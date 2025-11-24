@@ -1,5 +1,8 @@
 import { redirect } from 'next/navigation';
 
-export default function Home() {
+const EmailIndexPage = () => {
   redirect('/email/inbox');
-}
+};
+
+export default EmailIndexPage;
+
