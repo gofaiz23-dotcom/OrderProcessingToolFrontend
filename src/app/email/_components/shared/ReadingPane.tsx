@@ -4,11 +4,13 @@ import { memo } from 'react';
 import { EmailAttachment } from '@/app/types/email';
 import { InboxEmail } from '@/app/utils/Emails/Inbox';
 import { SentEmail } from '@/app/utils/Emails/Sent';
+import { ReadingPaneSkeleton } from './ReadingPaneSkeleton';
 
 type EmailWithDate = (InboxEmail & { dateField: 'receivedAt' }) | (SentEmail & { dateField: 'sentAt' });
 
 type ReadingPaneProps = {
   email: InboxEmail | SentEmail | null;
+  loading?: boolean;
   onAttachmentPreview: (att: EmailAttachment) => void;
 };
 
@@ -29,16 +31,13 @@ const getAttachmentDataUrl = (attachment: EmailAttachment): string | null => {
   return `data:${attachment.mimeType};base64,${normalized}`;
 };
 
-export const ReadingPane = memo(({ email, onAttachmentPreview }: ReadingPaneProps) => {
+export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }: ReadingPaneProps) => {
+  if (loading) {
+    return <ReadingPaneSkeleton />;
+  }
+
   if (!email) {
-    return (
-      <div className="flex items-center justify-center bg-slate-50 py-20">
-        <div className="text-center text-slate-500">
-          <p className="mb-2 text-lg font-medium">Select an email to read</p>
-          <p className="text-sm">Preview attachments and content here</p>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   // Determine if it's inbox or sent email and get the date
@@ -139,8 +138,8 @@ export const ReadingPane = memo(({ email, onAttachmentPreview }: ReadingPaneProp
                   onClick={() => onAttachmentPreview(att)}
                 >
                   {isImage(att.mimeType) && dataUrl ? (
-                    <div className="aspect-square overflow-hidden">
-                      <img src={dataUrl} alt={att.filename} className="h-full w-full object-cover" loading="lazy" />
+                    <div className="overflow-hidden">
+                      <img src={dataUrl} alt={att.filename} className="max-w-full max-h-96 w-auto h-auto object-contain" loading="lazy" />
                     </div>
                   ) : isPDF(att.mimeType) && dataUrl ? (
                     <div className="aspect-square flex flex-col items-center justify-center bg-slate-100 p-4">

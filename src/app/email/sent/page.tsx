@@ -1,19 +1,20 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AttachmentPreviewModal, ReadingPane, ResizableSplitView } from '@/app/email/_components/shared';
-import { SentEmailList, SentFilters } from '@/app/email/_components/sent';
+import { AttachmentPreviewModal, EmailFilters, ReadingPane, ResizableSplitView } from '@/app/email/_components/shared';
+import { SentEmailList } from '@/app/email/_components/sent';
 import { EmailAttachment } from '@/app/types/email';
 import { loadSentEmails, SentEmail } from '@/app/utils/Emails/Sent';
+
+type DateFilterOption = 'all' | 'today' | 'thisWeek' | 'specificDate' | 'custom';
 
 export const SentEmailsView = () => {
   const [limit, setLimit] = useState(20);
   const [search, setSearch] = useState('');
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  const [attachmentsOnly, setAttachmentsOnly] = useState(false);
+  const [dateFilter, setDateFilter] = useState<DateFilterOption>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [attachmentsOnly, setAttachmentsOnly] = useState(false);
 
   const [emails, setEmails] = useState<SentEmail[]>([]);
   const [loading, setLoading] = useState(false);
@@ -28,20 +29,66 @@ export const SentEmailsView = () => {
 
   const [previewAttachment, setPreviewAttachment] = useState<EmailAttachment | null>(null);
 
-  const filters = useMemo(
-    () => ({
+  const getDateRange = useCallback((filter: DateFilterOption, customStart?: string, customEnd?: string) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    switch (filter) {
+      case 'today': {
+        const start = new Date(today);
+        const end = new Date(today);
+        end.setHours(23, 59, 59, 999);
+        return { start, end };
+      }
+      case 'thisWeek': {
+        const start = new Date(today);
+        const dayOfWeek = start.getDay();
+        const diff = start.getDate() - dayOfWeek;
+        start.setDate(diff);
+        const end = new Date(start);
+        end.setDate(start.getDate() + 6);
+        end.setHours(23, 59, 59, 999);
+        return { start, end };
+      }
+      case 'specificDate': {
+        if (customStart) {
+          const start = new Date(customStart);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(customStart);
+          end.setHours(23, 59, 59, 999);
+          return { start, end };
+        }
+        return undefined;
+      }
+      case 'custom': {
+        if (customStart && customEnd) {
+          const start = new Date(customStart);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(customEnd);
+          end.setHours(23, 59, 59, 999);
+          return { start, end };
+        }
+        return undefined;
+      }
+      default:
+        return undefined;
+    }
+  }, []);
+
+  const filters = useMemo(() => {
+    const dateRange = getDateRange(dateFilter, startDate, endDate);
+    return {
       limit,
       search: search.trim() || undefined,
-      from: from.trim() || undefined,
-      to: to.trim() || undefined,
       hasAttachments: attachmentsOnly ? true : undefined,
-      dateRange: {
-        start: startDate ? new Date(startDate) : undefined,
-        end: endDate ? new Date(endDate) : undefined,
-      },
-    }),
-    [attachmentsOnly, endDate, from, limit, search, startDate, to],
-  );
+      dateRange: dateRange
+        ? {
+            start: dateRange.start,
+            end: dateRange.end,
+          }
+        : undefined,
+    };
+  }, [attachmentsOnly, limit, search, dateFilter, startDate, endDate, getDateRange]);
 
   const fetchSentEmailsData = useCallback(async () => {
     setLoading(true);
@@ -70,10 +117,25 @@ export const SentEmailsView = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchSentEmailsData]);
 
-  const handleApply = useCallback(() => {
+  const handleClear = useCallback(() => {
+    setSearch('');
+    setLimit(20);
+    setAttachmentsOnly(false);
+    setDateFilter('all');
+    setStartDate('');
+    setEndDate('');
     setSelectedEmailId(null);
-    fetchSentEmailsData();
-  }, [fetchSentEmailsData]);
+  }, []);
+
+  const handleDateFilterChange = useCallback((option: DateFilterOption) => {
+    setDateFilter(option);
+    if (option !== 'custom' && option !== 'specificDate') {
+      setStartDate('');
+      setEndDate('');
+    } else if (option === 'specificDate') {
+      setEndDate('');
+    }
+  }, []);
 
   const handleEmailSelect = useCallback((email: SentEmail) => {
     setSelectedEmailId(email.id);
@@ -82,23 +144,21 @@ export const SentEmailsView = () => {
   return (
     <div className="flex h-full flex-col bg-white">
       {/* Filters in single line at top */}
-      <SentFilters
+      <EmailFilters
         search={search}
         limit={limit}
-        from={from}
-        to={to}
+        attachmentsOnly={attachmentsOnly}
+        dateFilter={dateFilter}
         startDate={startDate}
         endDate={endDate}
-        attachmentsOnly={attachmentsOnly}
+        loading={loading}
         onSearchChange={setSearch}
         onLimitChange={setLimit}
-        onFromChange={setFrom}
-        onToChange={setTo}
+        onAttachmentsOnlyToggle={setAttachmentsOnly}
+        onDateFilterChange={handleDateFilterChange}
         onStartDateChange={setStartDate}
         onEndDateChange={setEndDate}
-        onAttachmentsOnlyToggle={setAttachmentsOnly}
-        onApply={handleApply}
-        onRefresh={fetchSentEmailsData}
+        onClear={handleClear}
       />
 
       {/* Main content area - resizable split view */}
@@ -120,7 +180,7 @@ export const SentEmailsView = () => {
           }
           right={
             <div className="h-full bg-white overflow-auto">
-              <ReadingPane email={selectedEmail ?? null} onAttachmentPreview={setPreviewAttachment} />
+              <ReadingPane email={selectedEmail ?? null} loading={loading} onAttachmentPreview={setPreviewAttachment} />
             </div>
           }
         />

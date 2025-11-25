@@ -43,7 +43,7 @@ export const EmailListItem = memo(({ email, isSelected, onSelect }: EmailListIte
   return (
     <div
       onClick={handleClick}
-      className={`flex cursor-pointer items-center gap-2 border-b border-slate-100 px-4 py-2 transition-colors ${
+      className={`flex cursor-pointer items-center gap-2 border-b border-slate200 px-4 py-2 transition-colors ${
         isSelected ? 'bg-blue-50' : 'hover:bg-slate-50'
       }`}
     >

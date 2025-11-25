@@ -4,7 +4,7 @@ export const MAX_RECIPIENTS = 10;
 export const MAX_ATTACHMENTS = 5;
 
 export type ComposeFormState = {
-  to: string;
+  to: string[];
   subject: string;
   text: string;
   html: string;
@@ -12,7 +12,7 @@ export type ComposeFormState = {
 };
 
 export const defaultComposeState: ComposeFormState = {
-  to: '',
+  to: [],
   subject: '',
   text: '',
   html: '',
@@ -26,7 +26,6 @@ const normalizeAttachments = (files: FileList | File[]): File[] => {
 
 const preparePayload = (state: ComposeFormState): ComposeEmailPayload => ({
   to: state.to
-    .split(',')
     .map((value) => value.trim())
     .filter(Boolean)
     .slice(0, MAX_RECIPIENTS),

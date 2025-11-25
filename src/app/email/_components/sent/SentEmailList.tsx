@@ -2,6 +2,7 @@
 
 import { memo } from 'react';
 import { EmailListItem } from '../shared/EmailListItem';
+import { EmailListItemSkeleton } from '../shared/EmailListItemSkeleton';
 import { SentEmail } from '@/app/utils/Emails/Sent';
 
 type SentEmailListProps = {
@@ -15,7 +16,11 @@ type SentEmailListProps = {
 export const SentEmailList = memo(({ emails, selectedEmailId, loading, error, onEmailSelect }: SentEmailListProps) => {
   if (loading && emails.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center text-sm text-slate-600">Loading messages…</div>
+      <div className="h-full">
+        {Array.from({ length: 10 }).map((_, index) => (
+          <EmailListItemSkeleton key={index} />
+        ))}
+      </div>
     );
   }
 
@@ -39,6 +44,13 @@ export const SentEmailList = memo(({ emails, selectedEmailId, loading, error, on
           onSelect={(e) => onEmailSelect(e as SentEmail)}
         />
       ))}
+      {loading && emails.length > 0 && (
+        <>
+          {Array.from({ length: 3 }).map((_, index) => (
+            <EmailListItemSkeleton key={`skeleton-${index}`} />
+          ))}
+        </>
+      )}
     </div>
   );
 });
