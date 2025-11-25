@@ -8,13 +8,22 @@ export const ReadingPaneSkeleton = memo(() => {
     <article className="flex flex-col bg-white">
       {/* Email Header Skeleton */}
       <header className="border-b border-slate-200 bg-white px-6 py-4 flex-shrink-0">
-        <Skeleton className="mb-3 h-7 w-3/4" />
-        <div className="mt-3 flex items-center justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div className="flex-1">
-            <Skeleton className="mb-2 h-4 w-48" />
-            <Skeleton className="h-3 w-32" />
+            <Skeleton className="mb-3 h-7 w-3/4" />
+            <div className="mt-3 flex items-center justify-between">
+              <div className="flex-1">
+                <Skeleton className="mb-2 h-4 w-48" />
+                <Skeleton className="h-3 w-32" />
+              </div>
+              <Skeleton className="h-3 w-24" />
+            </div>
           </div>
-          <Skeleton className="h-3 w-24" />
+          {/* Reply and Forward Buttons Skeleton */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Skeleton className="h-9 w-20" />
+            <Skeleton className="h-9 w-24" />
+          </div>
         </div>
       </header>
 

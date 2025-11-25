@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useState, useEffect } from 'react';
+import { FormEvent, useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Link from '@tiptap/extension-link';
@@ -13,6 +14,7 @@ import {
   submitComposeForm,
   updateAttachments,
 } from '@/app/utils/Emails/Compose';
+import { fetchEmailSuggestions, filterEmailSuggestions } from '@/app/utils/Emails/EmailSuggestions';
 
 const helperText = `Up to ${MAX_RECIPIENTS} recipients and ${MAX_ATTACHMENTS} attachments per email.`;
 
@@ -85,6 +87,7 @@ const AttachmentPreview = ({
 };
 
 const ComposeEmailForm = () => {
+  const searchParams = useSearchParams();
   const [form, setForm] = useState<ComposeFormState>(defaultComposeState);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({
@@ -94,6 +97,12 @@ const ComposeEmailForm = () => {
   const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [emailInput, setEmailInput] = useState('');
+  const [emailSuggestions, setEmailSuggestions] = useState<string[]>([]);
+  const [allEmailSuggestions, setAllEmailSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -186,13 +195,40 @@ const ComposeEmailForm = () => {
     }));
   };
 
+  // Handle selecting a suggestion
+  const selectSuggestion = (email: string) => {
+    addEmail(email);
+    setShowSuggestions(false);
+    setSelectedSuggestionIndex(-1);
+    emailInputRef.current?.focus();
+  };
+
   // Handle email input key events
   const handleEmailInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (emailInput.trim()) {
+      if (showSuggestions && selectedSuggestionIndex >= 0 && emailSuggestions[selectedSuggestionIndex]) {
+        // Select highlighted suggestion
+        selectSuggestion(emailSuggestions[selectedSuggestionIndex]);
+      } else if (emailInput.trim()) {
+        // Add the typed email
         addEmail(emailInput);
       }
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (showSuggestions && emailSuggestions.length > 0) {
+        setSelectedSuggestionIndex(prev => 
+          prev < emailSuggestions.length - 1 ? prev + 1 : prev
+        );
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (showSuggestions) {
+        setSelectedSuggestionIndex(prev => prev > 0 ? prev - 1 : -1);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSuggestions(false);
+      setSelectedSuggestionIndex(-1);
     } else if (e.key === 'Backspace' && !emailInput && form.to.length > 0) {
       // Put last email back into input for editing instead of removing
       e.preventDefault();
@@ -201,6 +237,43 @@ const ComposeEmailForm = () => {
       removeEmail(form.to.length - 1);
     }
   };
+
+  // Load email suggestions on mount
+  useEffect(() => {
+    fetchEmailSuggestions().then(setAllEmailSuggestions);
+  }, []);
+
+  // Update suggestions when email input changes
+  useEffect(() => {
+    if (emailInput.trim()) {
+      const filtered = filterEmailSuggestions(allEmailSuggestions, emailInput, form.to);
+      setEmailSuggestions(filtered);
+      setShowSuggestions(filtered.length > 0);
+      setSelectedSuggestionIndex(-1);
+    } else {
+      setEmailSuggestions([]);
+      setShowSuggestions(false);
+    }
+  }, [emailInput, allEmailSuggestions, form.to]);
+
+  // Handle clicking outside to close suggestions
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        suggestionsRef.current &&
+        !suggestionsRef.current.contains(event.target as Node) &&
+        emailInputRef.current &&
+        !emailInputRef.current.contains(event.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+
+    if (showSuggestions) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showSuggestions]);
 
   // Handle email input change
   const handleEmailInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -301,6 +374,48 @@ const ComposeEmailForm = () => {
     }
   }, [form.html, editor]);
 
+  // Handle URL search params for Reply and Forward
+  useEffect(() => {
+    const action = searchParams.get('action');
+    const to = searchParams.get('to');
+    const subject = searchParams.get('subject');
+    
+    // Get body from sessionStorage (stored to avoid URL length issues)
+    const body = sessionStorage.getItem('compose_body');
+
+    if (action && (action === 'reply' || action === 'forward')) {
+      // Pre-fill form with reply/forward data
+      const newForm: ComposeFormState = {
+        ...defaultComposeState,
+        subject: subject || '',
+      };
+
+      // For reply, add the 'to' email
+      if (action === 'reply' && to) {
+        newForm.to = [to];
+      }
+
+      // Set the body content from sessionStorage
+      if (body) {
+        newForm.html = body;
+        // Extract plain text from HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = body;
+        newForm.text = tempDiv.textContent || tempDiv.innerText || '';
+        
+        // Clear sessionStorage after reading
+        sessionStorage.removeItem('compose_body');
+      }
+
+      setForm(newForm);
+      
+      // Update editor if it exists
+      if (editor && body) {
+        editor.commands.setContent(body);
+      }
+    }
+  }, [searchParams, editor]);
+
   // Handle Escape key to close link dialog
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -386,7 +501,7 @@ const ComposeEmailForm = () => {
     <form onSubmit={handleSubmit} className="flex h-full flex-col">
       <div className="flex-1 space-y-6 overflow-y-auto">
         {/* To Field */}
-        <div>
+        <div className="relative">
           <label className="mb-2 block text-sm font-medium text-slate-900">
             To
           </label>
@@ -410,6 +525,7 @@ const ComposeEmailForm = () => {
             ))}
             {/* Email Input */}
             <input
+              ref={emailInputRef}
               type="text"
               placeholder={form.to.length === 0 ? "recipient@example.com" : ""}
               className="flex-1 min-w-[200px] outline-none bg-transparent placeholder:text-slate-400"
@@ -417,9 +533,34 @@ const ComposeEmailForm = () => {
               onChange={handleEmailInputChange}
               onKeyDown={handleEmailInputKeyDown}
               onPaste={handleEmailInputPaste}
+              onFocus={() => {
+                if (emailInput.trim() && emailSuggestions.length > 0) {
+                  setShowSuggestions(true);
+                }
+              }}
               required={form.to.length === 0}
             />
           </div>
+          {/* Email Suggestions Dropdown */}
+          {showSuggestions && emailSuggestions.length > 0 && (
+            <div
+              ref={suggestionsRef}
+              className="absolute z-50 mt-1 w-full rounded-md border border-slate-200 bg-white shadow-lg max-h-60 overflow-auto"
+            >
+              {emailSuggestions.map((email, index) => (
+                <button
+                  key={email}
+                  type="button"
+                  onClick={() => selectSuggestion(email)}
+                  className={`w-full text-left px-4 py-2 text-sm hover:bg-blue-50 transition-colors ${
+                    index === selectedSuggestionIndex ? 'bg-blue-50 text-blue-700' : 'text-slate-900'
+                  }`}
+                >
+                  {email}
+                </button>
+              ))}
+            </div>
+          )}
           <p className="mt-1.5 text-xs text-slate-500">{helperText}</p>
         </div>
 

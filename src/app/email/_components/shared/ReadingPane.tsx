@@ -1,10 +1,13 @@
 'use client';
 
-import { memo } from 'react';
+import { memo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Reply, Forward } from 'lucide-react';
 import { EmailAttachment } from '@/app/types/email';
 import { InboxEmail } from '@/app/utils/Emails/Inbox';
 import { SentEmail } from '@/app/utils/Emails/Sent';
 import { ReadingPaneSkeleton } from './ReadingPaneSkeleton';
+import { InlineReplyComposer } from './InlineReplyComposer';
 
 type EmailWithDate = (InboxEmail & { dateField: 'receivedAt' }) | (SentEmail & { dateField: 'sentAt' });
 
@@ -32,6 +35,9 @@ const getAttachmentDataUrl = (attachment: EmailAttachment): string | null => {
 };
 
 export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }: ReadingPaneProps) => {
+  const router = useRouter();
+  const [showReplyComposer, setShowReplyComposer] = useState(false);
+
   if (loading) {
     return <ReadingPaneSkeleton />;
   }
@@ -43,6 +49,61 @@ export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }
   // Determine if it's inbox or sent email and get the date
   const isInboxEmail = 'receivedAt' in email;
   const emailDate = isInboxEmail ? email.receivedAt : email.sentAt;
+
+  // Extract email address from "Name <email@example.com>" or just "email@example.com"
+  const extractEmailAddress = (emailString: string): string => {
+    const match = emailString.match(/<(.+)>/);
+    return match ? match[1] : emailString.trim();
+  };
+
+  // Handle Reply - show inline composer
+  const handleReply = () => {
+    setShowReplyComposer(true);
+  };
+
+  // Get reply data
+  const getReplyData = () => {
+    const replyTo = isInboxEmail ? extractEmailAddress(email.from) : extractEmailAddress(email.to);
+    const replySubject = email.subject.startsWith('Re: ') ? email.subject : `Re: ${email.subject}`;
+    
+    // Build reply body with quoted original message
+    const originalBody = email.htmlBody || email.textBody || email.snippet || '';
+    const quotedBody = email.htmlBody 
+      ? `<br><br><div style="border-left: 3px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;">${originalBody}</div>`
+      : `<br><br><div style="border-left: 3px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;"><pre style="white-space: pre-wrap; font-family: inherit;">${originalBody}</pre></div>`;
+
+    return {
+      to: [replyTo],
+      subject: replySubject,
+      body: quotedBody,
+    };
+  };
+
+  // Handle Forward
+  const handleForward = () => {
+    const forwardSubject = email.subject.startsWith('Fwd: ') ? email.subject : `Fwd: ${email.subject}`;
+    
+    // Build forward body with quoted original message
+    const originalBody = email.htmlBody || email.textBody || email.snippet || '';
+    const forwardInfo = `<div style="color: #666; font-size: 12px; margin-bottom: 10px;">
+      <p><strong>From:</strong> ${email.from}</p>
+      <p><strong>Date:</strong> ${formatDate(emailDate)}</p>
+      <p><strong>Subject:</strong> ${email.subject}</p>
+    </div>`;
+    
+    const quotedBody = email.htmlBody 
+      ? `${forwardInfo}<div style="border-left: 3px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;">${originalBody}</div>`
+      : `${forwardInfo}<div style="border-left: 3px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;"><pre style="white-space: pre-wrap; font-family: inherit;">${originalBody}</pre></div>`;
+
+    // Store body in sessionStorage to avoid URL length issues
+    sessionStorage.setItem('compose_body', quotedBody);
+    
+    const params = new URLSearchParams({
+      action: 'forward',
+      subject: forwardSubject,
+    });
+    router.push(`/email/compose?${params.toString()}`);
+  };
 
   return (
     <article className="flex flex-col bg-white">
@@ -70,22 +131,45 @@ export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }
       `}</style>
       {/* Email Header */}
       <header className="border-b border-slate-200 bg-white px-6 py-4 flex-shrink-0">
-        <h2 className="text-xl font-semibold text-slate-900">{email.subject || '(No subject)'}</h2>
-        <div className="mt-3 flex items-center justify-between text-sm">
-          <div>
-            {isInboxEmail ? (
-              <>
-                <p className="font-medium text-slate-900">{email.from}</p>
-                <p className="mt-1 text-xs text-slate-500">To: {email.to}</p>
-              </>
-            ) : (
-              <>
-                <p className="font-medium text-slate-900">To: {email.to}</p>
-                <p className="mt-1 text-xs text-slate-500">From: {email.from}</p>
-              </>
-            )}
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <h2 className="text-xl font-semibold text-slate-900">{email.subject || '(No subject)'}</h2>
+            <div className="mt-3 flex items-center justify-between text-sm">
+              <div>
+                {isInboxEmail ? (
+                  <>
+                    <p className="font-medium text-slate-900">{email.from}</p>
+                    <p className="mt-1 text-xs text-slate-500">To: {email.to}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="font-medium text-slate-900">To: {email.to}</p>
+                    <p className="mt-1 text-xs text-slate-500">From: {email.from}</p>
+                  </>
+                )}
+              </div>
+              <div className="text-xs text-slate-500">{formatDate(emailDate)}</div>
+            </div>
           </div>
-          <div className="text-xs text-slate-500">{formatDate(emailDate)}</div>
+          {/* Reply and Forward Buttons */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={handleReply}
+              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2"
+              title="Reply"
+            >
+              <Reply className="h-4 w-4" />
+              <span>Reply</span>
+            </button>
+            <button
+              onClick={handleForward}
+              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2"
+              title="Forward"
+            >
+              <Forward className="h-4 w-4" />
+              <span>Forward</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -185,6 +269,23 @@ export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }
           </div>
         </section>
       )}
+
+      {/* Inline Reply Composer */}
+      {showReplyComposer && (() => {
+        const replyData = getReplyData();
+        return (
+          <InlineReplyComposer
+            to={replyData.to}
+            subject={replyData.subject}
+            initialBody={replyData.body}
+            onClose={() => setShowReplyComposer(false)}
+            onSuccess={() => {
+              // Optionally refresh or update UI after successful send
+              setShowReplyComposer(false);
+            }}
+          />
+        );
+      })()}
     </article>
   );
 });
