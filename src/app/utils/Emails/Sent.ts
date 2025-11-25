@@ -24,6 +24,8 @@ export type SentEmail = {
   attachmentsCount: number;
   hasAttachments: boolean;
   attachments: EmailAttachment[];
+  htmlBody?: string | null;
+  textBody?: string | null;
 };
 
 const normalizeDate = (message: RawSentEmail) => {
@@ -66,6 +68,8 @@ const toReadableSentEmail = (message: RawSentEmail): SentEmail => {
     attachmentsCount: attachments.length,
     hasAttachments: attachments.length > 0,
     attachments,
+    htmlBody: message.htmlBody,
+    textBody: message.textBody,
   };
 };
 

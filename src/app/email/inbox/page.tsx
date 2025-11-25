@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AttachmentPreviewModal } from '@/app/email/_components/shared';
-import { EmailList, InboxFilters, ReadingPane } from '@/app/email/_components/inbox';
+import { AttachmentPreviewModal, ReadingPane, ResizableSplitView } from '@/app/email/_components/shared';
+import { EmailList, InboxFilters } from '@/app/email/_components/inbox';
 import { EmailAttachment } from '@/app/types/email';
 import { InboxEmail, loadInboxEmails } from '@/app/utils/Emails/Inbox';
 
@@ -101,23 +101,29 @@ export const InboxEmailsView = () => {
         onRefresh={fetchInboxEmailsData}
       />
 
-      {/* Main content area - split view */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Email list - Gmail style */}
-        <div className="w-2/5 flex-shrink-0 overflow-auto border-r border-slate-200">
-          <EmailList
-            emails={emails}
-            selectedEmailId={selectedEmail?.id ?? null}
-            loading={loading}
-            error={error}
-            onEmailSelect={handleEmailSelect}
-          />
-        </div>
-
-        {/* Right reading pane */}
-        <aside className="flex-1 overflow-auto bg-white">
-          <ReadingPane email={selectedEmail ?? null} onAttachmentPreview={setPreviewAttachment} />
-        </aside>
+      {/* Main content area - resizable split view */}
+      <div className="flex-1 overflow-hidden">
+        <ResizableSplitView
+          defaultLeftWidth={40}
+          minLeftWidth={20}
+          maxLeftWidth={80}
+          left={
+            <div className="h-full border-r border-slate-200">
+              <EmailList
+                emails={emails}
+                selectedEmailId={selectedEmail?.id ?? null}
+                loading={loading}
+                error={error}
+                onEmailSelect={handleEmailSelect}
+              />
+            </div>
+          }
+          right={
+            <div className="h-full bg-white overflow-auto">
+              <ReadingPane email={selectedEmail ?? null} onAttachmentPreview={setPreviewAttachment} />
+            </div>
+          }
+        />
       </div>
 
       {/* Attachment preview modal */}

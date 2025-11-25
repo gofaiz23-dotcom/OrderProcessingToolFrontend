@@ -1,12 +1,14 @@
 'use client';
 
 import { memo } from 'react';
-import { AttachmentBadge } from '../shared/AttachmentPreview';
 import { EmailAttachment } from '@/app/types/email';
 import { InboxEmail } from '@/app/utils/Emails/Inbox';
+import { SentEmail } from '@/app/utils/Emails/Sent';
+
+type EmailWithDate = (InboxEmail & { dateField: 'receivedAt' }) | (SentEmail & { dateField: 'sentAt' });
 
 type ReadingPaneProps = {
-  email: InboxEmail | null;
+  email: InboxEmail | SentEmail | null;
   onAttachmentPreview: (att: EmailAttachment) => void;
 };
 
@@ -30,7 +32,7 @@ const getAttachmentDataUrl = (attachment: EmailAttachment): string | null => {
 export const ReadingPane = memo(({ email, onAttachmentPreview }: ReadingPaneProps) => {
   if (!email) {
     return (
-      <div className="flex h-full items-center justify-center bg-slate-50">
+      <div className="flex items-center justify-center bg-slate-50 py-20">
         <div className="text-center text-slate-500">
           <p className="mb-2 text-lg font-medium">Select an email to read</p>
           <p className="text-sm">Preview attachments and content here</p>
@@ -39,36 +41,81 @@ export const ReadingPane = memo(({ email, onAttachmentPreview }: ReadingPaneProp
     );
   }
 
+  // Determine if it's inbox or sent email and get the date
+  const isInboxEmail = 'receivedAt' in email;
+  const emailDate = isInboxEmail ? email.receivedAt : email.sentAt;
+
   return (
-    <article className="flex h-full flex-col overflow-hidden bg-white">
+    <article className="flex flex-col bg-white">
+      <style>{`
+        .email-content img {
+          max-width: 100% !important;
+          height: auto !important;
+          display: block;
+          margin: 1em 0;
+        }
+        .email-content table {
+          width: 100% !important;
+          border-collapse: collapse;
+        }
+        .email-content a {
+          color: #1a73e8;
+          text-decoration: underline;
+        }
+        .email-content p {
+          margin: 0.5em 0;
+        }
+        .email-content * {
+          max-width: 100%;
+        }
+      `}</style>
       {/* Email Header */}
-      <header className="border-b border-slate-200 bg-white px-6 py-4">
+      <header className="border-b border-slate-200 bg-white px-6 py-4 flex-shrink-0">
         <h2 className="text-xl font-semibold text-slate-900">{email.subject || '(No subject)'}</h2>
         <div className="mt-3 flex items-center justify-between text-sm">
           <div>
-            <p className="font-medium text-slate-900">{email.from}</p>
-            <p className="mt-1 text-xs text-slate-500">To: {email.to}</p>
+            {isInboxEmail ? (
+              <>
+                <p className="font-medium text-slate-900">{email.from}</p>
+                <p className="mt-1 text-xs text-slate-500">To: {email.to}</p>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-slate-900">To: {email.to}</p>
+                <p className="mt-1 text-xs text-slate-500">From: {email.from}</p>
+              </>
+            )}
           </div>
-          <div className="text-xs text-slate-500">{formatDate(email.receivedAt)}</div>
+          <div className="text-xs text-slate-500">{formatDate(emailDate)}</div>
         </div>
       </header>
 
       {/* Email Body - HTML or Text */}
-      <section className="flex-1 overflow-auto px-6 py-4">
+      <section className="px-6 py-4">
         {email.htmlBody ? (
           <div
-            className="email-content"
+            className="email-content break-words"
             dangerouslySetInnerHTML={{ __html: email.htmlBody }}
             style={{
               fontFamily: 'Roboto, RobotoDraft, Helvetica, Arial, sans-serif',
               fontSize: '14px',
-              lineHeight: '1.5',
+              lineHeight: '1.6',
               color: '#202124',
+              wordWrap: 'break-word',
+              overflowWrap: 'break-word',
             }}
           />
         ) : email.textBody ? (
-          <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-700">
+          <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-700 break-words">
             {email.textBody}
+          </div>
+        ) : email.snippet ? (
+          <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-700 break-words">
+            {email.snippet}
+          </div>
+        ) : email.preview ? (
+          <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-700 break-words">
+            {email.preview}
           </div>
         ) : (
           <div className="italic text-slate-500">No content available</div>
@@ -77,7 +124,7 @@ export const ReadingPane = memo(({ email, onAttachmentPreview }: ReadingPaneProp
 
       {/* Attachments Section */}
       {email.attachments.length > 0 && (
-        <section className="border-t border-slate-200 bg-slate-50 px-6 py-4">
+        <section className="border-t border-slate-200 bg-slate-50 px-6 py-4 flex-shrink-0">
           <h3 className="mb-3 text-sm font-semibold text-slate-700">
             Attachments ({email.attachments.length})
           </h3>

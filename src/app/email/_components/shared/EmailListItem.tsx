@@ -2,11 +2,12 @@
 
 import { memo } from 'react';
 import { InboxEmail } from '@/app/utils/Emails/Inbox';
+import { SentEmail } from '@/app/utils/Emails/Sent';
 
 type EmailListItemProps = {
-  email: InboxEmail;
+  email: InboxEmail | SentEmail;
   isSelected: boolean;
-  onSelect: (email: InboxEmail) => void;
+  onSelect: (email: InboxEmail | SentEmail) => void;
 };
 
 const formatTime = (date: Date) => {
@@ -25,13 +26,19 @@ const formatTime = (date: Date) => {
 
 export const EmailListItem = memo(({ email, isSelected, onSelect }: EmailListItemProps) => {
   const handleClick = () => onSelect(email);
-  const handleCheckboxClick = (e: React.MouseEvent) => e.stopPropagation();
   const handleStarClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     // Star/unstar functionality can be added here
   };
 
-  const senderName = email.from.split('<')[0].trim() || email.from;
+  // Determine if it's inbox or sent email
+  const isInboxEmail = 'receivedAt' in email;
+  const emailDate = isInboxEmail ? email.receivedAt : email.sentAt;
+  
+  // For inbox: show sender (from), for sent: show recipient (to)
+  const displayName = isInboxEmail 
+    ? email.from.split('<')[0].trim() || email.from
+    : email.to.split('<')[0].trim() || email.to;
 
   return (
     <div
@@ -40,13 +47,6 @@ export const EmailListItem = memo(({ email, isSelected, onSelect }: EmailListIte
         isSelected ? 'bg-blue-50' : 'hover:bg-slate-50'
       }`}
     >
-      {/* Checkbox */}
-      <input
-        type="checkbox"
-        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-        onClick={handleCheckboxClick}
-      />
-
       {/* Star icon */}
       <button
         onClick={handleStarClick}
@@ -63,10 +63,10 @@ export const EmailListItem = memo(({ email, isSelected, onSelect }: EmailListIte
         </svg>
       </button>
 
-      {/* Sender */}
+      {/* Sender/Recipient */}
       <div className="min-w-[120px] flex-shrink-0">
         <p className={`text-sm ${isSelected ? 'font-semibold text-slate-900' : 'font-normal text-slate-600'}`}>
-          {senderName}
+          {displayName}
         </p>
       </div>
 
@@ -94,7 +94,7 @@ export const EmailListItem = memo(({ email, isSelected, onSelect }: EmailListIte
 
       {/* Time */}
       <div className="min-w-[80px] flex-shrink-0 text-right">
-        <p className="text-xs text-slate-600">{formatTime(email.receivedAt)}</p>
+        <p className="text-xs text-slate-600">{formatTime(emailDate)}</p>
       </div>
     </div>
   );

@@ -16,6 +16,7 @@ export type RawSentEmail = {
     filename: string;
     mimeType: string;
     size?: number;
+    contentBase64?: string;
   }>;
 };
 

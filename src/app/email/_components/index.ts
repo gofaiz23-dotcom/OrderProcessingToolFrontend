@@ -4,3 +4,6 @@ export * from './shared';
 // Inbox-specific components
 export * from './inbox';
 
+// Sent-specific components
+export * from './sent';
+

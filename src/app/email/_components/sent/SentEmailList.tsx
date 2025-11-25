@@ -2,17 +2,17 @@
 
 import { memo } from 'react';
 import { EmailListItem } from '../shared/EmailListItem';
-import { InboxEmail } from '@/app/utils/Emails/Inbox';
+import { SentEmail } from '@/app/utils/Emails/Sent';
 
-type EmailListProps = {
-  emails: InboxEmail[];
+type SentEmailListProps = {
+  emails: SentEmail[];
   selectedEmailId: string | null;
   loading: boolean;
   error: string | null;
-  onEmailSelect: (email: InboxEmail) => void;
+  onEmailSelect: (email: SentEmail) => void;
 };
 
-export const EmailList = memo(({ emails, selectedEmailId, loading, error, onEmailSelect }: EmailListProps) => {
+export const SentEmailList = memo(({ emails, selectedEmailId, loading, error, onEmailSelect }: SentEmailListProps) => {
   if (loading && emails.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-slate-600">Loading messages…</div>
@@ -36,12 +36,12 @@ export const EmailList = memo(({ emails, selectedEmailId, loading, error, onEmai
           key={email.id}
           email={email}
           isSelected={selectedEmailId === email.id}
-          onSelect={(e) => onEmailSelect(e as InboxEmail)}
+          onSelect={(e) => onEmailSelect(e as SentEmail)}
         />
       ))}
     </div>
   );
 });
 
-EmailList.displayName = 'EmailList';
+SentEmailList.displayName = 'SentEmailList';
 
