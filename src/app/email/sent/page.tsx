@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AttachmentBadge, AttachmentPreviewModal } from '@/app/email/components/AttachmentPreview';
+import { AttachmentBadge, AttachmentPreviewModal } from '@/app/email/_components/shared';
 import { EmailAttachment } from '@/app/types/email';
 import { loadSentEmails, SentEmail } from '@/app/utils/Emails/Sent';
 
@@ -97,73 +97,70 @@ const FiltersPanel = ({
   onRefresh: () => void;
   busy: boolean;
 }) => (
-  <div className="grid gap-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-2 lg:grid-cols-4">
+  <div className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
     <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
-      Search
+      <span className="text-xs">Search</span>
       <input
-        className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-        placeholder="Subject, recipient, snippet..."
+        className="w-48 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        placeholder="Subject, recipient..."
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
       />
     </label>
 
     <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
-      Limit
+      <span className="text-xs">Limit</span>
       <select
-        className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        className="w-32 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
         value={limit}
         onChange={(event) => onLimitChange(Number(event.target.value))}
       >
         {LIMIT_OPTIONS.map((option) => (
           <option key={option} value={option}>
-            {option} emails
+            {option}
           </option>
         ))}
       </select>
     </label>
 
     <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
-      Start date
+      <span className="text-xs">Start</span>
       <input
         type="date"
-        className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        className="w-40 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
         value={startDate}
         onChange={(event) => onStartDateChange(event.target.value)}
       />
     </label>
 
     <label className="flex flex-col gap-1 text-sm font-medium text-slate-700">
-      End date
+      <span className="text-xs">End</span>
       <input
         type="date"
-        className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        className="w-40 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
         value={endDate}
         onChange={(event) => onEndDateChange(event.target.value)}
       />
     </label>
 
-    <label className="flex items-center gap-3 text-sm font-medium text-slate-700 sm:col-span-2">
+    <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
       <input
         type="checkbox"
         className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
         checked={hasAttachments}
         onChange={(event) => onHasAttachmentsToggle(event.target.checked)}
       />
-      Show emails with attachments only
+      <span className="text-xs whitespace-nowrap">Attachments only</span>
     </label>
 
-    <div className="flex items-center gap-3 sm:col-span-2">
-      <button
-        type="button"
-        onClick={onRefresh}
-        disabled={busy}
-        className="inline-flex w-full items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-blue-300 sm:w-auto"
-      >
-        {busy ? 'Loading…' : 'Refresh'}
-      </button>
-      {busy && <span className="text-xs text-slate-500">Fetching latest data…</span>}
-    </div>
+    <button
+      type="button"
+      onClick={onRefresh}
+      disabled={busy}
+      className="ml-auto inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-blue-300"
+    >
+      {busy ? 'Loading…' : 'Refresh'}
+    </button>
   </div>
 );
 

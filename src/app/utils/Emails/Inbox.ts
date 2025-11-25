@@ -21,6 +21,8 @@ export type InboxEmail = {
   receivedAt: Date;
   preview: string;
   snippet: string;
+  textBody?: string | null;
+  htmlBody?: string | null;
   attachmentsCount: number;
   hasAttachments: boolean;
   attachments: EmailAttachment[];
@@ -63,6 +65,8 @@ const toReadableInboxEmail = (message: RawInboxEmail): InboxEmail => {
     receivedAt: normalizeDate(message),
     preview: message.textBody ?? message.htmlBody ?? message.snippet ?? '',
     snippet: message.snippet ?? '',
+    textBody: message.textBody ?? null,
+    htmlBody: message.htmlBody ?? null,
     attachmentsCount: attachments.length,
     hasAttachments: attachments.length > 0,
     attachments,

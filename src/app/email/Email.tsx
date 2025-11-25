@@ -16,9 +16,6 @@ const topSidebarItems = [
 const refreshItem = {
     href: `${API_BASE_URL}/auth/google/start`,
     label: 'Refresh Token',
-    icon: RefreshCcw,
-    external: true,
-    tooltip: "Refresh token lasts 5 days — use only when needed",
 };
 
 const isActivePath = (pathname: string | null, href: string) => {
@@ -50,29 +47,25 @@ const EmailWorkspace = ({ children }: { children: ReactNode }) => {
                         const Icon = item.icon;
                         const isActive = isActivePath(pathname, item.href);
 
-                        const classes = `
-              group relative flex items-center gap-3 rounded-2xl px-5 py-4 text-[15px] font-medium transition-all
-              ${isActive
+                        const classes = `group relative flex items-center gap-3 rounded-2xl px-5 py-4 text-[15px] font-medium transition-all ${
+                            isActive
                                 ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20 scale-[1.02]'
                                 : 'bg-white/60 text-slate-700 hover:bg-white hover:shadow-md hover:scale-[1.01]'
-                            }
-            `;
+                        }`;
 
                         return (
-                            <div key={item.href} className="relative group">
-                                <Link href={item.href} className={classes}>
-                                    <Icon
-                                        size={20}
-                                        className={isActive ? 'text-white' : 'text-blue-600 group-hover:text-blue-600'}
-                                    />
-                                    <span>{item.label}</span>
-                                    <span
-                                        className={`ml-auto h-2 w-2 rounded-full transition
+                            <Link key={item.href} href={item.href} className={classes}>
+                                <Icon
+                                    size={20}
+                                    className={isActive ? 'text-white' : 'text-blue-600 group-hover:text-blue-600'}
+                                />
+                                <span>{item.label}</span>
+                                <span
+                                    className={`ml-auto h-2 w-2 rounded-full transition
                       ${isActive ? 'bg-white' : 'bg-slate-300 group-hover:bg-blue-600'}
                     `}
-                                    />
-                                </Link>
-                            </div>
+                                />
+                            </Link>
                         );
                     })}
                 </nav>
@@ -90,12 +83,11 @@ const EmailWorkspace = ({ children }: { children: ReactNode }) => {
                 border border-slate-400
               "
                         >
-                            <refreshItem.icon size={20} className="text-blue-600 group-hover:text-blue-600" />
+                            <RefreshCcw size={20} className="text-blue-600 group-hover:text-blue-600" />
                             <span>{refreshItem.label}</span>
                             <span className="ml-auto h-2 w-2 rounded-full bg-slate-300 group-hover:bg-blue-600" />
                         </a>
 
-                        {/* Tooltip */}
                         {/* Tooltip */}
                         <span
                             className="
