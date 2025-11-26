@@ -6,7 +6,6 @@ import { AttachmentPreviewModal, EmailFilters, ReadingPane, ResizableSplitView }
 import { SentEmailList } from '@/app/email/_components/sent';
 import { EmailAttachment } from '@/app/types/email';
 import { loadSentEmails, SentEmail, enrichSentEmail } from '@/app/utils/Emails/Sent';
-import { extractErrorInfo } from '@/app/utils/Errors/ApiError';
 import { useDebounce } from '@/app/utils/hooks/useDebounce';
 
 type DateFilterOption = 'all' | 'today' | 'thisWeek' | 'specificDate' | 'custom';

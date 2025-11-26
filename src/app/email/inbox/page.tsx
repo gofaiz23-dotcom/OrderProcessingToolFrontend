@@ -6,9 +6,7 @@ import { AttachmentPreviewModal, EmailFilters, ReadingPane, ResizableSplitView }
 import { EmailList } from '@/app/email/_components/inbox';
 import { EmailAttachment } from '@/app/types/email';
 import { InboxEmail, loadInboxEmails, enrichInboxEmail } from '@/app/utils/Emails/Inbox';
-import { extractErrorInfo } from '@/app/utils/Errors/ApiError';
 import { useDebounce } from '@/app/utils/hooks/useDebounce';
-import { getCachedEmailList } from '@/app/utils/cache/emailCache';
 
 type DateFilterOption = 'all' | 'today' | 'thisWeek' | 'specificDate' | 'custom';
 
