@@ -1,7 +1,7 @@
 'use client';
 
 import { memo } from 'react';
-import { Skeleton } from '@/app/component/ui/skeleton';
+import { Skeleton } from '@/app/components/shared/ui';
 
 export const EmailListItemSkeleton = memo(() => {
   return (

@@ -36,8 +36,7 @@ email/
 ├── 📁 compose/                     # Compose email page route
 │   └── page.tsx                    # Compose email page
 │
-├── 📄 Email.tsx                    # Main workspace layout (sidebar + content)
-├── 📄 layout.tsx                   # Next.js layout wrapper
+├── 📄 layout.tsx                   # Next.js layout wrapper (uses AppLayout from components/shared)
 └── 📄 page.tsx                     # Email index (redirects to /inbox)
 ```
 

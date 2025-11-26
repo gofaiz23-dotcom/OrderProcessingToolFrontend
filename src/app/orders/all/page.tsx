@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { OrderList, OrderDetail, CreateOrderModal } from '../_components';
-import { ResizableSplitView } from '@/app/email/_components/shared';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { OrderList, CreateOrderModal, EditOrderModal, Toast } from '../_components';
 import {
   loadOrders,
   createNewOrder,
@@ -15,20 +15,35 @@ import type { Order, CreateOrderPayload, UpdateOrderPayload } from '@/app/types/
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { Loader2 } from 'lucide-react';
 
-type ViewMode = 'view' | 'edit';
-
 export default function AllOrdersPage() {
+  const searchParams = useSearchParams();
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [mode, setMode] = useState<ViewMode>('view');
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState<unknown>(null);
+  const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<Order | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editError, setEditError] = useState<unknown>(null);
   const [importLoading, setImportLoading] = useState(false);
   const [importError, setImportError] = useState<unknown>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
+
+  // Get marketplace filter from URL
+  const marketplaceFilter = searchParams?.get('marketplace');
+
+  // Filter orders by marketplace if filter is present
+  const filteredOrders = useMemo(() => {
+    if (!marketplaceFilter) {
+      return orders;
+    }
+    return orders.filter(
+      (order) => order.orderOnMarketPlace.toLowerCase() === marketplaceFilter.toLowerCase()
+    );
+  }, [orders, marketplaceFilter]);
 
   // Load orders on mount
   useEffect(() => {
@@ -41,10 +56,6 @@ export default function AllOrdersPage() {
     try {
       const data = await loadOrders();
       setOrders(data);
-      // Auto-select first order if available and none selected
-      if (data.length > 0 && !selectedOrder && mode === 'view') {
-        setSelectedOrder(data[0]);
-      }
     } catch (err) {
       setError(err);
       console.error('Error loading orders:', err);
@@ -55,62 +66,42 @@ export default function AllOrdersPage() {
 
   const handleOrderSelect = useCallback((order: Order) => {
     setSelectedOrder(order);
-    setMode('view');
     setError(null);
   }, []);
 
   const handleOrderEdit = useCallback((order: Order) => {
+    // Edit is now handled via EditOrderModal opened from OrderList
     setSelectedOrder(order);
-    setMode('edit');
     setError(null);
   }, []);
 
-  const handleSave = async (payload: UpdateOrderPayload) => {
-    if (!selectedOrder) return;
+  const handleEditOrder = async (payload: UpdateOrderPayload) => {
+    if (!selectedOrderForEdit) return;
 
-    setSaving(true);
-    setError(null);
-
+    setEditLoading(true);
+    setEditError(null);
     try {
       const updatedOrder = await updateExistingOrder(
-        selectedOrder.id,
+        selectedOrderForEdit.id,
         payload,
       );
-      // Update orders list
-      setOrders((prev) =>
-        prev.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)),
-      );
-      // Update selected order
-      setSelectedOrder(updatedOrder);
-      setMode('view');
+      // Refresh orders list
+      await fetchOrders();
+      // Update selected order if it was the one being edited
+      if (selectedOrder?.id === updatedOrder.id) {
+        setSelectedOrder(updatedOrder);
+      }
+      setSelectedOrderForEdit(null);
     } catch (err) {
-      setError(err);
-      console.error('Error saving order:', err);
+      setEditError(err);
+      console.error('Error updating order:', err);
+      throw err; // Re-throw so modal can handle it
     } finally {
-      setSaving(false);
+      setEditLoading(false);
     }
   };
 
-  const handleCancel = useCallback(() => {
-    if (mode === 'edit') {
-      // If editing, go back to view mode
-      setMode('view');
-      // Reload the order to discard changes
-      if (selectedOrder) {
-        const currentOrder = orders.find((o) => o.id === selectedOrder.id);
-        if (currentOrder) {
-          setSelectedOrder(currentOrder);
-        }
-      }
-    }
-    setError(null);
-  }, [mode, orders, selectedOrder]);
-
   const handleOrderDelete = async (id: number) => {
-    if (!confirm(`Are you sure you want to delete order #${id}? This action cannot be undone.`)) {
-      return;
-    }
-
     setError(null);
     try {
       await deleteExistingOrder(id);
@@ -128,7 +119,33 @@ export default function AllOrdersPage() {
     } catch (err) {
       setError(err);
       console.error('Error deleting order:', err);
-      alert('Failed to delete order. Please try again.');
+      throw err; // Re-throw so modal can handle it
+    }
+  };
+
+  const handleBulkDelete = async (ids: number[]) => {
+    if (ids.length === 0) return;
+
+    setError(null);
+    try {
+      // Delete all orders in parallel
+      await Promise.all(ids.map((id) => deleteExistingOrder(id)));
+      
+      // Remove deleted orders from the list
+      setOrders((prev) => prev.filter((o) => !ids.includes(o.id)));
+      
+      // Clear selected order if it was deleted
+      if (selectedOrder && ids.includes(selectedOrder.id)) {
+        const remainingOrders = orders.filter((o) => !ids.includes(o.id));
+        setSelectedOrder(remainingOrders.length > 0 ? remainingOrders[0] : null);
+      }
+      
+      // Refresh the orders list to ensure consistency
+      await fetchOrders();
+    } catch (err) {
+      setError(err);
+      console.error('Error deleting orders:', err);
+      throw err; // Re-throw so OrderList can handle it
     }
   };
 
@@ -139,9 +156,6 @@ export default function AllOrdersPage() {
       const newOrder = await createNewOrder(payload);
       // Refresh orders list
       await fetchOrders();
-      // Select the newly created order
-      setSelectedOrder(newOrder);
-      setMode('view');
       setIsCreateModalOpen(false);
     } catch (err) {
       setCreateError(err);
@@ -160,10 +174,13 @@ export default function AllOrdersPage() {
       const fileExtension = file.name.split('.').pop()?.toLowerCase();
       let orders: Array<{ orderOnMarketPlace: string; jsonb: Record<string, unknown> }> = [];
 
+      // Use marketplace filter from URL if available, otherwise null
+      const overrideMarketplace = marketplaceFilter || null;
+
       if (fileExtension === 'csv') {
-        orders = await parseCSVFile(file);
+        orders = await parseCSVFile(file, overrideMarketplace);
       } else if (fileExtension === 'xlsx' || fileExtension === 'xls' || fileExtension === 'ods') {
-        orders = await parseExcelFile(file);
+        orders = await parseExcelFile(file, overrideMarketplace);
       } else {
         throw new Error('Unsupported file format. Please use CSV, XLSX, XLS, or ODS files.');
       }
@@ -177,14 +194,13 @@ export default function AllOrdersPage() {
       
       // Refresh orders list
       await fetchOrders();
-      
-      // Select the first created order
-      if (createdOrders.length > 0) {
-        setSelectedOrder(createdOrders[0]);
-        setMode('view');
-      }
 
-      alert(`Successfully imported ${createdOrders.length} order(s)!`);
+      // Show toast notification instead of alert
+      const marketplaceMessage = overrideMarketplace 
+        ? ` with marketplace "${overrideMarketplace}"`
+        : '';
+      setToastMessage(`Successfully imported ${createdOrders.length} order(s)${marketplaceMessage}!`);
+      setShowToast(true);
     } catch (err) {
       setImportError(err);
       console.error('Error importing file:', err);
@@ -195,7 +211,7 @@ export default function AllOrdersPage() {
   };
 
   // Show error banner at top if there's a global error
-  const hasGlobalError = (error || importError) && mode === 'view';
+  const hasGlobalError = error || importError;
 
   return (
     <div className="flex h-full flex-col">
@@ -219,46 +235,26 @@ export default function AllOrdersPage() {
       )}
 
       <div className="flex-1 overflow-hidden min-h-0">
-        <ResizableSplitView
-          defaultLeftWidth={40}
-          minLeftWidth={20}
-          maxLeftWidth={80}
-          left={
-            <div className="h-full border-r border-slate-200 flex flex-col overflow-hidden bg-white rounded-l-lg">
-              {loading && orders.length === 0 ? (
-                <div className="flex h-full items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
-                </div>
-              ) : (
-                <OrderList
-                  orders={orders}
-                  selectedOrderId={selectedOrder?.id ?? null}
-                  loading={loading}
-                  onOrderSelect={handleOrderSelect}
-                  onOrderDelete={handleOrderDelete}
-                  onOrderEdit={handleOrderEdit}
-                  onCreateNew={() => {
-                    setIsCreateModalOpen(true);
-                  }}
-                  onImportFile={handleImportFile}
-                />
-              )}
-            </div>
-          }
-          right={
-            <div className="h-full bg-white overflow-hidden flex flex-col rounded-r-lg">
-              <OrderDetail
-                order={selectedOrder}
-                mode={mode}
-                loading={loading && !orders.length}
-                saving={saving}
-                error={error}
-                onSave={handleSave}
-                onCancel={handleCancel}
-              />
-            </div>
-          }
-        />
+        {loading && orders.length === 0 ? (
+          <div className="flex h-full items-center justify-center bg-white">
+            <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+          </div>
+        ) : (
+          <OrderList
+            orders={filteredOrders}
+            selectedOrderId={selectedOrder?.id ?? null}
+            loading={loading}
+            onOrderSelect={handleOrderSelect}
+            onOrderDelete={handleOrderDelete}
+            onOrderEdit={handleOrderEdit}
+            onCreateNew={() => {
+              setIsCreateModalOpen(true);
+            }}
+            onImportFile={handleImportFile}
+            onOpenEditModal={setSelectedOrderForEdit}
+            onBulkDelete={handleBulkDelete}
+          />
+        )}
       </div>
 
       {/* Create Order Modal */}
@@ -271,7 +267,34 @@ export default function AllOrdersPage() {
         onSave={handleCreateOrder}
         loading={createLoading}
         error={createError}
+        defaultMarketplace={marketplaceFilter}
       />
+
+      {/* Edit Order Modal */}
+      <EditOrderModal
+        isOpen={selectedOrderForEdit !== null}
+        order={selectedOrderForEdit}
+        onClose={() => {
+          setSelectedOrderForEdit(null);
+          setEditError(null);
+        }}
+        onSave={handleEditOrder}
+        loading={editLoading}
+        error={editError}
+      />
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <Toast
+          message={toastMessage}
+          isVisible={showToast}
+          onClose={() => {
+            setShowToast(false);
+            setTimeout(() => setToastMessage(null), 300);
+          }}
+          duration={4000}
+        />
+      )}
     </div>
   );
 }

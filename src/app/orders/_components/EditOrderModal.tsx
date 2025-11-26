@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { X, Loader2, Save, Plus, Trash2 } from 'lucide-react';
-import type { CreateOrderPayload } from '@/app/types/order';
-import { isValidJson, parseJsonSafely, formatJsonb } from '@/app/utils/Orders';
+import { useState, useEffect, useRef } from 'react';
+import { X, Loader2, Save, Plus, Trash2, GripVertical } from 'lucide-react';
+import type { Order, UpdateOrderPayload } from '@/app/types/order';
+import { formatJsonb, parseJsonSafely } from '@/app/utils/Orders';
 import { detectValueType, parseValueByType } from '@/app/utils/Orders/valueTypeDetector';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 
@@ -13,37 +13,71 @@ type KeyValuePair = {
   value: string;
 };
 
-type CreateOrderModalProps = {
+type EditOrderModalProps = {
   isOpen: boolean;
+  order: Order | null;
   onClose: () => void;
-  onSave: (payload: CreateOrderPayload) => Promise<void>;
+  onSave: (payload: UpdateOrderPayload) => Promise<void>;
   loading?: boolean;
   error?: unknown;
-  defaultMarketplace?: string | null;
 };
 
-export const CreateOrderModal = ({
+export const EditOrderModal = ({
   isOpen,
+  order,
   onClose,
   onSave,
   loading = false,
   error,
-  defaultMarketplace,
-}: CreateOrderModalProps) => {
+}: EditOrderModalProps) => {
   const [orderOnMarketPlace, setOrderOnMarketPlace] = useState('');
-  const [keyValuePairs, setKeyValuePairs] = useState<KeyValuePair[]>([
-    { id: '1', key: '', value: '' },
-  ]);
+  const [keyValuePairs, setKeyValuePairs] = useState<KeyValuePair[]>([]);
   const [jsonbError, setJsonbError] = useState<string | null>(null);
+  const [previewHeight, setPreviewHeight] = useState(192); // Default 192px (12rem)
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeRef = useRef<HTMLDivElement>(null);
+  const startYRef = useRef<number>(0);
+  const startHeightRef = useRef<number>(192);
 
-  // Reset form when modal opens/closes and pre-fill marketplace if provided
+  // Initialize form when order changes
   useEffect(() => {
-    if (isOpen) {
-      setOrderOnMarketPlace(defaultMarketplace || '');
-      setKeyValuePairs([{ id: '1', key: '', value: '' }]);
+    if (isOpen && order) {
+      setOrderOnMarketPlace(order.orderOnMarketPlace);
+      
+      // Convert JSONB to key-value pairs
+      const jsonObj = typeof order.jsonb === 'string' 
+        ? parseJsonSafely(order.jsonb) as Record<string, unknown>
+        : (order.jsonb as Record<string, unknown>);
+      
+      if (jsonObj && typeof jsonObj === 'object' && !Array.isArray(jsonObj)) {
+        const pairs: KeyValuePair[] = Object.entries(jsonObj).map(([key, value], index) => {
+          let stringValue = '';
+          
+          if (value === null) {
+            stringValue = 'null';
+          } else if (typeof value === 'boolean') {
+            stringValue = value.toString();
+          } else if (typeof value === 'number') {
+            stringValue = value.toString();
+          } else {
+            stringValue = String(value);
+          }
+          
+          return {
+            id: `pair-${index}-${Date.now()}`,
+            key,
+            value: stringValue,
+          };
+        });
+        
+        setKeyValuePairs(pairs.length > 0 ? pairs : [{ id: '1', key: '', value: '' }]);
+      } else {
+        setKeyValuePairs([{ id: '1', key: '', value: '' }]);
+      }
+      
       setJsonbError(null);
     }
-  }, [isOpen, defaultMarketplace]);
+  }, [isOpen, order]);
 
   // Build JSON object from key-value pairs
   const buildJsonFromPairs = (): Record<string, unknown> | null => {
@@ -62,6 +96,13 @@ export const CreateOrderModal = ({
     return jsonObj;
   };
 
+  // Get JSON preview
+  const getJsonPreview = (): string => {
+    const jsonObj = buildJsonFromPairs();
+    if (jsonObj === null) return '{}';
+    return formatJsonb(jsonObj);
+  };
+
   // Handle Escape key to close modal
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -78,6 +119,37 @@ export const CreateOrderModal = ({
     }
   }, [isOpen, loading, onClose]);
 
+  // Handle resize
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return;
+      
+      const deltaY = e.clientY - startYRef.current;
+      const newHeight = Math.max(100, Math.min(600, startHeightRef.current + deltaY));
+      setPreviewHeight(newHeight);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isResizing]);
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    startYRef.current = e.clientY;
+    startHeightRef.current = previewHeight;
+  };
+
   const addKeyValuePair = () => {
     const newId = Date.now().toString();
     setKeyValuePairs([...keyValuePairs, { id: newId, key: '', value: '' }]);
@@ -85,9 +157,7 @@ export const CreateOrderModal = ({
   };
 
   const removeKeyValuePair = (id: string) => {
-    if (keyValuePairs.length > 1) {
-      setKeyValuePairs(keyValuePairs.filter((pair) => pair.id !== id));
-    }
+    setKeyValuePairs(keyValuePairs.filter((pair) => pair.id !== id));
     setJsonbError(null);
   };
 
@@ -104,6 +174,8 @@ export const CreateOrderModal = ({
   };
 
   const handleSave = async () => {
+    if (!order) return;
+
     // Validate required fields
     if (!orderOnMarketPlace.trim()) {
       alert('Order on Marketplace is required');
@@ -141,22 +213,22 @@ export const CreateOrderModal = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !order) return null;
+
+  const jsonPreview = getJsonPreview();
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in"
       onClick={onClose}
-      style={{ animation: 'fadeIn 0.2s ease-out' }}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[90vh] flex flex-col"
+        className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col animate-slide-up-and-scale"
         onClick={(e) => e.stopPropagation()}
-        style={{ animation: 'slideUp 0.2s ease-out' }}
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between rounded-t-xl">
-          <h2 className="text-xl font-semibold text-slate-900">Create New Order</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Edit Order #{order.id}</h2>
           <button
             onClick={onClose}
             disabled={loading}
@@ -176,6 +248,16 @@ export const CreateOrderModal = ({
 
         {/* Form content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Order ID (read-only) */}
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-slate-900">
+              Order ID
+            </label>
+            <div className="w-full px-4 py-3 border border-slate-300 rounded-lg bg-slate-100 text-slate-600 cursor-not-allowed">
+              #{order.id}
+            </div>
+          </div>
+
           {/* Order on Marketplace */}
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-slate-900">
@@ -191,11 +273,11 @@ export const CreateOrderModal = ({
             />
           </div>
 
-          {/* JSONB Field - Key-Value Pairs */}
+          {/* Key-Value Pairs */}
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="block text-sm font-semibold text-slate-900">
-                JSONB Data <span className="text-red-500">*</span>
+                Key-Value Pairs <span className="text-red-500">*</span>
               </label>
               <button
                 type="button"
@@ -208,8 +290,8 @@ export const CreateOrderModal = ({
               </button>
             </div>
 
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-              {keyValuePairs.map((pair, index) => (
+            <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
+              {keyValuePairs.map((pair) => (
                 <div
                   key={pair.id}
                   className="flex items-start gap-2 p-4 border border-slate-200 rounded-lg bg-slate-50/50 hover:bg-slate-50 transition-colors"
@@ -241,17 +323,15 @@ export const CreateOrderModal = ({
 
                     {/* Remove Button */}
                     <div className="col-span-1 flex items-center">
-                      {keyValuePairs.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => removeKeyValuePair(pair.id)}
-                          disabled={loading}
-                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title="Remove pair"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeKeyValuePair(pair.id)}
+                        disabled={loading}
+                        className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Remove pair"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -261,29 +341,30 @@ export const CreateOrderModal = ({
             {jsonbError && (
               <p className="text-sm text-red-600 font-medium">{jsonbError}</p>
             )}
-
-            {/* JSONB Data Preview at Bottom */}
-            <div className="space-y-2 border-t border-slate-200 pt-4 mt-4">
-              <label className="block text-sm font-semibold text-slate-900">
-                JSONB Data Preview
-              </label>
-              <div className="w-full px-4 py-3 border border-slate-300 rounded-lg bg-slate-50 font-mono text-xs text-slate-700 max-h-48 overflow-auto">
-                <pre className="whitespace-pre-wrap break-words">
-                  {(() => {
-                    const jsonObj = buildJsonFromPairs();
-                    if (jsonObj === null) return '{}';
-                    return formatJsonb(jsonObj);
-                  })()}
-                </pre>
-              </div>
-            </div>
           </div>
 
-          {/* Help text */}
-          <div className="bg-blue-50/80 border-l-4 border-blue-400 rounded-md p-4">
-            <p className="text-sm text-blue-900">
-              <strong className="font-semibold">Tip:</strong> Add key-value pairs to build your JSON object. Value types are automatically detected: numbers (123, 45.67), booleans (true/false), null, or strings. Empty keys will be ignored.
-            </p>
+          {/* JSONB Data Preview at Bottom - Resizable */}
+          <div className="space-y-2 border-t border-slate-200 pt-4">
+            <label className="block text-sm font-semibold text-slate-900">
+              JSONB Data Preview
+            </label>
+            <div className="relative">
+              <div
+                ref={resizeRef}
+                className="w-full border border-slate-300 rounded-lg bg-slate-50 font-mono text-xs text-slate-700 overflow-auto"
+                style={{ height: `${previewHeight}px`, minHeight: '100px', maxHeight: '600px' }}
+              >
+                <div className="px-4 py-3">
+                  <pre className="whitespace-pre-wrap break-words">{jsonPreview}</pre>
+                </div>
+              </div>
+              <div
+                onMouseDown={handleResizeStart}
+                className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-200 transition-colors rounded-b-lg flex items-center justify-center group"
+              >
+                <GripVertical className="h-4 w-4 text-slate-400 group-hover:text-slate-600" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -309,7 +390,7 @@ export const CreateOrderModal = ({
             ) : (
               <>
                 <Save className="h-4 w-4" />
-                Save Order
+                Save Changes
               </>
             )}
           </button>

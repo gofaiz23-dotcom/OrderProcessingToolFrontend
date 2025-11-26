@@ -1,10 +1,10 @@
 'use client';
 
 import { ReactNode } from 'react';
-import EmailWorkspace from '../email/Email';
+import { AppLayout } from '../components/shared';
 
 const OrdersLayout = ({ children }: { children: ReactNode }) => (
-  <EmailWorkspace>{children}</EmailWorkspace>
+  <AppLayout>{children}</AppLayout>
 );
 
 export default OrdersLayout;

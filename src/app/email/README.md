@@ -27,8 +27,7 @@ email/
 │   └── page.tsx
 ├── sent/                # Sent emails page
 │   └── page.tsx
-├── Email.tsx            # Main email workspace layout
-├── layout.tsx           # Next.js layout wrapper
+├── layout.tsx           # Next.js layout wrapper (uses AppLayout from components/shared)
 └── page.tsx             # Email index (redirects to inbox)
 ```
 

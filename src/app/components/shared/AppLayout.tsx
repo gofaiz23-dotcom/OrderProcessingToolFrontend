@@ -2,19 +2,16 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname } from 'next/navigation';
-import { ReactNode, useState, useEffect } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { ReactNode, useState, useEffect, useRef } from 'react';
 import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart } from 'lucide-react';
-import API_BASE_URL from '../../../BaseUrl';
+import API_BASE_URL from '../../../../BaseUrl';
+import { MARKETPLACES } from '@/Shared/constant';
 
 const emailSubItems = [
     { href: '/email/inbox', label: 'Inbox', icon: Inbox },
     { href: '/email/sent', label: 'Sent', icon: Send },
     { href: '/email/compose', label: 'Compose Email', icon: PencilLine },
-];
-
-const otherItems = [
-    { href: '/orders/all', label: 'Orders', icon: ShoppingCart },
 ];
 
 // Refresh Token button at bottom
@@ -29,9 +26,12 @@ const isActivePath = (pathname: string | null, href: string) => {
     return pathname.startsWith(`${href}/`);
 };
 
-const EmailWorkspace = ({ children }: { children: ReactNode }) => {
+const AppLayout = ({ children }: { children: ReactNode }) => {
     const pathname = usePathname();
+    const searchParams = useSearchParams();
     const [isEmailExpanded, setIsEmailExpanded] = useState(true);
+    const [isOrdersExpanded, setIsOrdersExpanded] = useState(false);
+    const ordersDropdownRef = useRef<HTMLDivElement>(null);
 
     // Auto-expand Email section if on inbox, sent, or compose page
     useEffect(() => {
@@ -40,7 +40,31 @@ const EmailWorkspace = ({ children }: { children: ReactNode }) => {
         }
     }, [pathname]);
 
+    // Auto-expand Orders section if on orders page
+    useEffect(() => {
+        if (pathname?.startsWith('/orders')) {
+            setIsOrdersExpanded(true);
+        }
+    }, [pathname]);
+
+    // Close orders dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (ordersDropdownRef.current && !ordersDropdownRef.current.contains(event.target as Node)) {
+                setIsOrdersExpanded(false);
+            }
+        };
+
+        if (isOrdersExpanded) {
+            document.addEventListener('mousedown', handleClickOutside);
+            return () => {
+                document.removeEventListener('mousedown', handleClickOutside);
+            };
+        }
+    }, [isOrdersExpanded]);
+
     const hasActiveEmailItem = emailSubItems.some(item => isActivePath(pathname, item.href));
+    const hasActiveOrdersItem = pathname?.startsWith('/orders');
 
     return (
         <div className="flex h-screen w-full bg-gradient-to-br from-slate-100 to-slate-200">
@@ -115,29 +139,68 @@ const EmailWorkspace = ({ children }: { children: ReactNode }) => {
                                     )}
                                 </div>
 
-                                {/* Orders */}
-                                {otherItems.map((item) => {
-                                    const Icon = item.icon;
-                                    const isActive = isActivePath(pathname, item.href);
-
-                                    return (
-                                        <Link key={item.href} href={item.href}>
-                                            <div
-                                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-                                                    isActive
+                                {/* Orders Section - Collapsible with Marketplace Dropdown */}
+                                <div ref={ordersDropdownRef}>
+                                    <button
+                                        onClick={() => setIsOrdersExpanded(!isOrdersExpanded)}
+                                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                                            hasActiveOrdersItem
                                                         ? 'bg-blue-50 text-blue-700'
                                                         : 'text-slate-700 hover:bg-slate-50'
                                                 }`}
                                             >
-                                                <Icon
+                                        <ShoppingCart
                                                     size={18}
-                                                    className={isActive ? 'text-blue-600' : 'text-slate-400'}
+                                            className={hasActiveOrdersItem ? 'text-blue-600' : 'text-slate-400'}
                                                 />
-                                                <span className="text-sm font-medium">{item.label}</span>
+                                        <span className="text-sm font-medium flex-1 text-left">Orders</span>
+                                        {isOrdersExpanded ? (
+                                            <ChevronDown size={16} className="text-slate-400" />
+                                        ) : (
+                                            <ChevronRight size={16} className="text-slate-400" />
+                                        )}
+                                    </button>
+
+                                    {/* Marketplace Sub-items */}
+                                    {isOrdersExpanded && (
+                                        <div className="ml-6 mt-1 space-y-0.5">
+                                            {/* All Orders option */}
+                                            <Link href="/orders/all">
+                                                <div
+                                                    className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                                                        hasActiveOrdersItem && !searchParams?.get('marketplace')
+                                                            ? 'bg-blue-50 text-blue-700'
+                                                            : 'text-slate-600 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    <span className="text-sm font-medium">All Orders</span>
+                                                </div>
+                                            </Link>
+                                            
+                                            {/* Marketplace options */}
+                                            {MARKETPLACES.map((marketplace) => {
+                                                const isActive = hasActiveOrdersItem && searchParams?.get('marketplace') === marketplace;
+                                                
+                                                return (
+                                                    <Link 
+                                                        key={marketplace} 
+                                                        href={`/orders/all?marketplace=${encodeURIComponent(marketplace)}`}
+                                                    >
+                                                        <div
+                                                            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                                                                isActive
+                                                                    ? 'bg-blue-50 text-blue-700'
+                                                                    : 'text-slate-600 hover:bg-slate-50'
+                                                            }`}
+                                                        >
+                                                            <span className="text-sm font-medium">{marketplace}</span>
                                             </div>
                                         </Link>
                                     );
                                 })}
+                                        </div>
+                                    )}
+                                </div>
                             </nav>
                         </div>
                     </div>
@@ -200,4 +263,5 @@ const EmailWorkspace = ({ children }: { children: ReactNode }) => {
     );
 };
 
-export default EmailWorkspace;
+export default AppLayout;
+

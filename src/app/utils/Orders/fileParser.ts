@@ -20,8 +20,13 @@ const loadXLSX = async () => {
 
 /**
  * Parse CSV file and convert to orders
+ * @param file - The CSV file to parse
+ * @param overrideMarketplace - Optional marketplace name to override all marketplace values in the file
  */
-export const parseCSVFile = async (file: File): Promise<Array<{ orderOnMarketPlace: string; jsonb: Record<string, unknown> }>> => {
+export const parseCSVFile = async (
+  file: File,
+  overrideMarketplace?: string | null
+): Promise<Array<{ orderOnMarketPlace: string; jsonb: Record<string, unknown> }>> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
@@ -68,11 +73,17 @@ export const parseCSVFile = async (file: File): Promise<Array<{ orderOnMarketPla
         for (let i = 1; i < lines.length; i++) {
           const values = parseCSVLine(lines[i]);
           
-          if (values.length === 0 || !values[marketplaceIndex]?.trim()) {
-            continue; // Skip empty rows
+          if (values.length === 0) {
+            continue; // Skip completely empty rows
           }
 
-          const orderOnMarketPlace = values[marketplaceIndex].trim();
+          // Use override marketplace if provided, otherwise use value from file
+          const orderOnMarketPlace = overrideMarketplace?.trim() || values[marketplaceIndex]?.trim() || '';
+          
+          // Skip row if no marketplace value (neither override nor file value)
+          if (!orderOnMarketPlace) {
+            continue;
+          }
           
           // Build JSONB object from all other columns
           const jsonb: Record<string, unknown> = {};
@@ -170,8 +181,13 @@ const parseValue = (value: string): unknown => {
 
 /**
  * Parse Excel file (XLSX, XLS, ODS)
+ * @param file - The Excel file to parse
+ * @param overrideMarketplace - Optional marketplace name to override all marketplace values in the file
  */
-export const parseExcelFile = async (file: File): Promise<Array<{ orderOnMarketPlace: string; jsonb: Record<string, unknown> }>> => {
+export const parseExcelFile = async (
+  file: File,
+  overrideMarketplace?: string | null
+): Promise<Array<{ orderOnMarketPlace: string; jsonb: Record<string, unknown> }>> => {
   // Load xlsx library dynamically
   const XLSX = await loadXLSX();
   
@@ -240,8 +256,11 @@ export const parseExcelFile = async (file: File): Promise<Array<{ orderOnMarketP
           
           if (!row || row.length === 0) continue;
           
-          const marketplaceValue = String(row[marketplaceIndex] || '').trim();
-          if (!marketplaceValue) continue; // Skip rows without marketplace value
+          // Use override marketplace if provided, otherwise use value from file
+          const marketplaceValue = overrideMarketplace?.trim() || String(row[marketplaceIndex] || '').trim();
+          
+          // Skip row if no marketplace value (neither override nor file value)
+          if (!marketplaceValue) continue;
 
           // Build JSONB object from other columns
           const jsonb: Record<string, unknown> = {};
