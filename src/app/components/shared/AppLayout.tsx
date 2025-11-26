@@ -4,9 +4,9 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { ReactNode, useState, useEffect, useRef } from 'react';
-import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart } from 'lucide-react';
+import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart, Truck } from 'lucide-react';
 import API_BASE_URL from '../../../../BaseUrl';
-import { MARKETPLACES } from '@/Shared/constant';
+import { MARKETPLACES, LOGISTICS_CARRIERS } from '@/Shared/constant';
 
 const emailSubItems = [
     { href: '/email/inbox', label: 'Inbox', icon: Inbox },
@@ -31,7 +31,9 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     const searchParams = useSearchParams();
     const [isEmailExpanded, setIsEmailExpanded] = useState(true);
     const [isOrdersExpanded, setIsOrdersExpanded] = useState(false);
+    const [isLogisticsExpanded, setIsLogisticsExpanded] = useState(false);
     const ordersDropdownRef = useRef<HTMLDivElement>(null);
+    const logisticsDropdownRef = useRef<HTMLDivElement>(null);
 
     // Auto-expand Email section if on inbox, sent, or compose page
     useEffect(() => {
@@ -47,24 +49,35 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         }
     }, [pathname]);
 
+    // Auto-expand Logistics section if on logistics page
+    useEffect(() => {
+        if (pathname?.startsWith('/logistics')) {
+            setIsLogisticsExpanded(true);
+        }
+    }, [pathname]);
+
     // Close orders dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (ordersDropdownRef.current && !ordersDropdownRef.current.contains(event.target as Node)) {
                 setIsOrdersExpanded(false);
             }
+            if (logisticsDropdownRef.current && !logisticsDropdownRef.current.contains(event.target as Node)) {
+                setIsLogisticsExpanded(false);
+            }
         };
 
-        if (isOrdersExpanded) {
+        if (isOrdersExpanded || isLogisticsExpanded) {
             document.addEventListener('mousedown', handleClickOutside);
             return () => {
                 document.removeEventListener('mousedown', handleClickOutside);
             };
         }
-    }, [isOrdersExpanded]);
+    }, [isOrdersExpanded, isLogisticsExpanded]);
 
     const hasActiveEmailItem = emailSubItems.some(item => isActivePath(pathname, item.href));
     const hasActiveOrdersItem = pathname?.startsWith('/orders');
+    const hasActiveLogisticsItem = pathname?.startsWith('/logistics');
 
     return (
         <div className="flex h-screen w-full bg-gradient-to-br from-slate-100 to-slate-200">
@@ -198,6 +211,55 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                         </Link>
                                     );
                                 })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Logistics Section - Collapsible with Carrier Dropdown */}
+                                <div ref={logisticsDropdownRef}>
+                                    <button
+                                        onClick={() => setIsLogisticsExpanded(!isLogisticsExpanded)}
+                                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                                            hasActiveLogisticsItem
+                                                ? 'bg-blue-50 text-blue-700'
+                                                : 'text-slate-700 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <Truck
+                                            size={18}
+                                            className={hasActiveLogisticsItem ? 'text-blue-600' : 'text-slate-400'}
+                                        />
+                                        <span className="text-sm font-medium flex-1 text-left">Logistics</span>
+                                        {isLogisticsExpanded ? (
+                                            <ChevronDown size={16} className="text-slate-400" />
+                                        ) : (
+                                            <ChevronRight size={16} className="text-slate-400" />
+                                        )}
+                                    </button>
+
+                                    {/* Carrier Sub-items */}
+                                    {isLogisticsExpanded && (
+                                        <div className="ml-6 mt-1 space-y-0.5">
+                                            {LOGISTICS_CARRIERS.map((carrier) => {
+                                                const isActive = hasActiveLogisticsItem && searchParams?.get('carrier') === carrier;
+                                                
+                                                return (
+                                                    <Link 
+                                                        key={carrier} 
+                                                        href={`/logistics?carrier=${encodeURIComponent(carrier)}`}
+                                                    >
+                                                        <div
+                                                            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                                                                isActive
+                                                                    ? 'bg-blue-50 text-blue-700'
+                                                                    : 'text-slate-600 hover:bg-slate-50'
+                                                            }`}
+                                                        >
+                                                            <span className="text-sm font-medium">{carrier}</span>
+                                                        </div>
+                                                    </Link>
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>
