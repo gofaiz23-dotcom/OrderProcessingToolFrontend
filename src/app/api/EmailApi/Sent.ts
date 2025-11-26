@@ -1,4 +1,5 @@
 import API_BASE_URL, { buildApiUrl } from '../../../../BaseUrl';
+import { handleApiError } from '@/app/utils/Errors/ApiError';
 
 export type SentEmailQueryOptions = {
   limit?: number;
@@ -48,7 +49,7 @@ export const fetchSentEmails = async (
   });
 
   if (!response.ok) {
-    throw new Error(`Unable to load sent emails (status ${response.status})`);
+    await handleApiError(response);
   }
 
   return response.json();

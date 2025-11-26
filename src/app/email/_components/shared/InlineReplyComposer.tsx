@@ -11,6 +11,8 @@ import {
   MAX_RECIPIENTS,
   submitComposeForm,
 } from '@/app/utils/Emails/Compose';
+import { extractErrorInfo } from '@/app/utils/Errors/ApiError';
+import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 
 type InlineReplyComposerProps = {
   to: string[];
@@ -43,6 +45,7 @@ export const InlineReplyComposer = ({
     type: null,
     message: '',
   });
+  const [error, setError] = useState<unknown>(null);
   const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -51,6 +54,7 @@ export const InlineReplyComposer = ({
     event.preventDefault();
     setLoading(true);
     setStatus({ type: null, message: '' });
+    setError(null);
 
     try {
       const result = await submitComposeForm(form);
@@ -66,8 +70,9 @@ export const InlineReplyComposer = ({
         }
         onClose();
       }, 1500);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to send email';
+    } catch (err) {
+      setError(err);
+      const { message } = extractErrorInfo(err);
       setStatus({ type: 'error', message });
     } finally {
       setLoading(false);
@@ -252,17 +257,14 @@ export const InlineReplyComposer = ({
         </div>
 
         {/* Status Message */}
-        {status.message && (
-          <div
-            className={`mx-4 mt-2 rounded-md border px-3 py-2 text-xs ${
-              status.type === 'success'
-                ? 'border-green-200 bg-green-50 text-green-700'
-                : 'border-red-200 bg-red-50 text-red-700'
-            }`}
-          >
+        {status.type === 'success' && status.message && (
+          <div className="mx-4 mt-2 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-700">
             {status.message}
           </div>
         )}
+        
+        {/* Error Display */}
+        {error !== null && <div className="mx-4 mt-2"><ErrorDisplay error={error} /></div>}
 
         {/* Action Buttons */}
         <div className="flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3">

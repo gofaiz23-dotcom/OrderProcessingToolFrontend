@@ -10,17 +10,25 @@ type EmailListItemProps = {
   onSelect: (email: InboxEmail | SentEmail) => void;
 };
 
-const formatTime = (date: Date) => {
+const formatTime = (date: Date | string) => {
+  // Ensure date is a Date object (handle cases where it might be a string from cache)
+  const dateObj = date instanceof Date ? date : new Date(date);
+  
+  // Check if date is valid
+  if (isNaN(dateObj.getTime())) {
+    return 'Invalid date';
+  }
+  
   const now = new Date();
-  const diff = now.getTime() - date.getTime();
+  const diff = now.getTime() - dateObj.getTime();
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
   if (days === 0) {
-    return new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(date);
+    return new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(dateObj);
   } else if (days < 7) {
-    return new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(date);
+    return new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dateObj);
   } else {
-    return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
+    return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(dateObj);
   }
 };
 

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { ReactNode, useState, useEffect } from 'react';
 import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight } from 'lucide-react';
@@ -44,123 +45,128 @@ const EmailWorkspace = ({ children }: { children: ReactNode }) => {
         <div className="flex h-screen w-full bg-gradient-to-br from-slate-100 to-slate-200">
 
             {/* LEFT FIXED SIDEBAR */}
-            <aside className="w-72 h-full bg-white/80 backdrop-blur-xl border-r border-white/50 shadow-xl p-6 flex flex-col">
-
-                {/* Header */}
-                <div>
-                    <h2 className="text-3xl font-bold text-slate-900">Order Processing Tool</h2>
-                </div>
-
-                {/* TOP NAVIGATION */}
-                <nav className="mt-10 space-y-2 flex-1">
-                    {/* Email Section */}
-                    <div>
-                        <button
-                            onClick={() => setIsEmailExpanded(!isEmailExpanded)}
-                            className={`group relative flex w-full items-center gap-3 rounded-2xl px-5 py-4 text-[15px] font-medium transition-all ${
-                                hasActiveEmailItem
-                                    ? 'bg-blue-100 text-blue-700 shadow-sm scale-[1.02]'
-                                    : 'bg-white/60 text-slate-700 hover:bg-slate-50 hover:shadow-md hover:scale-[1.01]'
-                            }`}
-                        >
-                            <Mail
-                                size={20}
-                                className={hasActiveEmailItem ? 'text-blue-600' : 'text-slate-500 group-hover:text-blue-500'}
+            <aside className="w-64 h-full bg-white border-r border-slate-200 flex flex-col">
+                <div className="flex-1 overflow-y-auto">
+                    <div className="p-6">
+                        {/* Header */}
+                        <div className="mb-8 pb-6 border-b border-slate-200 flex justify-center">
+                            <Image
+                                src="/logo.png"
+                                alt="Order Processing Tool"
+                                width={120}
+                                height={30}
+                                className="h-auto w-auto object-contain"
+                                priority
                             />
-                            <span>Email</span>
-                            {isEmailExpanded ? (
-                                <ChevronDown
-                                    size={16}
-                                    className={`ml-auto ${hasActiveEmailItem ? 'text-blue-500' : 'text-slate-400'}`}
-                                />
-                            ) : (
-                                <ChevronRight
-                                    size={16}
-                                    className={`ml-auto ${hasActiveEmailItem ? 'text-blue-500' : 'text-slate-400'}`}
-                                />
-                            )}
-                        </button>
+                        </div>
 
-                        {/* Email Sub-items */}
-                        {isEmailExpanded && (
-                            <div className="ml-4 mt-2 space-y-1">
-                                {emailSubItems.map((item) => {
+                        {/* OVERVIEW Section */}
+                        <div className="mb-8">
+                            <nav className="space-y-1">
+                                {/* Email Section - Collapsible */}
+                                <div>
+                                    <button
+                                        onClick={() => setIsEmailExpanded(!isEmailExpanded)}
+                                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                                            hasActiveEmailItem
+                                                ? 'bg-blue-50 text-blue-700'
+                                                : 'text-slate-700 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <Mail
+                                            size={18}
+                                            className={hasActiveEmailItem ? 'text-blue-600' : 'text-slate-400'}
+                                        />
+                                        <span className="text-sm font-medium flex-1 text-left">Email</span>
+                                        {isEmailExpanded ? (
+                                            <ChevronDown size={16} className="text-slate-400" />
+                                        ) : (
+                                            <ChevronRight size={16} className="text-slate-400" />
+                                        )}
+                                    </button>
+
+                                    {/* Email Sub-items */}
+                                    {isEmailExpanded && (
+                                        <div className="ml-6 mt-1 space-y-0.5">
+                                            {emailSubItems.map((item) => {
+                                                const Icon = item.icon;
+                                                const isActive = isActivePath(pathname, item.href);
+
+                                                return (
+                                                    <Link key={item.href} href={item.href}>
+                                                        <div
+                                                            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
+                                                                isActive
+                                                                    ? 'bg-blue-50 text-blue-700'
+                                                                    : 'text-slate-600 hover:bg-slate-50'
+                                                            }`}
+                                                        >
+                                                            <Icon
+                                                                size={16}
+                                                                className={isActive ? 'text-blue-600' : 'text-slate-400'}
+                                                            />
+                                                            <span className="text-sm font-medium">{item.label}</span>
+                                                        </div>
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Compose Email */}
+                                {otherItems.map((item) => {
                                     const Icon = item.icon;
                                     const isActive = isActivePath(pathname, item.href);
 
                                     return (
                                         <Link key={item.href} href={item.href}>
                                             <div
-                                                className={`group relative flex items-center gap-3 rounded-xl px-4 py-3 text-[14px] font-medium transition-all ${
+                                                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
                                                     isActive
-                                                        ? 'bg-blue-50 text-blue-700 shadow-sm'
-                                                        : 'bg-white/40 text-slate-700 hover:bg-slate-50 hover:shadow-sm'
+                                                        ? 'bg-blue-50 text-blue-700'
+                                                        : 'text-slate-700 hover:bg-slate-50'
                                                 }`}
                                             >
                                                 <Icon
                                                     size={18}
-                                                    className={isActive ? 'text-blue-600' : 'text-slate-500 group-hover:text-blue-500'}
+                                                    className={isActive ? 'text-blue-600' : 'text-slate-400'}
                                                 />
-                                                <span>{item.label}</span>
+                                                <span className="text-sm font-medium">{item.label}</span>
                                             </div>
                                         </Link>
                                     );
                                 })}
-                            </div>
-                        )}
+                            </nav>
+                        </div>
                     </div>
+                </div>
 
-                    {/* Other Items */}
-                    {otherItems.map((item) => {
-                        const Icon = item.icon;
-                        const isActive = isActivePath(pathname, item.href);
-
-                        const classes = `group relative flex items-center gap-3 rounded-2xl px-5 py-4 text-[15px] font-medium transition-all ${isActive
-                                ? 'bg-blue-100 text-blue-700 shadow-sm scale-[1.02]'
-                                : 'bg-white/60 text-slate-700 hover:bg-slate-50 hover:shadow-md hover:scale-[1.01]'
-                            }`;
-
-                        return (
-                            <Link key={item.href} href={item.href} className={classes}>
-                                <Icon
-                                    size={20}
-                                    className={isActive ? 'text-blue-600' : 'text-slate-500 group-hover:text-blue-500'}
-                                />
-                                <span>{item.label}</span>
-                            </Link>
-                        );
-                    })}
-                </nav>
-
-                {/* BOTTOM REFRESH TOKEN BUTTON WITH TOOLTIP */}
-                <div className="mt-auto border-t border-slate-400 pt-4">
+                {/* Refresh Token Button at Bottom */}
+                <div className="border-t border-slate-200 p-6">
                     <div className="relative group">
                         <a
                             href={refreshItem.href}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="
-                group flex items-center gap-3 rounded-2xl px-5 py-4 text-[15px] font-medium transition-all 
-                bg-white/60 text-slate-700 hover:bg-slate-50 hover:shadow-md hover:scale-[1.01]
-                border border-slate-300
-              "
+                            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
                         >
-                            <RefreshCcw size={20} className="text-slate-500 group-hover:text-blue-500" />
-                            <span>{refreshItem.label}</span>
+                            <RefreshCcw size={18} className="text-slate-400 group-hover:text-slate-600" />
+                            <span className="text-sm font-medium">{refreshItem.label}</span>
                         </a>
 
                         {/* Tooltip */}
                         <span
                             className="
-    absolute bottom-full left-1/2 -translate-x-1/2 mb-2
-    px-3 py-1.5 text-sm rounded-lg bg-red-600 text-white shadow-lg
-    opacity-0 pointer-events-none
-    group-hover:opacity-100 group-hover:-translate-y-1
-    transition-all duration-200 whitespace-nowrap
-    flex items-center gap-2 z-[9999]
-    before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2
-    before:border-4 before:border-transparent before:border-t-red-600
-  "
+                                absolute bottom-full left-4 mb-2
+                                px-3 py-1.5 text-sm rounded-lg bg-red-600 text-white shadow-lg
+                                opacity-0 pointer-events-none
+                                group-hover:opacity-100 group-hover:-translate-y-1
+                                transition-all duration-200 whitespace-nowrap
+                                flex items-center gap-2 z-[9999]
+                                before:content-[''] before:absolute before:top-full before:left-4
+                                before:border-4 before:border-transparent before:border-t-red-600
+                            "
                         >
                             <svg
                                 xmlns='http://www.w3.org/2000/svg'
@@ -176,18 +182,15 @@ const EmailWorkspace = ({ children }: { children: ReactNode }) => {
                                     d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 110 20 10 10 0 010-20z"
                                 />
                             </svg>
-
                             Refresh token lasts 5 days - use only when needed
                         </span>
-
                     </div>
                 </div>
-
             </aside>
 
             {/* RIGHT MAIN CONTENT */}
-            <main className="flex-1 overflow-y-auto p-10">
-                <div className="bg-white rounded-3xl shadow-xl p-8 border border-white/50 min-h-full">
+            <main className="flex-1 p-10 overflow-hidden flex flex-col">
+                <div className="bg-white rounded-3xl shadow-xl p-8 border border-white/50 flex-1 min-h-0 overflow-hidden flex flex-col">
                     {children}
                 </div>
             </main>

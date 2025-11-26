@@ -235,37 +235,64 @@ export const AttachmentPreviewModal = ({ attachment, onClose }: AttachmentPrevie
                 />
               </div>
             ) : csvData ? (
-              <div className="h-full w-full overflow-auto p-4">
-                <table className="min-w-full divide-y divide-slate-200 border border-slate-300 bg-white">
-                  <thead className="bg-slate-50">
-                    {csvData[0] && (
-                      <tr>
-                        {csvData[0].map((header, idx) => (
-                          <th
-                            key={idx}
-                            className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-slate-700 border-b border-slate-200"
-                          >
-                            {header || `Column ${idx + 1}`}
-                          </th>
-                        ))}
-                      </tr>
-                    )}
-                  </thead>
-                  <tbody className="bg-white divide-y divide-slate-200">
-                    {csvData.slice(1).map((row, rowIdx) => (
-                      <tr key={rowIdx} className="hover:bg-slate-50">
-                        {row.map((cell, cellIdx) => (
-                          <td
-                            key={cellIdx}
-                            className="px-4 py-2 text-sm text-slate-900 whitespace-nowrap"
-                          >
-                            {cell || '-'}
-                          </td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="h-full w-full bg-white border border-slate-300 overflow-auto" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
+                <style>{`
+                  .csv-container::-webkit-scrollbar {
+                    width: 12px;
+                    height: 12px;
+                  }
+                  .csv-container::-webkit-scrollbar-track {
+                    background: #f1f5f9;
+                  }
+                  .csv-container::-webkit-scrollbar-thumb {
+                    background: #cbd5e1;
+                    border-radius: 6px;
+                  }
+                  .csv-container::-webkit-scrollbar-thumb:hover {
+                    background: #94a3b8;
+                  }
+                `}</style>
+                <div className="csv-container overflow-auto h-full">
+                  <table className="border-collapse" style={{ fontSize: '11px', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                    <thead className="sticky top-0 z-10">
+                      {csvData[0] && (
+                        <tr>
+                          {csvData[0].map((header, idx) => (
+                            <th
+                              key={idx}
+                              className="bg-slate-100 border border-slate-300 px-2 py-1.5 text-left font-semibold text-slate-700 whitespace-nowrap"
+                              style={{ minWidth: '100px', maxWidth: '200px' }}
+                            >
+                              <div className="truncate" title={header || `Column ${idx + 1}`}>
+                                {header || `Column ${idx + 1}`}
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      )}
+                    </thead>
+                    <tbody>
+                      {csvData.slice(1).map((row, rowIdx) => (
+                        <tr 
+                          key={rowIdx} 
+                          className="hover:bg-blue-50 transition-colors"
+                        >
+                          {row.map((cell, cellIdx) => (
+                            <td
+                              key={cellIdx}
+                              className="border border-slate-300 px-2 py-1.5 text-slate-900 bg-white"
+                              style={{ minWidth: '100px', maxWidth: '200px' }}
+                            >
+                              <div className="truncate" title={cell || ''}>
+                                {cell || <span className="text-slate-300">-</span>}
+                              </div>
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ) : textContent ? (
               <pre className="h-full w-full overflow-auto p-4 text-sm font-mono text-slate-900 whitespace-pre-wrap break-words bg-white">

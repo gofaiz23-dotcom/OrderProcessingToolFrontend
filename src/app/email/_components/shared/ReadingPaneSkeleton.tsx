@@ -5,7 +5,7 @@ import { Skeleton } from '@/app/component/ui/skeleton';
 
 export const ReadingPaneSkeleton = memo(() => {
   return (
-    <article className="flex flex-col bg-white">
+    <article className="flex h-full flex-col bg-white overflow-hidden">
       {/* Email Header Skeleton */}
       <header className="border-b border-slate-200 bg-white px-6 py-4 flex-shrink-0">
         <div className="flex items-start justify-between gap-4">
@@ -27,17 +27,19 @@ export const ReadingPaneSkeleton = memo(() => {
         </div>
       </header>
 
-      {/* Email Body Skeleton */}
-      <section className="px-6 py-4">
-        <div className="space-y-3">
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-5/6" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-4/5" />
-          <Skeleton className="h-4 w-full" />
-        </div>
-      </section>
+      {/* Email Body Skeleton - Scrollable */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+        <section className="px-6 py-4">
+          <div className="space-y-3">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-5/6" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-4/5" />
+            <Skeleton className="h-4 w-full" />
+          </div>
+        </section>
+      </div>
     </article>
   );
 });

@@ -1,7 +1,10 @@
 import { buildApiUrl } from '../../../../BaseUrl';
+import { handleApiError } from '@/app/utils/Errors/ApiError';
 
 export type ComposeEmailPayload = {
   to: string[];
+  cc?: string;
+  bcc?: string;
   subject: string;
   text?: string;
   html?: string;
@@ -22,6 +25,8 @@ const sanitizeRecipients = (input: string | string[]) => {
 
 export const sendEmail = async ({
   to,
+  cc,
+  bcc,
   subject,
   text,
   html,
@@ -35,6 +40,8 @@ export const sendEmail = async ({
 
   const formData = new FormData();
   formData.append('to', recipients.join(','));
+  if (cc) formData.append('cc', cc);
+  if (bcc) formData.append('bcc', bcc);
   formData.append('subject', subject);
   if (text) formData.append('text', text);
   if (html) formData.append('html', html);
@@ -49,8 +56,7 @@ export const sendEmail = async ({
   });
 
   if (!response.ok) {
-    const errorBody = await response.json().catch(() => ({}));
-    throw new Error(errorBody.message || `Unable to send email (status ${response.status})`);
+    await handleApiError(response);
   }
 
   return response.json();

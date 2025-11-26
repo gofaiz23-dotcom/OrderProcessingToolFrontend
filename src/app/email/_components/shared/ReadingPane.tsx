@@ -7,7 +7,6 @@ import { EmailAttachment } from '@/app/types/email';
 import { InboxEmail } from '@/app/utils/Emails/Inbox';
 import { SentEmail } from '@/app/utils/Emails/Sent';
 import { ReadingPaneSkeleton } from './ReadingPaneSkeleton';
-import { InlineReplyComposer } from './InlineReplyComposer';
 
 type EmailWithDate = (InboxEmail & { dateField: 'receivedAt' }) | (SentEmail & { dateField: 'sentAt' });
 
@@ -17,11 +16,20 @@ type ReadingPaneProps = {
   onAttachmentPreview: (att: EmailAttachment) => void;
 };
 
-const formatDate = (date: Date) =>
-  new Intl.DateTimeFormat(undefined, {
+const formatDate = (date: Date | string) => {
+  // Ensure date is a Date object (handle cases where it might be a string from cache)
+  const dateObj = date instanceof Date ? date : new Date(date);
+  
+  // Check if date is valid
+  if (isNaN(dateObj.getTime())) {
+    return 'Invalid date';
+  }
+  
+  return new Intl.DateTimeFormat(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
-  }).format(date);
+  }).format(dateObj);
+};
 
 const normalizeBase64 = (value: string) => value.replace(/-/g, '+').replace(/_/g, '/');
 
@@ -36,7 +44,6 @@ const getAttachmentDataUrl = (attachment: EmailAttachment): string | null => {
 
 export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }: ReadingPaneProps) => {
   const router = useRouter();
-  const [showReplyComposer, setShowReplyComposer] = useState(false);
 
   if (loading) {
     return <ReadingPaneSkeleton />;
@@ -48,55 +55,158 @@ export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }
 
   // Determine if it's inbox or sent email and get the date
   const isInboxEmail = 'receivedAt' in email;
-  const emailDate = isInboxEmail ? email.receivedAt : email.sentAt;
+  const emailDateRaw = isInboxEmail ? email.receivedAt : email.sentAt;
+  // Ensure date is a Date object (handle cases where it might be a string from cache)
+  const emailDate = emailDateRaw instanceof Date ? emailDateRaw : new Date(emailDateRaw);
 
   // Extract email address from "Name <email@example.com>" or just "email@example.com"
   const extractEmailAddress = (emailString: string): string => {
     const match = emailString.match(/<(.+)>/);
     return match ? match[1] : emailString.trim();
   };
-
-  // Handle Reply - show inline composer
-  const handleReply = () => {
-    setShowReplyComposer(true);
+  
+  // Extract all email addresses from a comma-separated list (may contain "Name <email>" format)
+  const extractEmailAddresses = (emailString: string): string[] => {
+    if (!emailString) return [];
+    // Split by comma, then extract email from each part
+    return emailString
+      .split(',')
+      .map(part => extractEmailAddress(part.trim()))
+      .filter(Boolean);
   };
 
-  // Get reply data
-  const getReplyData = () => {
-    const replyTo = isInboxEmail ? extractEmailAddress(email.from) : extractEmailAddress(email.to);
-    const replySubject = email.subject.startsWith('Re: ') ? email.subject : `Re: ${email.subject}`;
+  // Handle Reply - navigate to compose page
+  const handleReply = () => {
+    // Extract email address to reply to
+    const fromEmail = email.from || '';
+    const toEmail = email.to || '';
+    const replyToEmail = isInboxEmail ? fromEmail : toEmail;
+    const replyTo = extractEmailAddress(replyToEmail);
     
-    // Build reply body with quoted original message
-    const originalBody = email.htmlBody || email.textBody || email.snippet || '';
-    const quotedBody = email.htmlBody 
-      ? `<br><br><div style="border-left: 3px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;">${originalBody}</div>`
-      : `<br><br><div style="border-left: 3px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;"><pre style="white-space: pre-wrap; font-family: inherit;">${originalBody}</pre></div>`;
-
-    return {
+    // Validate that we have an email address to reply to
+    if (!replyTo || !replyTo.includes('@')) {
+      console.error('Cannot reply: No valid email address found', { fromEmail, toEmail, isInboxEmail });
+      alert('Cannot reply: No valid email address found');
+      return;
+    }
+    
+    // Get subject - ensure it's not empty
+    const originalSubject = email.subject || '(No subject)';
+    const replySubject = originalSubject.startsWith('Re: ') ? originalSubject : `Re: ${originalSubject}`;
+    
+    // Extract CC and BCC from original email
+    const originalCc = email.cc || '';
+    const originalBcc = email.bcc || '';
+    const originalTo = email.to || '';
+    
+    // Parse CC/BCC/To strings into arrays and extract email addresses properly
+    const ccList = extractEmailAddresses(originalCc);
+    const bccList = extractEmailAddresses(originalBcc);
+    const toList = extractEmailAddresses(originalTo);
+    
+    // For replies, add other "To" recipients to CC (standard email behavior)
+    // Exclude the current user's email if present
+    const otherToRecipients = toList.filter(addr => {
+      const addrLower = addr.toLowerCase();
+      return addrLower !== replyTo.toLowerCase() && addrLower.includes('@');
+    });
+    
+    // Combine original CC with other To recipients, avoiding duplicates
+    const combinedCc = [...new Set([...ccList, ...otherToRecipients])].filter(addr => addr.includes('@'));
+    
+    // Store reply data in sessionStorage to avoid URL length issues
+    const replyData = {
       to: [replyTo],
+      cc: combinedCc,
+      bcc: bccList.filter(addr => addr.includes('@')), // Include BCC from original (though typically BCC recipients don't see each other)
       subject: replySubject,
-      body: quotedBody,
+      // No body - empty body for reply (user can type fresh reply)
     };
+    
+    // Debug: Log the reply data
+    console.log('Reply data being stored:', replyData);
+    
+    sessionStorage.setItem('compose_reply_data', JSON.stringify(replyData));
+    
+    // Navigate to compose page with reply action
+    const params = new URLSearchParams({
+      action: 'reply',
+    });
+    router.push(`/email/compose?${params.toString()}`);
   };
 
   // Handle Forward
   const handleForward = () => {
     const forwardSubject = email.subject.startsWith('Fwd: ') ? email.subject : `Fwd: ${email.subject}`;
     
-    // Build forward body with quoted original message
+    // Build forward body with standard email forwarding format (Gmail-style)
     const originalBody = email.htmlBody || email.textBody || email.snippet || '';
-    const forwardInfo = `<div style="color: #666; font-size: 12px; margin-bottom: 10px;">
-      <p><strong>From:</strong> ${email.from}</p>
-      <p><strong>Date:</strong> ${formatDate(emailDate)}</p>
-      <p><strong>Subject:</strong> ${email.subject}</p>
-    </div>`;
     
-    const quotedBody = email.htmlBody 
-      ? `${forwardInfo}<div style="border-left: 3px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;">${originalBody}</div>`
-      : `${forwardInfo}<div style="border-left: 3px solid #ccc; padding-left: 10px; margin-left: 10px; color: #666;"><pre style="white-space: pre-wrap; font-family: inherit;">${originalBody}</pre></div>`;
+    // Format date for email header
+    const emailDateFormatted = formatDate(emailDate);
+    
+    // Build the forwarded message header (standard email format)
+    const forwardHeader = `
+---------- Forwarded message ---------
+From: ${email.from}
+Date: ${emailDateFormatted}
+Subject: ${email.subject || '(No subject)'}
+To: ${email.to || ''}
+${email.cc ? `Cc: ${email.cc}` : ''}
+`.trim();
+    
+    // Create HTML version with proper styling
+    const forwardHeaderHtml = `
+<div style="color: #666; font-size: 12px; line-height: 1.5; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #ddd;">
+<div style="font-family: monospace; white-space: pre-wrap; color: #666;">---------- Forwarded message ---------</div>
+<div style="margin-top: 8px;"><strong>From:</strong> ${email.from}</div>
+<div><strong>Date:</strong> ${emailDateFormatted}</div>
+<div><strong>Subject:</strong> ${email.subject || '(No subject)'}</div>
+<div><strong>To:</strong> ${email.to || ''}</div>
+${email.cc ? `<div><strong>Cc:</strong> ${email.cc}</div>` : ''}
+</div>`;
+    
+    // Build the complete forwarded message
+    let quotedBody: string;
+    
+    if (email.htmlBody) {
+      // HTML email - wrap in a quoted block
+      quotedBody = `${forwardHeaderHtml}
+<div style="margin-top: 15px; padding-left: 15px; border-left: 3px solid #ccc; color: #333;">
+${originalBody}
+</div>`;
+    } else {
+      // Plain text email - use pre-formatted text
+      const plainTextBody = email.textBody || email.snippet || '';
+      quotedBody = `${forwardHeaderHtml}
+<div style="margin-top: 15px; padding-left: 15px; border-left: 3px solid #ccc; color: #333;">
+<pre style="white-space: pre-wrap; font-family: inherit; margin: 0;">${plainTextBody.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+</div>`;
+    }
 
     // Store body in sessionStorage to avoid URL length issues
     sessionStorage.setItem('compose_body', quotedBody);
+    
+    // Store attachments data for forwarding (only those with contentBase64)
+    if (email.attachments && email.attachments.length > 0) {
+      const attachmentsData = email.attachments
+        .filter(att => att.contentBase64) // Only include attachments with contentBase64
+        .map(att => ({
+          filename: att.filename,
+          mimeType: att.mimeType,
+          size: att.size,
+          contentBase64: att.contentBase64,
+        }));
+      
+      if (attachmentsData.length > 0) {
+        sessionStorage.setItem('compose_forward_attachments', JSON.stringify(attachmentsData));
+        
+        // Warn if some attachments couldn't be included
+        if (attachmentsData.length < email.attachments.length) {
+          console.warn(`Some attachments couldn't be forwarded (missing contentBase64). Forwarding ${attachmentsData.length} of ${email.attachments.length} attachments.`);
+        }
+      }
+    }
     
     const params = new URLSearchParams({
       action: 'forward',
@@ -106,7 +216,7 @@ export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }
   };
 
   return (
-    <article className="flex flex-col bg-white">
+    <article className="flex h-full flex-col bg-white overflow-hidden">
       <style>{`
         .email-content img {
           max-width: 100% !important;
@@ -173,41 +283,43 @@ export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }
         </div>
       </header>
 
-      {/* Email Body - HTML or Text */}
-      <section className="px-6 py-4">
-        {email.htmlBody ? (
-          <div
-            className="email-content break-words"
-            dangerouslySetInnerHTML={{ __html: email.htmlBody }}
-            style={{
-              fontFamily: 'Roboto, RobotoDraft, Helvetica, Arial, sans-serif',
-              fontSize: '14px',
-              lineHeight: '1.6',
-              color: '#202124',
-              wordWrap: 'break-word',
-              overflowWrap: 'break-word',
-            }}
-          />
-        ) : email.textBody ? (
-          <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-700 break-words">
-            {email.textBody}
-          </div>
-        ) : email.snippet ? (
-          <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-700 break-words">
-            {email.snippet}
-          </div>
-        ) : email.preview ? (
-          <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-700 break-words">
-            {email.preview}
-          </div>
-        ) : (
-          <div className="italic text-slate-500">No content available</div>
-        )}
-      </section>
+      {/* Scrollable Content Area */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+        {/* Email Body - HTML or Text */}
+        <section className="px-6 py-4">
+          {email.htmlBody ? (
+            <div
+              className="email-content break-words"
+              dangerouslySetInnerHTML={{ __html: email.htmlBody }}
+              style={{
+                fontFamily: 'Roboto, RobotoDraft, Helvetica, Arial, sans-serif',
+                fontSize: '14px',
+                lineHeight: '1.6',
+                color: '#202124',
+                wordWrap: 'break-word',
+                overflowWrap: 'break-word',
+              }}
+            />
+          ) : email.textBody ? (
+            <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-700 break-words">
+              {email.textBody}
+            </div>
+          ) : email.snippet ? (
+            <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-700 break-words">
+              {email.snippet}
+            </div>
+          ) : email.preview ? (
+            <div className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-slate-700 break-words">
+              {email.preview}
+            </div>
+          ) : (
+            <div className="italic text-slate-500">No content available</div>
+          )}
+        </section>
 
-      {/* Attachments Section */}
-      {email.attachments.length > 0 && (
-        <section className="border-t border-slate-200 bg-slate-50 px-6 py-4 flex-shrink-0">
+        {/* Attachments Section */}
+        {email.attachments.length > 0 && (
+          <section className="border-t border-slate-200 bg-slate-50 px-6 py-4">
           <h3 className="mb-3 text-sm font-semibold text-slate-700">
             Attachments ({email.attachments.length})
           </h3>
@@ -268,24 +380,9 @@ export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }
             })}
           </div>
         </section>
-      )}
+        )}
 
-      {/* Inline Reply Composer */}
-      {showReplyComposer && (() => {
-        const replyData = getReplyData();
-        return (
-          <InlineReplyComposer
-            to={replyData.to}
-            subject={replyData.subject}
-            initialBody={replyData.body}
-            onClose={() => setShowReplyComposer(false)}
-            onSuccess={() => {
-              // Optionally refresh or update UI after successful send
-              setShowReplyComposer(false);
-            }}
-          />
-        );
-      })()}
+      </div>
     </article>
   );
 });

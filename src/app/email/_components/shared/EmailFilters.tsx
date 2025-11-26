@@ -43,8 +43,10 @@ export const EmailFilters = memo(
   }: EmailFiltersProps) => {
     const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
     const [isLimitDropdownOpen, setIsLimitDropdownOpen] = useState(false);
+    const [limitInput, setLimitInput] = useState<string>(limit.toString());
     const dateDropdownRef = useRef<HTMLDivElement>(null);
     const limitDropdownRef = useRef<HTMLDivElement>(null);
+    const limitInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
       const handleClickOutside = (event: MouseEvent) => {
@@ -84,8 +86,52 @@ export const EmailFilters = memo(
 
     const handleLimitSelect = (value: number) => {
       onLimitChange(value);
+      setLimitInput(value.toString());
+      setIsLimitDropdownOpen(false);
+      limitInputRef.current?.blur();
+    };
+
+    const handleLimitInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value;
+      setLimitInput(value);
+      
+      // Only update if it's a valid number
+      const numValue = parseInt(value, 10);
+      if (!isNaN(numValue) && numValue > 0 && numValue <= 1000) {
+        onLimitChange(numValue);
+      }
+    };
+
+    const handleLimitInputBlur = () => {
+      // Validate and fix the input on blur
+      const numValue = parseInt(limitInput, 10);
+      if (isNaN(numValue) || numValue <= 0) {
+        setLimitInput(limit.toString());
+      } else if (numValue > 1000) {
+        setLimitInput('1000');
+        onLimitChange(1000);
+      } else {
+        setLimitInput(numValue.toString());
+        onLimitChange(numValue);
+      }
       setIsLimitDropdownOpen(false);
     };
+
+    const handleLimitInputFocus = () => {
+      setIsLimitDropdownOpen(true);
+    };
+
+    const handleLimitInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter' || e.key === 'Escape') {
+        limitInputRef.current?.blur();
+        setIsLimitDropdownOpen(false);
+      }
+    };
+
+    // Sync limitInput when limit prop changes externally
+    useEffect(() => {
+      setLimitInput(limit.toString());
+    }, [limit]);
 
     return (
       <div className="border-b border-slate-200 bg-white px-4 py-3">
@@ -109,31 +155,37 @@ export const EmailFilters = memo(
 
           <div className="flex flex-col gap-1 relative" ref={limitDropdownRef}>
             <span className="text-xs font-medium text-slate-900">Limit</span>
-            <button
-              type="button"
-              onClick={() => setIsLimitDropdownOpen(!isLimitDropdownOpen)}
-              className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-left text-sm text-slate-900 hover:bg-slate-50 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-            >
-              {limit}
-              <span className="float-right mt-0.5"></span>
-            </button>
-
-            {isLimitDropdownOpen && (
-              <div className="absolute top-full z-10 mt-1 w-20 rounded-md border border-slate-200 bg-white shadow-lg">
-                {LIMIT_OPTIONS.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => handleLimitSelect(option)}
-                    className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${
-                      limit === option ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))}
-              </div>
-            )}
+            <div className="relative">
+              <input
+                ref={limitInputRef}
+                type="text"
+                inputMode="numeric"
+                value={limitInput}
+                onChange={handleLimitInputChange}
+                onFocus={handleLimitInputFocus}
+                onBlur={handleLimitInputBlur}
+                onKeyDown={handleLimitInputKeyDown}
+                placeholder="Enter limit"
+                className="w-20 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              />
+              {isLimitDropdownOpen && (
+                <div className="absolute top-full z-10 mt-1 w-20 rounded-md border border-slate-200 bg-white shadow-lg">
+                  {LIMIT_OPTIONS.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => handleLimitSelect(option)}
+                      onMouseDown={(e) => e.preventDefault()} // Prevent blur before click
+                      className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${
+                        limit === option ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-col gap-1 relative" ref={dateDropdownRef}>

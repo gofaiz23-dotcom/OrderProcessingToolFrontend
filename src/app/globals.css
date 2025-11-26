@@ -75,3 +75,35 @@ body {
 .ProseMirror h3 {
   font-size: 1.1em;
 }
+
+/* Custom Scrollbar Styles - Light Theme */
+/* Webkit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #e2e8f0; /* slate-200 - lighter */
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1; /* slate-300 */
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #e2e8f0 transparent; /* thumb track - lighter */
+}

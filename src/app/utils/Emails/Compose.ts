@@ -5,6 +5,8 @@ export const MAX_ATTACHMENTS = 5;
 
 export type ComposeFormState = {
   to: string[];
+  cc: string[];
+  bcc: string[];
   subject: string;
   text: string;
   html: string;
@@ -13,6 +15,8 @@ export type ComposeFormState = {
 
 export const defaultComposeState: ComposeFormState = {
   to: [],
+  cc: [],
+  bcc: [],
   subject: '',
   text: '',
   html: '',
@@ -24,16 +28,29 @@ const normalizeAttachments = (files: FileList | File[]): File[] => {
   return fileArray.slice(0, MAX_ATTACHMENTS);
 };
 
-const preparePayload = (state: ComposeFormState): ComposeEmailPayload => ({
-  to: state.to
+const preparePayload = (state: ComposeFormState): ComposeEmailPayload => {
+  const ccList = state.cc
     .map((value) => value.trim())
     .filter(Boolean)
-    .slice(0, MAX_RECIPIENTS),
-  subject: state.subject.trim(),
-  text: state.text.trim() || undefined,
-  html: state.html.trim() || undefined,
-  attachments: state.attachments.slice(0, MAX_ATTACHMENTS),
-});
+    .slice(0, MAX_RECIPIENTS);
+  const bccList = state.bcc
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, MAX_RECIPIENTS);
+  
+  return {
+    to: state.to
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .slice(0, MAX_RECIPIENTS),
+    cc: ccList.length > 0 ? ccList.join(',') : undefined,
+    bcc: bccList.length > 0 ? bccList.join(',') : undefined,
+    subject: state.subject.trim(),
+    text: state.text.trim() || undefined,
+    html: state.html.trim() || undefined,
+    attachments: state.attachments.slice(0, MAX_ATTACHMENTS),
+  };
+};
 
 export const updateAttachments = (
   current: ComposeFormState,
