@@ -1,0 +1,371 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { X, Loader2, Save, Plus, Trash2 } from 'lucide-react';
+import type { CreateOrderPayload } from '@/app/types/order';
+import { isValidJson, parseJsonSafely } from '@/app/utils/Orders';
+import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
+
+type KeyValuePair = {
+  id: string;
+  key: string;
+  value: string;
+  valueType: 'string' | 'number' | 'boolean' | 'null';
+};
+
+type CreateOrderModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (payload: CreateOrderPayload) => Promise<void>;
+  loading?: boolean;
+  error?: unknown;
+};
+
+export const CreateOrderModal = ({
+  isOpen,
+  onClose,
+  onSave,
+  loading = false,
+  error,
+}: CreateOrderModalProps) => {
+  const [orderOnMarketPlace, setOrderOnMarketPlace] = useState('');
+  const [keyValuePairs, setKeyValuePairs] = useState<KeyValuePair[]>([
+    { id: '1', key: '', value: '', valueType: 'string' },
+  ]);
+  const [jsonbError, setJsonbError] = useState<string | null>(null);
+
+  // Reset form when modal opens/closes
+  useEffect(() => {
+    if (isOpen) {
+      setOrderOnMarketPlace('');
+      setKeyValuePairs([{ id: '1', key: '', value: '', valueType: 'string' }]);
+      setJsonbError(null);
+    }
+  }, [isOpen]);
+
+  // Build JSON object from key-value pairs
+  const buildJsonFromPairs = (): Record<string, unknown> | null => {
+    const jsonObj: Record<string, unknown> = {};
+    
+    for (const pair of keyValuePairs) {
+      if (!pair.key.trim()) continue; // Skip empty keys
+      
+      let parsedValue: unknown;
+      switch (pair.valueType) {
+        case 'string':
+          parsedValue = pair.value;
+          break;
+        case 'number':
+          const num = parseFloat(pair.value);
+          if (isNaN(num)) {
+            setJsonbError(`Invalid number for key "${pair.key}"`);
+            return null;
+          }
+          parsedValue = num;
+          break;
+        case 'boolean':
+          parsedValue = pair.value.toLowerCase() === 'true';
+          break;
+        case 'null':
+          parsedValue = null;
+          // Clear value for null type
+          updateKeyValuePair(pair.id, 'value', '');
+          break;
+        default:
+          parsedValue = pair.value;
+      }
+      
+      jsonObj[pair.key.trim()] = parsedValue;
+    }
+    
+    return jsonObj;
+  };
+
+  // Handle Escape key to close modal
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen && !loading) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener('keydown', handleEscape);
+      return () => {
+        document.removeEventListener('keydown', handleEscape);
+      };
+    }
+  }, [isOpen, loading, onClose]);
+
+  const addKeyValuePair = () => {
+    const newId = Date.now().toString();
+    setKeyValuePairs([...keyValuePairs, { id: newId, key: '', value: '', valueType: 'string' }]);
+    setJsonbError(null);
+  };
+
+  const removeKeyValuePair = (id: string) => {
+    if (keyValuePairs.length > 1) {
+      setKeyValuePairs(keyValuePairs.filter((pair) => pair.id !== id));
+    }
+    setJsonbError(null);
+  };
+
+  const updateKeyValuePair = (id: string, field: 'key' | 'value' | 'valueType', newValue: string) => {
+    setKeyValuePairs(
+      keyValuePairs.map((pair) => {
+        if (pair.id === id) {
+          const updated = { ...pair, [field]: newValue };
+          // If value type changed to null, clear the value
+          if (field === 'valueType' && newValue === 'null') {
+            updated.value = '';
+          }
+          // If value type changed from null, set default value
+          if (field === 'valueType' && pair.valueType === 'null' && newValue !== 'null') {
+            if (newValue === 'boolean') {
+              updated.value = 'true';
+            } else {
+              updated.value = '';
+            }
+          }
+          return updated;
+        }
+        return pair;
+      })
+    );
+    setJsonbError(null);
+  };
+
+  const handleSave = async () => {
+    // Validate required fields
+    if (!orderOnMarketPlace.trim()) {
+      alert('Order on Marketplace is required');
+      return;
+    }
+
+    // Check if at least one key-value pair has a key
+    const hasValidPair = keyValuePairs.some((pair) => pair.key.trim() !== '');
+    if (!hasValidPair) {
+      alert('At least one key-value pair is required');
+      return;
+    }
+
+    if (jsonbError) {
+      alert('Please fix errors before saving');
+      return;
+    }
+
+    // Build JSON object from pairs
+    const jsonObj = buildJsonFromPairs();
+    if (jsonObj === null) {
+      return; // Error already set by buildJsonFromPairs
+    }
+
+    try {
+      await onSave({
+        orderOnMarketPlace: orderOnMarketPlace.trim(),
+        jsonb: jsonObj,
+      });
+      // Close modal on successful save
+      onClose();
+    } catch (err) {
+      // Error is handled by parent component
+      console.error('Error saving order:', err);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+      style={{ animation: 'fadeIn 0.2s ease-out' }}
+    >
+      <div
+        className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[90vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+        style={{ animation: 'slideUp 0.2s ease-out' }}
+      >
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between rounded-t-xl">
+          <h2 className="text-xl font-semibold text-slate-900">Create New Order</h2>
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            aria-label="Close modal"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Error display */}
+        {error && (
+          <div className="px-6 py-4 border-b border-red-200 bg-red-50/50">
+            <ErrorDisplay error={error} />
+          </div>
+        )}
+
+        {/* Form content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Order on Marketplace */}
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-slate-900">
+              Order on Marketplace <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={orderOnMarketPlace}
+              onChange={(e) => setOrderOnMarketPlace(e.target.value)}
+              disabled={loading}
+              placeholder="e.g., Amazon, eBay, Shopify"
+              className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-all"
+            />
+          </div>
+
+          {/* JSONB Field - Key-Value Pairs */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="block text-sm font-semibold text-slate-900">
+                JSONB Data <span className="text-red-500">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={addKeyValuePair}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Pair
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+              {keyValuePairs.map((pair, index) => (
+                <div
+                  key={pair.id}
+                  className="flex items-start gap-2 p-4 border border-slate-200 rounded-lg bg-slate-50/50 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex-1 grid grid-cols-12 gap-2">
+                    {/* Key Input */}
+                    <div className="col-span-4">
+                      <input
+                        type="text"
+                        value={pair.key}
+                        onChange={(e) => updateKeyValuePair(pair.id, 'key', e.target.value)}
+                        disabled={loading}
+                        placeholder="Key"
+                        className="w-full px-3 py-2 border border-slate-300 bg-white text-slate-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-all"
+                      />
+                    </div>
+
+                    {/* Value Type Select */}
+                    <div className="col-span-2">
+                      <select
+                        value={pair.valueType}
+                        onChange={(e) => updateKeyValuePair(pair.id, 'valueType', e.target.value)}
+                        disabled={loading}
+                        className="w-full px-3 py-2 border border-slate-300 bg-white text-slate-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-all"
+                      >
+                        <option value="string">String</option>
+                        <option value="number">Number</option>
+                        <option value="boolean">Boolean</option>
+                        <option value="null">Null</option>
+                      </select>
+                    </div>
+
+                    {/* Value Input */}
+                    <div className="col-span-5">
+                      {pair.valueType === 'boolean' ? (
+                        <select
+                          value={pair.value || 'true'}
+                          onChange={(e) => updateKeyValuePair(pair.id, 'value', e.target.value)}
+                          disabled={loading}
+                          className="w-full px-3 py-2 border border-slate-300 bg-white text-slate-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-all"
+                        >
+                          <option value="true">True</option>
+                          <option value="false">False</option>
+                        </select>
+                      ) : pair.valueType === 'null' ? (
+                        <input
+                          type="text"
+                          value="null"
+                          readOnly
+                          className="w-full px-3 py-2 border border-slate-300 bg-slate-100 text-slate-500 rounded-md text-sm cursor-not-allowed"
+                        />
+                      ) : (
+                        <input
+                          type={pair.valueType === 'number' ? 'number' : 'text'}
+                          value={pair.value}
+                          onChange={(e) => updateKeyValuePair(pair.id, 'value', e.target.value)}
+                          disabled={loading}
+                          placeholder={pair.valueType === 'number' ? '0' : 'Value'}
+                          className="w-full px-3 py-2 border border-slate-300 bg-white text-slate-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-all"
+                        />
+                      )}
+                    </div>
+
+                    {/* Remove Button */}
+                    <div className="col-span-1 flex items-center">
+                      {keyValuePairs.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeKeyValuePair(pair.id)}
+                          disabled={loading}
+                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          title="Remove pair"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {jsonbError && (
+              <p className="text-sm text-red-600 font-medium">{jsonbError}</p>
+            )}
+          </div>
+
+          {/* Help text */}
+          <div className="bg-blue-50/80 border-l-4 border-blue-400 rounded-md p-4">
+            <p className="text-sm text-blue-900">
+              <strong className="font-semibold">Tip:</strong> Add key-value pairs to build your JSON object. You can set values as strings, numbers, booleans, or null. Empty keys will be ignored.
+            </p>
+          </div>
+        </div>
+
+        {/* Footer with buttons */}
+        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50/80 flex items-center justify-end gap-3 rounded-b-xl">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="px-5 py-2.5 text-sm font-medium border border-slate-300 text-slate-700 bg-white rounded-lg hover:bg-slate-50 hover:border-slate-400 active:bg-slate-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={loading || !!jsonbError || !orderOnMarketPlace.trim() || !keyValuePairs.some((p) => p.key.trim() !== '')}
+            className="px-5 py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-all disabled:bg-blue-300 disabled:text-white disabled:cursor-not-allowed flex items-center gap-2 shadow-sm hover:shadow-md"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="h-4 w-4" />
+                Save Order
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+

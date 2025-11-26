@@ -4,16 +4,17 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { ReactNode, useState, useEffect } from 'react';
-import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight } from 'lucide-react';
+import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart } from 'lucide-react';
 import API_BASE_URL from '../../../BaseUrl';
 
 const emailSubItems = [
     { href: '/email/inbox', label: 'Inbox', icon: Inbox },
     { href: '/email/sent', label: 'Sent', icon: Send },
+    { href: '/email/compose', label: 'Compose Email', icon: PencilLine },
 ];
 
 const otherItems = [
-    { href: '/email/compose', label: 'Compose Email', icon: PencilLine },
+    { href: '/orders/all', label: 'Orders', icon: ShoppingCart },
 ];
 
 // Refresh Token button at bottom
@@ -32,9 +33,9 @@ const EmailWorkspace = ({ children }: { children: ReactNode }) => {
     const pathname = usePathname();
     const [isEmailExpanded, setIsEmailExpanded] = useState(true);
 
-    // Auto-expand Email section if on inbox or sent page
+    // Auto-expand Email section if on inbox, sent, or compose page
     useEffect(() => {
-        if (pathname?.startsWith('/email/inbox') || pathname?.startsWith('/email/sent')) {
+        if (pathname?.startsWith('/email/inbox') || pathname?.startsWith('/email/sent') || pathname?.startsWith('/email/compose')) {
             setIsEmailExpanded(true);
         }
     }, [pathname]);
@@ -114,7 +115,7 @@ const EmailWorkspace = ({ children }: { children: ReactNode }) => {
                                     )}
                                 </div>
 
-                                {/* Compose Email */}
+                                {/* Orders */}
                                 {otherItems.map((item) => {
                                     const Icon = item.icon;
                                     const isActive = isActivePath(pathname, item.href);
