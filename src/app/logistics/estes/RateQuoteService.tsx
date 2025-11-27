@@ -12,6 +12,7 @@ import { ESTES_AUTOFILL_DATA } from '@/Shared/constant';
 import { StepIndicator } from './components/StepIndicator';
 import { BillOfLanding } from './BillOfLanding';
 import { PickupRequest } from './PickupRequest';
+import { ResponseSummary } from './components/ResponseSummary';
 
 type HandlingUnit = {
   id: string;
@@ -37,9 +38,14 @@ type CommodityItem = {
 type RateQuoteServiceProps = {
   carrier: string;
   token?: string;
+  orderData?: {
+    sku?: string;
+    orderOnMarketPlace?: string;
+    ordersJsonb?: Record<string, unknown>;
+  };
 };
 
-export const EstesRateQuoteService = ({ carrier, token }: RateQuoteServiceProps) => {
+export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderData }: RateQuoteServiceProps) => {
   const { getToken } = useLogisticsStore();
   const [storedToken, setStoredToken] = useState<string>('');
   const [isMounted, setIsMounted] = useState(false);
@@ -114,11 +120,35 @@ export const EstesRateQuoteService = ({ carrier, token }: RateQuoteServiceProps)
   // Store BOL form data and response to persist across step navigation
   const [bolFormData, setBolFormData] = useState<any>(null);
   const [bolResponseData, setBolResponseData] = useState<any>(null);
+  
+  // Store pickup response data
+  const [pickupResponseData, setPickupResponseData] = useState<any>(null);
+  
+  // Store order data (will be passed as prop or fetched)
+  const [orderData, setOrderData] = useState<{
+    sku?: string;
+    orderOnMarketPlace?: string;
+    ordersJsonb?: Record<string, unknown>;
+  } | null>(initialOrderData || null);
+  
+  // Update order data when prop changes
+  useEffect(() => {
+    if (initialOrderData) {
+      setOrderData(initialOrderData);
+    }
+  }, [initialOrderData]);
+  
+  // Store BOL PDF URL
+  const [bolPdfUrl, setBolPdfUrl] = useState<string | null>(null);
+  
+  // Store files from BOL
+  const [bolFiles, setBolFiles] = useState<File[]>([]);
 
   const steps = [
     { id: 1, name: 'Rate Quote', component: 'RateQuote' },
     { id: 2, name: 'Bill of Lading', component: 'BillOfLanding' },
     { id: 3, name: 'Pickup Request', component: 'PickupRequest' },
+    { id: 4, name: 'Response Summary', component: 'ResponseSummary' },
   ];
 
   // Calculate totals
@@ -471,11 +501,35 @@ export const EstesRateQuoteService = ({ carrier, token }: RateQuoteServiceProps)
     setCurrentStep(3);
   };
 
-  const handlePickupRequestComplete = () => {
+  const handlePickupRequestComplete = (pickupResponse?: any) => {
     handleStepComplete(3);
-    // Show success message or redirect
-    alert('Shipment booking completed successfully!');
+    if (pickupResponse) {
+      setPickupResponseData(pickupResponse);
+    }
+    // Move to step 4 (Response Summary)
+    setCurrentStep(4);
+    handleStepComplete(4);
   };
+  
+  // Extract BOL PDF URL when BOL response is available
+  useEffect(() => {
+    if (bolResponseData?.data?.images?.bol) {
+      try {
+        const base64String = bolResponseData.data.images.bol;
+        const binaryString = atob(base64String);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        setBolPdfUrl(url);
+      } catch (err) {
+        console.error('Failed to create PDF URL:', err);
+        setBolPdfUrl(null);
+      }
+    }
+  }, [bolResponseData]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-8">
@@ -1108,10 +1162,33 @@ export const EstesRateQuoteService = ({ carrier, token }: RateQuoteServiceProps)
       {currentStep === 3 && (
         <PickupRequest
           onPrevious={handlePreviousStep}
-          onComplete={handlePickupRequestComplete}
+          onComplete={(pickupResponse) => handlePickupRequestComplete(pickupResponse)}
           quoteData={selectedQuote}
           bolFormData={bolFormData}
           bolResponseData={bolResponseData}
+        />
+      )}
+
+      {/* Step 4: Response Summary */}
+      {currentStep === 4 && (
+        <ResponseSummary
+          orderData={orderData || undefined}
+          rateQuotesResponseJsonb={response?.data || undefined}
+          bolResponseJsonb={bolResponseData?.data || undefined}
+          pickupResponseJsonb={pickupResponseData?.data || undefined}
+          files={bolFiles}
+          pdfUrl={bolPdfUrl}
+          onDownloadPDF={() => {
+            if (bolPdfUrl) {
+              const link = document.createElement('a');
+              link.href = bolPdfUrl;
+              const proNumber = bolResponseData?.data?.referenceNumbers?.pro || 'BOL';
+              link.download = `BillOfLading_${proNumber}.pdf`;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }
+          }}
         />
       )}
     </div>
