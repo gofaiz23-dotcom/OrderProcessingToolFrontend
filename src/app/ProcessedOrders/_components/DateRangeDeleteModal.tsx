@@ -131,7 +131,7 @@ export const DateRangeDeleteModal = ({
             </div>
 
             <p className="text-sm text-slate-600 mb-6">
-              This will permanently delete all shipped orders between the selected dates. This action cannot be undone.
+              This will permanently delete all processed orders between the selected dates. This action cannot be undone.
             </p>
 
             <div className="flex items-center justify-end gap-3">

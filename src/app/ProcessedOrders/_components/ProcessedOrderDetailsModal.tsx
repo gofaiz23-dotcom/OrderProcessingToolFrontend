@@ -4,17 +4,17 @@ import { useEffect } from 'react';
 import { X } from 'lucide-react';
 import type { ShippedOrder } from '../utils/shippedOrdersApi';
 
-type ShippedOrderDetailsModalProps = {
+type ProcessedOrderDetailsModalProps = {
   isOpen: boolean;
   order: ShippedOrder | null;
   onClose: () => void;
 };
 
-export const ShippedOrderDetailsModal = ({
+export const ProcessedOrderDetailsModal = ({
   isOpen,
   order,
   onClose,
-}: ShippedOrderDetailsModalProps) => {
+}: ProcessedOrderDetailsModalProps) => {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -36,7 +36,7 @@ export const ShippedOrderDetailsModal = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         <div className="p-6 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900">Shipped Order Details</h2>
+          <h2 className="text-xl font-bold text-slate-900">Processed Order Details</h2>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 transition-colors"
