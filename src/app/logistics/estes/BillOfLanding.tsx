@@ -503,6 +503,11 @@ export const BillOfLanding = ({
       onResponseDataChange(responseData);
     }
   }, [responseData, onResponseDataChange]);
+  
+  // Expose PDF URL and files to parent component
+  useEffect(() => {
+    // This could be passed via callback if needed
+  }, [pdfUrl]);
 
   // Create PDF URL from Base64 when response data is available
   useEffect(() => {

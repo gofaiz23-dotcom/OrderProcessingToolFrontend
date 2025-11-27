@@ -4,13 +4,17 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, Calendar, Clock, CheckCircle2, Plus, X, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { buildApiUrl } from '../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
+import { Toast } from '@/app/orders/_components/Toast';
+import { deleteOrder } from '@/app/api/OrderApi';
+import { useRouter } from 'next/navigation';
 
 type PickupRequestProps = {
   onPrevious: () => void;
-  onComplete: () => void;
+  onComplete: (response?: any) => void;
   quoteData?: any;
   bolFormData?: any;
   bolResponseData?: any;
+  orderId?: number;
 };
 
 type Shipment = {
@@ -28,8 +32,9 @@ type Contact = {
   email: string;
 };
 
-export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, bolResponseData }: PickupRequestProps) => {
+export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, bolResponseData, orderId }: PickupRequestProps) => {
   const { getToken } = useLogisticsStore();
+  const router = useRouter();
   const carrier = 'estes';
 
   // Account Information
@@ -99,6 +104,8 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
   // UI State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
   const [showSections, setShowSections] = useState<Record<string, boolean>>({
     accountInfo: true,
     requesterInfo: true,
@@ -567,7 +574,53 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
 
       const data = await res.json();
       console.log('Pickup Request Response:', data);
-      onComplete();
+      
+      // Create JSON response
+      const responseData = {
+        success: true,
+        message: 'Pickup request created successfully',
+        data: data,
+        timestamp: new Date().toISOString(),
+      };
+      console.log('Pickup Request JSON Response:', JSON.stringify(responseData, null, 2));
+
+      // Delete order if orderId is provided
+      if (orderId) {
+        try {
+          await deleteOrder(orderId);
+          console.log(`Order ${orderId} deleted successfully`);
+        } catch (deleteErr) {
+          console.error('Failed to delete order:', deleteErr);
+          // Continue even if order deletion fails
+        }
+      }
+
+      // Clear cache - using Next.js router refresh to revalidate cache
+      try {
+        router.refresh();
+        // Also clear browser cache for orders
+        if (typeof window !== 'undefined' && 'caches' in window) {
+          caches.keys().then((names) => {
+            names.forEach((name) => {
+              if (name.includes('order') || name.includes('api')) {
+                caches.delete(name);
+              }
+            });
+          });
+        }
+      } catch (cacheErr) {
+        console.error('Failed to clear cache:', cacheErr);
+        // Continue even if cache clearing fails
+      }
+
+      // Show toast notification
+      setToastMessage('Successfully order and delete cache');
+      setShowToast(true);
+
+      // Call onComplete with response data after a short delay to allow toast to be visible
+      setTimeout(() => {
+        onComplete(responseData);
+      }, 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create pickup request');
     } finally {
@@ -1458,6 +1511,19 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
           </div>
         </form>
       </div>
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <Toast
+          message={toastMessage}
+          isVisible={showToast}
+          onClose={() => {
+            setShowToast(false);
+            setTimeout(() => setToastMessage(null), 300);
+          }}
+          duration={3000}
+        />
+      )}
     </div>
   );
 };
