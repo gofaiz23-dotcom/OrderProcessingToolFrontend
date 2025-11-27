@@ -9,6 +9,9 @@ import { buildEstesRequestBody } from './utils/requestBuilder';
 import { EstesQuoteCard } from './components/EstesQuoteCard';
 import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
 import { ESTES_AUTOFILL_DATA } from '@/Shared/constant';
+import { StepIndicator } from './components/StepIndicator';
+import { BillOfLanding } from './BillOfLanding';
+import { PickupRequest } from './PickupRequest';
 
 type HandlingUnit = {
   id: string;
@@ -102,6 +105,21 @@ export const EstesRateQuoteService = ({ carrier, token }: RateQuoteServiceProps)
   const [response, setResponse] = useState<any>(null);
   const [showAccountInfo, setShowAccountInfo] = useState(true);
   const [showResponseDropdown, setShowResponseDropdown] = useState(false);
+
+  // Multi-step form state
+  const [currentStep, setCurrentStep] = useState(1);
+  const [completedSteps, setCompletedSteps] = useState<number[]>([]);
+  const [selectedQuote, setSelectedQuote] = useState<any>(null);
+  
+  // Store BOL form data and response to persist across step navigation
+  const [bolFormData, setBolFormData] = useState<any>(null);
+  const [bolResponseData, setBolResponseData] = useState<any>(null);
+
+  const steps = [
+    { id: 1, name: 'Rate Quote', component: 'RateQuote' },
+    { id: 2, name: 'Bill of Lading', component: 'BillOfLanding' },
+    { id: 3, name: 'Pickup Request', component: 'PickupRequest' },
+  ];
 
   // Calculate totals
   const calculateTotals = () => {
@@ -371,6 +389,11 @@ export const EstesRateQuoteService = ({ carrier, token }: RateQuoteServiceProps)
       const data = await res.json();
       setResponse(data);
       
+      // Mark step 1 as completed
+      if (!completedSteps.includes(1)) {
+        setCompletedSteps([...completedSteps, 1]);
+      }
+      
       // Collapse the main accordion only after successful response
       setShowAccountInfo(false);
       // Open the response dropdown when response is received
@@ -391,30 +414,106 @@ export const EstesRateQuoteService = ({ carrier, token }: RateQuoteServiceProps)
     }
   };
 
+  // Step navigation handlers
+  const handleNextStep = () => {
+    if (currentStep < steps.length) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const handlePreviousStep = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const handleStepComplete = (stepId: number) => {
+    if (!completedSteps.includes(stepId)) {
+      setCompletedSteps([...completedSteps, stepId]);
+    }
+  };
+
+  const handleBookShipment = () => {
+    // Check if a quote is selected
+    if (response && response.data?.data && response.data.data.length > 0) {
+      // Get the first quote (or selected quote)
+      const quote = response.data.data[0];
+      setSelectedQuote({
+        quote,
+        formData: {
+          myAccount,
+          role,
+          term,
+          shipDate,
+          shipTime,
+          requestorName,
+          requestorPhone,
+          requestorEmail,
+          originCity,
+          originZipCode,
+          originCountry,
+          destinationCity,
+          destinationZipCode,
+          destinationCountry,
+          handlingUnits,
+          liftGateService,
+          residentialDelivery,
+          appointmentRequest,
+        },
+      });
+      handleStepComplete(1);
+      setCurrentStep(2);
+    }
+  };
+
+  const handleBillOfLandingNext = () => {
+    handleStepComplete(2);
+    setCurrentStep(3);
+  };
+
+  const handlePickupRequestComplete = () => {
+    handleStepComplete(3);
+    // Show success message or redirect
+    alert('Shipment booking completed successfully!');
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-900">Estes Rate Quote Service</h1>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleAutofill}
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 font-semibold"
-          >
-            <Sparkles size={18} />
-            Autofill
-          </button>
-          <button
-            type="button"
-            className="px-4 py-2 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors flex items-center gap-2 font-semibold"
-          >
-            <HelpCircle size={18} />
-            Walk Me Through
-          </button>
-        </div>
+      {/* Step Indicator */}
+      <div className="bg-white rounded-lg border border-slate-200 p-6">
+        <StepIndicator 
+          steps={steps} 
+          currentStep={currentStep} 
+          completedSteps={completedSteps}
+          onStepClick={setCurrentStep}
+        />
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-8">
+      {/* Step 1: Rate Quote */}
+      {currentStep === 1 && (
+        <>
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold text-slate-900">Estes Rate Quote Service</h1>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleAutofill}
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 font-semibold"
+              >
+                <Sparkles size={18} />
+                Autofill
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors flex items-center gap-2 font-semibold"
+              >
+                <HelpCircle size={18} />
+                Walk Me Through
+              </button>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-8">
         {/* Account Information - Main Accordion */}
         <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
           <button
@@ -963,22 +1062,57 @@ export const EstesRateQuoteService = ({ carrier, token }: RateQuoteServiceProps)
         carrier={carrier}
       />
 
-      {response && response.data?.data && (
-        <div className="mt-6 space-y-6">
-          <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <h3 className="text-2xl font-bold text-slate-900 mb-2">Rate Quote Results</h3>
-            <p className="text-sm text-slate-600 mb-6">
-              {response.message || `Rate quotes for ${response.shippingCompanyName || carrier}`}
-            </p>
+          {response && response.data?.data && (
+            <div className="mt-6 space-y-6">
+              <div className="bg-white rounded-lg border border-slate-200 p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-2xl font-bold text-slate-900">Rate Quote Results</h3>
+                  <button
+                    type="button"
+                    onClick={handleBookShipment}
+                    className="font-bold text-lg px-6 py-2.5 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors flex items-center gap-2"
+                  >
+                    Book Shipment
+                  </button>
+                </div>
+                <p className="text-sm text-slate-600 mb-6">
+                  {response.message || `Rate quotes for ${response.shippingCompanyName || carrier}`}
+                </p>
 
-            {/* Quote Cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {response.data.data.map((quote: any, index: number) => (
-                <EstesQuoteCard key={quote.quoteId || index} quote={quote} index={index} />
-              ))}
+                {/* Quote Cards */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {response.data.data.map((quote: any, index: number) => (
+                    <EstesQuoteCard key={quote.quoteId || index} quote={quote} index={index} />
+                  ))}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          )}
+        </>
+      )}
+
+      {/* Step 2: Bill of Lading */}
+      {currentStep === 2 && (
+        <BillOfLanding
+          onNext={handleBillOfLandingNext}
+          onPrevious={handlePreviousStep}
+          quoteData={selectedQuote}
+          initialFormData={bolFormData}
+          initialResponseData={bolResponseData}
+          onFormDataChange={setBolFormData}
+          onResponseDataChange={setBolResponseData}
+        />
+      )}
+
+      {/* Step 3: Pickup Request */}
+      {currentStep === 3 && (
+        <PickupRequest
+          onPrevious={handlePreviousStep}
+          onComplete={handlePickupRequestComplete}
+          quoteData={selectedQuote}
+          bolFormData={bolFormData}
+          bolResponseData={bolResponseData}
+        />
       )}
     </div>
   );
