@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
-import { ShippedOrdersList } from './_components';
+import { ProcessedOrdersList } from './_components';
 import {
   getAllShippedOrders,
   deleteShippedOrder,
@@ -13,7 +13,7 @@ import {
   type UpdateShippedOrderPayload,
 } from './utils/shippedOrdersApi';
 
-export default function ShipmentTrackingTabPage() {
+export default function ProcessedOrdersPage() {
   const [orders, setOrders] = useState<ShippedOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -26,7 +26,7 @@ export default function ShipmentTrackingTabPage() {
       setOrders(data);
     } catch (err) {
       setError(err);
-      console.error('Error loading shipped orders:', err);
+      console.error('Error loading processed orders:', err);
     } finally {
       setLoading(false);
     }
@@ -68,7 +68,7 @@ export default function ShipmentTrackingTabPage() {
 
   return (
     <div className="flex h-full flex-col bg-white overflow-hidden p-6">
-      <h1 className="text-3xl font-bold text-slate-900 mb-6">Shipment Tracking</h1>
+      <h1 className="text-3xl font-bold text-slate-900 mb-6">Processed Orders</h1>
 
       {error !== null && (
         <div className="mb-6">
@@ -82,7 +82,7 @@ export default function ShipmentTrackingTabPage() {
         </div>
       )}
 
-      <ShippedOrdersList
+      <ProcessedOrdersList
         orders={orders}
         loading={loading}
         onRefresh={fetchOrders}
@@ -93,3 +93,4 @@ export default function ShipmentTrackingTabPage() {
     </div>
   );
 }
+

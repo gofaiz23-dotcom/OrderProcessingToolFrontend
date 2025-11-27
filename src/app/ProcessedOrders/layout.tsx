@@ -3,9 +3,9 @@
 import { ReactNode } from 'react';
 import { AppLayout } from '../components/shared';
 
-const ShipmentTrackingTabLayout = ({ children }: { children: ReactNode }) => (
+const ProcessedOrdersLayout = ({ children }: { children: ReactNode }) => (
   <AppLayout>{children}</AppLayout>
 );
 
-export default ShipmentTrackingTabLayout;
+export default ProcessedOrdersLayout;
 

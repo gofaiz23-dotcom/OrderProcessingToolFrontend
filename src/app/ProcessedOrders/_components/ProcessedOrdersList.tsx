@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Trash2, Edit, Info, ChevronLeft, ChevronRight, Calendar, Download } from 'lucide-react';
+import { Search, Trash2, Edit, Info, ChevronLeft, ChevronRight, Calendar, PackageSearch } from 'lucide-react';
 import type { ShippedOrder } from '../utils/shippedOrdersApi';
-import { ShippedOrderDetailsModal } from './ShippedOrderDetailsModal';
-import { ShippedOrderEditModal } from './ShippedOrderEditModal';
+import { ProcessedOrderDetailsModal } from './ProcessedOrderDetailsModal';
+import { ProcessedOrderEditModal } from './ProcessedOrderEditModal';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { DateRangeDeleteModal } from './DateRangeDeleteModal';
+import { GetStatusModal } from './GetStatusModal';
 
-type ShippedOrdersListProps = {
+type ProcessedOrdersListProps = {
   orders: ShippedOrder[];
   loading?: boolean;
   onRefresh: () => void;
@@ -17,14 +18,14 @@ type ShippedOrdersListProps = {
   onDeleteByDateRange: (startDate: string, endDate: string) => Promise<void>;
 };
 
-export const ShippedOrdersList = ({
+export const ProcessedOrdersList = ({
   orders,
   loading = false,
   onRefresh,
   onDelete,
   onUpdate,
   onDeleteByDateRange,
-}: ShippedOrdersListProps) => {
+}: ProcessedOrdersListProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<ShippedOrder | null>(null);
@@ -39,6 +40,8 @@ export const ShippedOrdersList = ({
     loading: false,
   });
   const [dateRangeDeleteModalOpen, setDateRangeDeleteModalOpen] = useState(false);
+  const [getStatusModalOpen, setGetStatusModalOpen] = useState(false);
+  const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<ShippedOrder | null>(null);
 
   const ITEMS_PER_PAGE = 20;
 
@@ -102,7 +105,7 @@ export const ShippedOrdersList = ({
   if (loading && orders.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-slate-500">Loading shipped orders...</div>
+        <div className="text-slate-500">Loading processed orders...</div>
       </div>
     );
   }
@@ -135,7 +138,7 @@ export const ShippedOrdersList = ({
       {filteredOrders.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-slate-500 p-8">
           <p className="text-sm">
-            {searchQuery ? 'No orders match your search' : 'No shipped orders found'}
+            {searchQuery ? 'No orders match your search' : 'No processed orders found'}
           </p>
         </div>
       ) : (
@@ -208,6 +211,16 @@ export const ShippedOrdersList = ({
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center sticky right-0 bg-slate-50 z-10">
                         <div className="flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedOrderForStatus(order);
+                              setGetStatusModalOpen(true);
+                            }}
+                            className="inline-flex items-center justify-center p-2 text-slate-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                            title="Get Status"
+                          >
+                            <PackageSearch className="h-4 w-4" />
+                          </button>
                           <button
                             onClick={() => setSelectedOrderForDetails(order)}
                             className="inline-flex items-center justify-center p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -304,13 +317,13 @@ export const ShippedOrdersList = ({
       )}
 
       {/* Modals */}
-      <ShippedOrderDetailsModal
+      <ProcessedOrderDetailsModal
         isOpen={selectedOrderForDetails !== null}
         order={selectedOrderForDetails}
         onClose={() => setSelectedOrderForDetails(null)}
       />
 
-      <ShippedOrderEditModal
+      <ProcessedOrderEditModal
         isOpen={selectedOrderForEdit !== null}
         order={selectedOrderForEdit}
         onClose={() => setSelectedOrderForEdit(null)}
@@ -332,7 +345,7 @@ export const ShippedOrdersList = ({
         }}
         onConfirm={handleConfirmDelete}
         title="Confirm Deletion"
-        message={`Are you sure you want to delete shipped order #${deleteModalState.orderId}? This action cannot be undone.`}
+        message={`Are you sure you want to delete processed order #${deleteModalState.orderId}? This action cannot be undone.`}
         loading={deleteModalState.loading}
       />
 
@@ -344,6 +357,20 @@ export const ShippedOrdersList = ({
           setDateRangeDeleteModalOpen(false);
           onRefresh();
         }}
+      />
+
+      <GetStatusModal
+        isOpen={getStatusModalOpen}
+        onClose={() => {
+          setGetStatusModalOpen(false);
+          setSelectedOrderForStatus(null);
+        }}
+        orderId={selectedOrderForStatus?.id}
+        orderData={selectedOrderForStatus ? {
+          ordersJsonb: selectedOrderForStatus.ordersJsonb,
+          bolResponseJsonb: selectedOrderForStatus.bolResponseJsonb,
+          rateQuotesResponseJsonb: selectedOrderForStatus.rateQuotesResponseJsonb,
+        } : undefined}
       />
     </div>
   );

@@ -4,19 +4,19 @@ import { useState, useEffect } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import type { ShippedOrder, UpdateShippedOrderPayload } from '../utils/shippedOrdersApi';
 
-type ShippedOrderEditModalProps = {
+type ProcessedOrderEditModalProps = {
   isOpen: boolean;
   order: ShippedOrder | null;
   onClose: () => void;
   onSave: (payload: UpdateShippedOrderPayload) => Promise<void>;
 };
 
-export const ShippedOrderEditModal = ({
+export const ProcessedOrderEditModal = ({
   isOpen,
   order,
   onClose,
   onSave,
-}: ShippedOrderEditModalProps) => {
+}: ProcessedOrderEditModalProps) => {
   const [sku, setSku] = useState('');
   const [orderOnMarketPlace, setOrderOnMarketPlace] = useState('');
   const [status, setStatus] = useState('pending');
@@ -120,7 +120,7 @@ export const ShippedOrderEditModal = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
         <div className="p-6 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900">Edit Shipped Order</h2>
+          <h2 className="text-xl font-bold text-slate-900">Edit Processed Order</h2>
           <button
             onClick={onClose}
             disabled={loading}
