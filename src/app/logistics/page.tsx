@@ -2,12 +2,15 @@
 
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
-import { AuthenticateTab, RateQuoteTab, BillOfLadingTab } from './_components';
+import { RateQuoteTab, BillOfLadingTab } from './_components';
+import { useLogisticsStore } from '@/store/logisticsStore';
 
 export default function LogisticsPage() {
   const searchParams = useSearchParams();
   const selectedCarrier = searchParams?.get('carrier') || 'FedEx';
-  const [activeTab, setActiveTab] = useState('authenticate');
+  const [activeTab, setActiveTab] = useState('rate-quote');
+  const { getToken } = useLogisticsStore();
+  const storedToken = getToken(selectedCarrier);
 
   return (
     <div className="flex h-full flex-col">
@@ -16,16 +19,6 @@ export default function LogisticsPage() {
       {/* Simple Tab Navigation */}
       <div className="border-b border-slate-200 mb-6">
         <nav className="flex gap-2">
-          <button
-            onClick={() => setActiveTab('authenticate')}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-              activeTab === 'authenticate'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            Authenticate
-          </button>
           <button
             onClick={() => setActiveTab('rate-quote')}
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
@@ -51,9 +44,8 @@ export default function LogisticsPage() {
 
       {/* Tab Content */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'authenticate' && <AuthenticateTab carrier={selectedCarrier} />}
-        {activeTab === 'rate-quote' && <RateQuoteTab carrier={selectedCarrier} />}
-        {activeTab === 'bill-of-lading' && <BillOfLadingTab carrier={selectedCarrier} />}
+        {activeTab === 'rate-quote' && <RateQuoteTab carrier={selectedCarrier} token={storedToken || undefined} />}
+        {activeTab === 'bill-of-lading' && <BillOfLadingTab carrier={selectedCarrier} token={storedToken || undefined} />}
       </div>
     </div>
   );

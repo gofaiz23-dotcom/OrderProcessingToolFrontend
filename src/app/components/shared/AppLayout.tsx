@@ -2,11 +2,13 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { ReactNode, useState, useEffect, useRef } from 'react';
 import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart, Truck } from 'lucide-react';
 import API_BASE_URL from '../../../../BaseUrl';
 import { MARKETPLACES, LOGISTICS_CARRIERS } from '@/Shared/constant';
+import { LogisticsAuthModal } from './LogisticsAuthModal';
+import { useLogisticsStore } from '@/store/logisticsStore';
 
 const emailSubItems = [
     { href: '/email/inbox', label: 'Inbox', icon: Inbox },
@@ -29,9 +31,13 @@ const isActivePath = (pathname: string | null, href: string) => {
 const AppLayout = ({ children }: { children: ReactNode }) => {
     const pathname = usePathname();
     const searchParams = useSearchParams();
+    const router = useRouter();
+    const { getToken } = useLogisticsStore();
     const [isEmailExpanded, setIsEmailExpanded] = useState(true);
     const [isOrdersExpanded, setIsOrdersExpanded] = useState(false);
     const [isLogisticsExpanded, setIsLogisticsExpanded] = useState(false);
+    const [selectedCarrier, setSelectedCarrier] = useState<string | null>(null);
+    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const ordersDropdownRef = useRef<HTMLDivElement>(null);
     const logisticsDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -244,20 +250,33 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                                 const isActive = hasActiveLogisticsItem && searchParams?.get('carrier') === carrier;
                                                 
                                                 return (
-                                                    <Link 
-                                                        key={carrier} 
-                                                        href={`/logistics?carrier=${encodeURIComponent(carrier)}`}
+                                                    <div
+                                                        key={carrier}
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            // Check if token exists in Zustand store
+                                                            const existingToken = getToken(carrier);
+                                                            
+                                                            if (existingToken) {
+                                                                // Token exists, redirect directly to rate quote page
+                                                                const rateQuoteUrl = `/logistics/estes?carrier=${encodeURIComponent(carrier)}`;
+                                                                router.push(rateQuoteUrl);
+                                                            } else {
+                                                                // Token doesn't exist, show login modal
+                                                                const logisticsUrl = `/logistics?carrier=${encodeURIComponent(carrier)}`;
+                                                                router.push(logisticsUrl);
+                                                                setSelectedCarrier(carrier);
+                                                                setIsAuthModalOpen(true);
+                                                            }
+                                                        }}
+                                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors cursor-pointer ${
+                                                            isActive
+                                                                ? 'bg-blue-50 text-blue-700'
+                                                                : 'text-slate-600 hover:bg-slate-50'
+                                                        }`}
                                                     >
-                                                        <div
-                                                            className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${
-                                                                isActive
-                                                                    ? 'bg-blue-50 text-blue-700'
-                                                                    : 'text-slate-600 hover:bg-slate-50'
-                                                            }`}
-                                                        >
-                                                            <span className="text-sm font-medium">{carrier}</span>
-                                                        </div>
-                                                    </Link>
+                                                        <span className="text-sm font-medium">{carrier}</span>
+                                                    </div>
                                                 );
                                             })}
                                         </div>
@@ -316,11 +335,22 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
 
             {/* RIGHT MAIN CONTENT */}
             <main className="flex-1 p-10 overflow-hidden flex flex-col">
-                <div className="bg-white rounded-3xl shadow-xl p-8 border border-white/50 flex-1 min-h-0 overflow-hidden flex flex-col">
+                <div className="bg-white rounded-3xl shadow-xl p-8 border border-white/50 flex-1 min-h-0 overflow-y-auto flex flex-col">
                     {children}
                 </div>
             </main>
 
+            {/* Logistics Authentication Modal */}
+            {selectedCarrier && (
+                <LogisticsAuthModal
+                    isOpen={isAuthModalOpen}
+                    onClose={() => {
+                        setIsAuthModalOpen(false);
+                        setSelectedCarrier(null);
+                    }}
+                    carrier={selectedCarrier}
+                />
+            )}
         </div>
     );
 };
