@@ -39,6 +39,16 @@ export default function LogisticsPage() {
           >
             Bill of Lading
           </button>
+          <button
+            onClick={() => setActiveTab('shipment-tracking')}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+              activeTab === 'shipment-tracking'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Shipment Tracking
+          </button>
         </nav>
       </div>
 
