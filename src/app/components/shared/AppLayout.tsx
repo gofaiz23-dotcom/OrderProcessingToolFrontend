@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { ReactNode, useState, useEffect, useRef } from 'react';
-import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart, Truck } from 'lucide-react';
+import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart, Truck, PackageSearch } from 'lucide-react';
 import API_BASE_URL from '../../../../BaseUrl';
 import { MARKETPLACES, LOGISTICS_CARRIERS } from '@/Shared/constant';
 import { LogisticsAuthModal } from './LogisticsAuthModal';
@@ -36,10 +36,12 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     const [isEmailExpanded, setIsEmailExpanded] = useState(true);
     const [isOrdersExpanded, setIsOrdersExpanded] = useState(false);
     const [isLogisticsExpanded, setIsLogisticsExpanded] = useState(false);
+    const [isProcessedOrdersExpanded, setIsProcessedOrdersExpanded] = useState(false);
     const [selectedCarrier, setSelectedCarrier] = useState<string | null>(null);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const ordersDropdownRef = useRef<HTMLDivElement>(null);
     const logisticsDropdownRef = useRef<HTMLDivElement>(null);
+    const processedOrdersDropdownRef = useRef<HTMLDivElement>(null);
 
     // Auto-expand Email section if on inbox, sent, or compose page
     useEffect(() => {
@@ -62,6 +64,13 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         }
     }, [pathname]);
 
+    // Auto-expand Processed Orders section if on processed orders page
+    useEffect(() => {
+        if (pathname?.startsWith('/ProcessedOrders')) {
+            setIsProcessedOrdersExpanded(true);
+        }
+    }, [pathname]);
+
     // Close orders dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -71,19 +80,23 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             if (logisticsDropdownRef.current && !logisticsDropdownRef.current.contains(event.target as Node)) {
                 setIsLogisticsExpanded(false);
             }
+            if (processedOrdersDropdownRef.current && !processedOrdersDropdownRef.current.contains(event.target as Node)) {
+                setIsProcessedOrdersExpanded(false);
+            }
         };
 
-        if (isOrdersExpanded || isLogisticsExpanded) {
+        if (isOrdersExpanded || isLogisticsExpanded || isProcessedOrdersExpanded) {
             document.addEventListener('mousedown', handleClickOutside);
             return () => {
                 document.removeEventListener('mousedown', handleClickOutside);
             };
         }
-    }, [isOrdersExpanded, isLogisticsExpanded]);
+    }, [isOrdersExpanded, isLogisticsExpanded, isProcessedOrdersExpanded]);
 
     const hasActiveEmailItem = emailSubItems.some(item => isActivePath(pathname, item.href));
     const hasActiveOrdersItem = pathname?.startsWith('/orders');
     const hasActiveLogisticsItem = pathname?.startsWith('/logistics');
+    const hasActiveProcessedOrdersItem = pathname?.startsWith('/ProcessedOrders');
 
     return (
         <div className="flex h-screen w-full bg-gradient-to-br from-slate-100 to-slate-200">
@@ -281,6 +294,25 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                             })}
                                         </div>
                                     )}
+                                </div>
+
+                                {/* Processed Orders Section */}
+                                <div ref={processedOrdersDropdownRef}>
+                                    <Link href="/ProcessedOrders">
+                                        <div
+                                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                                                hasActiveProcessedOrdersItem
+                                                    ? 'bg-blue-50 text-blue-700'
+                                                    : 'text-slate-700 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            <PackageSearch
+                                                size={18}
+                                                className={hasActiveProcessedOrdersItem ? 'text-blue-600' : 'text-slate-400'}
+                                            />
+                                            <span className="text-sm font-medium flex-1 text-left">Processed Orders</span>
+                                        </div>
+                                    </Link>
                                 </div>
                             </nav>
                         </div>
