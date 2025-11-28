@@ -66,3 +66,64 @@ export const getAllLogisticsShippedOrders = async (): Promise<GetAllLogisticsShi
   return response.json();
 };
 
+export type CreateLogisticsShippedOrderPayload = {
+  sku: string;
+  orderOnMarketPlace: string;
+  ordersJsonb: Record<string, unknown>;
+  rateQuotesResponseJsonb?: Record<string, unknown>;
+  bolResponseJsonb?: Record<string, unknown>;
+  pickupResponseJsonb?: Record<string, unknown>;
+  files?: File[];
+};
+
+export type CreateLogisticsShippedOrderResponse = {
+  message: string;
+  data: LogisticsShippedOrder;
+};
+
+/**
+ * Create logistics shipped order with multipart/form-data
+ */
+export const createLogisticsShippedOrder = async (
+  payload: CreateLogisticsShippedOrderPayload,
+): Promise<CreateLogisticsShippedOrderResponse> => {
+  const formData = new FormData();
+  
+  // Add text fields
+  formData.append('sku', payload.sku);
+  formData.append('orderOnMarketPlace', payload.orderOnMarketPlace);
+  formData.append('ordersJsonb', JSON.stringify(payload.ordersJsonb));
+  
+  if (payload.rateQuotesResponseJsonb) {
+    formData.append('rateQuotesResponseJsonb', JSON.stringify(payload.rateQuotesResponseJsonb));
+  }
+  
+  if (payload.bolResponseJsonb) {
+    formData.append('bolResponseJsonb', JSON.stringify(payload.bolResponseJsonb));
+  }
+  
+  if (payload.pickupResponseJsonb) {
+    formData.append('pickupResponseJsonb', JSON.stringify(payload.pickupResponseJsonb));
+  }
+  
+  // Add files
+  if (payload.files && payload.files.length > 0) {
+    payload.files.forEach((file) => {
+      formData.append('files', file);
+    });
+  }
+
+  const response = await fetch(buildApiUrl('/Logistics/shipped-orders'), {
+    method: 'POST',
+    body: formData,
+    // Don't set Content-Type header - browser will set it with boundary for multipart/form-data
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    await handleApiError(response);
+  }
+
+  return response.json();
+};
+
