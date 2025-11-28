@@ -240,7 +240,7 @@ export const EditOrderModal = ({
         </div>
 
         {/* Error display */}
-        {error && (
+        {error != null && (
           <div className="px-6 py-4 border-b border-red-200 bg-red-50/50">
             <ErrorDisplay error={error} />
           </div>
