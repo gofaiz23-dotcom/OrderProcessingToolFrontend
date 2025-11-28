@@ -151,7 +151,7 @@ export type ShipmentHistoryResponse = {
 };
 
 // GET - Get shipment history
-export const getShipmentHistory = async (params: ShipmentHistoryParams): Promise<ShipmentHistoryResponse> => {
+export const getShipmentHistory = async (params: ShipmentHistoryParams, token?: string): Promise<ShipmentHistoryResponse> => {
   const queryParams = new URLSearchParams();
   
   if (params.pro !== null && params.pro !== undefined && params.pro !== '') {
@@ -176,13 +176,21 @@ export const getShipmentHistory = async (params: ShipmentHistoryParams): Promise
     queryParams.append('interlinePro', params.interlinePro);
   }
 
+  // Use backend endpoint (backend will proxy to Estes API to avoid CORS issues)
   const url = buildApiUrl(`/Logistics/shipment-history?${queryParams.toString()}`);
+
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+
+  // Add Authorization header if token is provided
+  if (token && token.trim() !== '') {
+    headers['Authorization'] = `Bearer ${token.trim()}`;
+  }
 
   const res = await fetch(url, {
     method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
   });
 
   if (!res.ok) {

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
-import { X, Loader2, Package, MapPin, Calendar, Truck, CheckCircle, AlertCircle, User, Building2, Phone, Mail } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Loader2, Download, ChevronDown, ChevronUp, HelpCircle, Mail, Truck, CheckCircle, Circle } from 'lucide-react';
 import type { ShipmentHistoryResponse } from '../utils/shipmentHistoryApi';
 
 type ShipmentHistoryModalProps = {
@@ -16,6 +16,14 @@ const formatValue = (value: string | number | boolean | undefined | null): strin
   if (value === null || value === undefined || value === '') return 'N/A';
   if (typeof value === 'boolean') return value ? 'Yes' : 'No';
   return String(value);
+};
+
+const formatDate = (date?: string, time?: string): string => {
+  if (!date) return 'N/A';
+  if (time) {
+    return `${date} ${time}`;
+  }
+  return date;
 };
 
 const formatAddress = (address?: {
@@ -35,6 +43,26 @@ const formatAddress = (address?: {
   return parts.length > 0 ? parts.join(', ') : 'N/A';
 };
 
+const getStatusColor = (status?: string): string => {
+  if (!status) return 'text-slate-500';
+  const lowerStatus = status.toLowerCase();
+  if (lowerStatus.includes('delivered')) return 'text-green-600';
+  if (lowerStatus.includes('transit')) return 'text-green-600';
+  if (lowerStatus.includes('picked')) return 'text-green-600';
+  return 'text-slate-500';
+};
+
+const getStatusStage = (status?: string): { pickedUp: boolean; inTransit: boolean; outForDelivery: boolean; delivered: boolean } => {
+  if (!status) return { pickedUp: false, inTransit: false, outForDelivery: false, delivered: false };
+  const lowerStatus = status.toLowerCase();
+  return {
+    pickedUp: lowerStatus.includes('picked') || lowerStatus.includes('pickup'),
+    inTransit: lowerStatus.includes('transit') || lowerStatus.includes('in transit'),
+    outForDelivery: lowerStatus.includes('delivery') && !lowerStatus.includes('delivered'),
+    delivered: lowerStatus.includes('delivered'),
+  };
+};
+
 export const ShipmentHistoryModal = ({
   isOpen,
   onClose,
@@ -42,6 +70,15 @@ export const ShipmentHistoryModal = ({
   loading,
   error,
 }: ShipmentHistoryModalProps) => {
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    shipmentHistory: true,
+    shipmentDetails: false,
+    deliveryDetails: false,
+    referenceNumbers: false,
+    destinationTerminal: false,
+  });
+  const [allCollapsed, setAllCollapsed] = useState(false);
+
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -57,541 +94,407 @@ export const ShipmentHistoryModal = ({
     }
   }, [isOpen, onClose]);
 
+  const toggleSection = (section: string) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [section]: !prev[section],
+    }));
+  };
+
+  const toggleAllSections = () => {
+    const newState = !allCollapsed;
+    setAllCollapsed(newState);
+    setCollapsedSections({
+      shipmentHistory: newState,
+      shipmentDetails: newState,
+      deliveryDetails: newState,
+      referenceNumbers: newState,
+      destinationTerminal: newState,
+    });
+  };
+
   if (!isOpen) return null;
 
   const shipment = data?.data?.data?.[0];
+  const status = shipment?.status?.conciseStatus || 'Unknown';
+  const statusStages = getStatusStage(status);
+
+  // Extract BOL from documentReference
+  const bolNumber = shipment?.documentReference?.find(doc => 
+    doc.documentType?.toLowerCase().includes('lading') || 
+    doc.documentType?.toLowerCase().includes('bol')
+  )?.id || 'N/A';
+
+  // Calculate estimated delivery date range (example logic)
+  const estimatedDelivery = shipment?.deliveryDate 
+    ? `${shipment.deliveryDate} - ${shipment.deliveryDate}` 
+    : 'N/A';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-blue-50 to-indigo-50">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">Shipment History</h2>
-            <p className="text-sm text-slate-600 mt-1">
-              Company: {formatValue(data?.shippingCompanyName)}
-            </p>
+    <div className="fixed inset-0 z-[10001] flex items-start justify-center bg-gray-100 overflow-y-auto">
+      <div className="bg-white w-full max-w-7xl mx-auto my-8 shadow-lg">
+        {/* Header */}
+        <div className="bg-white border-b border-slate-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-3xl font-bold text-slate-900">Tracking Results</h1>
+            <div className="flex items-center gap-3">
+              <button className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-2">
+                <Download className="h-4 w-4" />
+                Download Results
+              </button>
+              <button 
+                onClick={toggleAllSections}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 flex items-center gap-2"
+              >
+                {allCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                Collapse All
+              </button>
+              <button
+                onClick={onClose}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
-          <button
-            onClick={onClose}
-            className="text-slate-400 hover:text-slate-600 transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            <button className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg flex items-center gap-2">
+              <Mail className="h-4 w-4" />
+              GET EMAIL UPDATES
+            </button>
+            <span className="text-sm text-slate-600">Get email updates for undelivered shipments selected below.</span>
+          </div>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="p-6">
           {loading && (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-              <span className="ml-3 text-slate-600">Loading shipment history...</span>
+              <span className="ml-3 text-slate-600">Loading tracking results...</span>
             </div>
           )}
 
           {error && (
             <div className="p-4 bg-red-50 border border-red-200 rounded-lg mb-4">
-              <div className="flex items-center gap-2 text-red-700">
-                <AlertCircle className="h-5 w-5" />
-                <p className="font-medium">Error</p>
-              </div>
-              <p className="text-sm text-red-600 mt-1">{error}</p>
+              <p className="text-sm text-red-700">{error}</p>
             </div>
           )}
 
-          {!loading && !error && (
+          {!loading && !error && shipment && (
             <div className="space-y-6">
-              {/* Note */}
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>Note:</strong> If using PRO, also include BOL for better tracking accuracy.
-                </p>
+              {/* Summary Table */}
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                        <input type="checkbox" className="rounded" />
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">PRO Number</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">Pickup Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">BOL Number</th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">
+                        <div className="flex items-center gap-1">
+                          Estimated Delivery
+                          <HelpCircle className="h-4 w-4 text-blue-500" />
+                        </div>
+                      </th>
+                      <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white">
+                    <tr className="border-t border-slate-200">
+                      <td className="px-4 py-4">
+                        <input type="checkbox" className="rounded" />
+                      </td>
+                      <td className="px-4 py-4 text-sm font-medium text-slate-900">{formatValue(shipment.pro)}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700">{formatDate(shipment.pickupDate)}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700">{bolNumber}</td>
+                      <td className="px-4 py-4 text-sm text-slate-700">{estimatedDelivery}</td>
+                      <td className="px-4 py-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full ${getStatusColor(status).replace('text-', 'bg-')}`}></div>
+                          <span className={`text-sm font-medium ${getStatusColor(status)}`}>{status}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
-              {/* Status Overview */}
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border border-blue-200">
-                <h3 className="text-lg font-bold text-slate-900 mb-4">Status Overview</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                        shipment?.status?.conciseStatus === 'Delivered'
-                          ? 'bg-green-100'
-                          : shipment?.status?.isException
-                          ? 'bg-red-100'
-                          : 'bg-blue-100'
-                      }`}>
-                        {shipment?.status?.conciseStatus === 'Delivered' ? (
-                          <CheckCircle className="h-6 w-6 text-green-600" />
-                        ) : (
-                          <Package className="h-6 w-6 text-blue-600" />
-                        )}
+              {/* Status Progress Bar */}
+              <div className="border border-slate-200 rounded-lg p-6 bg-white">
+                <div className="flex items-center justify-between mb-4">
+                  {[
+                    { label: 'Picked Up', completed: statusStages.pickedUp, icon: CheckCircle },
+                    { label: 'In Transit', completed: statusStages.inTransit, icon: Truck },
+                    { label: 'Out for Delivery', completed: statusStages.outForDelivery, icon: Circle },
+                    { label: 'Delivered', completed: statusStages.delivered, icon: CheckCircle },
+                  ].map((stage, index) => {
+                    const Icon = stage.icon;
+                    const isActive = stage.completed;
+                    return (
+                      <div key={index} className="flex-1 flex flex-col items-center">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${
+                          isActive ? 'bg-green-100' : 'bg-slate-100'
+                        }`}>
+                          <Icon className={`h-5 w-5 ${isActive ? 'text-green-600' : 'text-slate-400'}`} />
+                        </div>
+                        <span className={`text-sm font-medium ${isActive ? 'text-green-600' : 'text-slate-400'}`}>
+                          {stage.label}
+                        </span>
                       </div>
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Concise Status</p>
-                      <p className="text-lg font-bold text-slate-900">{formatValue(shipment?.status?.conciseStatus)}</p>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Is Exception</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.status?.isException)}</p>
-                  </div>
+                    );
+                  })}
                 </div>
-                <div className="mt-4 space-y-2">
-                  <div>
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Expanded Status</p>
-                    <p className="text-sm text-slate-700">{formatValue(shipment?.status?.expandedStatus)}</p>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
+              </div>
+
+              {/* Status Message Bar */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-center gap-3">
+                <Truck className="h-5 w-5 text-green-600" />
+                <span className="text-sm font-medium text-green-800">
+                  {formatValue(shipment.status?.expandedStatus || shipment.status?.conciseStatus)}
+                </span>
+              </div>
+
+              {/* Shipment Details Section */}
+              <div className="border border-slate-200 rounded-lg">
+                <button
+                  onClick={() => toggleSection('shipmentDetails')}
+                  className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                >
+                  <h3 className="text-lg font-semibold text-slate-900">Shipment Details</h3>
+                  {collapsedSections.shipmentDetails ? (
+                    <ChevronDown className="h-5 w-5 text-slate-500" />
+                  ) : (
+                    <ChevronUp className="h-5 w-5 text-slate-500" />
+                  )}
+                </button>
+                {!collapsedSections.shipmentDetails && (
+                  <div className="p-6 grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Reference Date</p>
-                      <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.status?.referenceDate)}</p>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Shipper Name</p>
+                      <p className="text-sm font-medium text-slate-900">{formatValue(shipment.shipperParty?.name)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Reference Time</p>
-                      <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.status?.referenceTime)}</p>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Shipper Address</p>
+                      <p className="text-sm text-slate-700">{formatAddress(shipment.shipperParty?.address)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Reason Code</p>
-                      <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.status?.reasonCode)}</p>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Pickup Date</p>
+                      <p className="text-sm font-medium text-slate-900">{formatDate(shipment.pickupDate, shipment.pickupTime)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Pieces</p>
+                      <p className="text-sm font-medium text-slate-900">{formatValue(shipment.piecesCount)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Weight (lbs.)</p>
+                      <p className="text-sm font-medium text-slate-900">{formatValue(shipment.totalWeight)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Freight Charges</p>
+                      <p className="text-sm font-medium text-slate-900">
+                        {shipment.freightCharges ? `$${shipment.freightCharges}` : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Transit Days</p>
+                      <p className="text-sm font-medium text-slate-900">{formatValue(shipment.transitDays)}</p>
                     </div>
                   </div>
-                  <div>
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Reason</p>
-                    <p className="text-sm text-slate-700">{formatValue(shipment?.status?.reason)}</p>
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* Basic Information */}
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Basic Information</h3>
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">PRO Number</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.pro)}</p>
+              {/* Shipment History Section */}
+              <div className="border border-slate-200 rounded-lg">
+                <button
+                  onClick={() => toggleSection('shipmentHistory')}
+                  className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                >
+                  <h3 className="text-lg font-semibold text-slate-900">Shipment History</h3>
+                  {collapsedSections.shipmentHistory ? (
+                    <ChevronDown className="h-5 w-5 text-slate-500" />
+                  ) : (
+                    <ChevronUp className="h-5 w-5 text-slate-500" />
+                  )}
+                </button>
+                {!collapsedSections.shipmentHistory && (
+                  <div className="p-6">
+                    {shipment.movementHistory && shipment.movementHistory.length > 0 ? (
+                      <div className="space-y-4">
+                        {shipment.movementHistory.map((movement, index) => (
+                          <div key={index} className="border border-slate-200 rounded-lg p-4">
+                            <p className="text-sm font-medium text-slate-900 mb-2">{formatValue(movement.description)}</p>
+                            <p className="text-xs text-slate-500">{formatValue(movement.transportEventTypeCode)}</p>
+                            {movement.location && (
+                              <p className="text-xs text-slate-600 mt-2">{formatAddress(movement.location.address)}</p>
+                            )}
+                            {movement.statusHistory && movement.statusHistory.length > 0 && (
+                              <div className="mt-3 space-y-2">
+                                {movement.statusHistory.map((status, statusIndex) => (
+                                  <div key={statusIndex} className="text-xs text-slate-600">
+                                    <span className="font-medium">{formatValue(status.conciseStatus)}</span>
+                                    {' - '}
+                                    <span>{formatValue(status.referenceDate)} {formatValue(status.referenceTime)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-500">No shipment history available</p>
+                    )}
                   </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Pickup Request Number</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.pickupRequestNumber)}</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Is Residential</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.isResidential)}</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Is Truckload</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.isTruckload)}</p>
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* Dates & Times */}
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Dates & Times</h3>
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Pickup Date</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.pickupDate)}</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Pickup Time</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.pickupTime)}</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Delivery Date</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.deliveryDate)}</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Delivery Time</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.deliveryTime)}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 mt-4">
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Transit Days</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.transitDays)}</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Received By</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.receivedBy)}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Shipment Details */}
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Shipment Details</h3>
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Pieces Count</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.piecesCount)}</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Weight</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.totalWeight)} lbs</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Cube</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.cube)}</p>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Freight Charges</p>
-                    <p className="text-sm font-semibold text-slate-900">
-                      {shipment?.freightCharges ? `$${shipment.freightCharges}` : 'N/A'}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4">
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Terms</p>
-                    <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.terms)}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Driver Info */}
-              {shipment?.driverInfo && (
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                    <User className="h-5 w-5" />
-                    Driver Information
-                  </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="p-4 bg-slate-50 rounded-lg">
-                      <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Driver Name</p>
-                      <p className="text-sm font-semibold text-slate-900">{formatValue(shipment.driverInfo.name)}</p>
+              {/* Delivery Details Section */}
+              <div className="border border-slate-200 rounded-lg">
+                <button
+                  onClick={() => toggleSection('deliveryDetails')}
+                  className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                >
+                  <h3 className="text-lg font-semibold text-slate-900">Delivery Details</h3>
+                  {collapsedSections.deliveryDetails ? (
+                    <ChevronDown className="h-5 w-5 text-slate-500" />
+                  ) : (
+                    <ChevronUp className="h-5 w-5 text-slate-500" />
+                  )}
+                </button>
+                {!collapsedSections.deliveryDetails && (
+                  <div className="p-6 grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Consignee Name</p>
+                      <p className="text-sm font-medium text-slate-900">{formatValue(shipment.consigneeParty?.name)}</p>
                     </div>
-                    <div className="p-4 bg-slate-50 rounded-lg col-span-2">
-                      <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Geo Coordinates</p>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {shipment.driverInfo.geoCoordinates && shipment.driverInfo.geoCoordinates.length > 0
-                          ? shipment.driverInfo.geoCoordinates.join(', ')
-                          : 'N/A'}
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Consignee Address</p>
+                      <p className="text-sm text-slate-700">{formatAddress(shipment.consigneeParty?.address)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Appointment Date</p>
+                      <p className="text-sm font-medium text-slate-900">
+                        {formatDate(shipment.deliveryDate, shipment.deliveryTime)}
+                        {shipment.deliveryDate && (
+                          <a href="#" className="ml-2 text-blue-600 text-xs hover:underline">
+                            View in Appointment Research Tool
+                          </a>
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Appointment Status</p>
+                      <p className="text-sm font-medium text-slate-900">Customer requested appointment</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Estimated Delivery Date</p>
+                      <p className="text-sm font-medium text-slate-900">{estimatedDelivery}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Driver Name</p>
+                      <p className="text-sm font-medium text-slate-900">{formatValue(shipment.driverInfo?.name)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Delivery Receipt</p>
+                      <p className="text-xs text-slate-600">
+                        Image not available. A Delivery Receipt typically takes up to 48 hours to process after delivery.
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">W&R Certificate</p>
+                      <p className="text-xs text-slate-600">
+                        Image not available. Weight & Research images typically take up to 48 hours to process after delivery.
                       </p>
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* Parties */}
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Parties</h3>
-                <div className="grid grid-cols-3 gap-4">
-                  {/* Shipper */}
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <Building2 className="h-4 w-4" />
-                      Shipper
-                    </h4>
-                    <div className="space-y-2">
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Name</p>
-                        <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.shipperParty?.name)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Account Number</p>
-                        <p className="text-sm text-slate-700">{formatValue(shipment?.shipperParty?.accountNumber)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Address</p>
-                        <p className="text-xs text-slate-600">{formatAddress(shipment?.shipperParty?.address)}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Consignee */}
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <Building2 className="h-4 w-4" />
-                      Consignee
-                    </h4>
-                    <div className="space-y-2">
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Name</p>
-                        <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.consigneeParty?.name)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Account Number</p>
-                        <p className="text-sm text-slate-700">{formatValue(shipment?.consigneeParty?.accountNumber)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Address</p>
-                        <p className="text-xs text-slate-600">{formatAddress(shipment?.consigneeParty?.address)}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Third Party */}
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <Building2 className="h-4 w-4" />
-                      Third Party
-                    </h4>
-                    <div className="space-y-2">
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Name</p>
-                        <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.thirdParty?.name)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Account Number</p>
-                        <p className="text-sm text-slate-700">{formatValue(shipment?.thirdParty?.accountNumber)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Address</p>
-                        <p className="text-xs text-slate-600">{formatAddress(shipment?.thirdParty?.address)}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Terminals */}
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Terminals</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Origin Terminal */}
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <h4 className="text-sm font-semibold text-slate-900 mb-3">Origin Terminal</h4>
-                    <div className="space-y-2">
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Number</p>
-                        <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.originTerminal?.number)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Name</p>
-                        <p className="text-sm text-slate-700">{formatValue(shipment?.originTerminal?.name)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Address</p>
-                        <p className="text-xs text-slate-600">{formatAddress(shipment?.originTerminal?.address)}</p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Telephone</p>
-                          <p className="text-xs text-slate-600">{formatValue(shipment?.originTerminal?.telephone)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Fax</p>
-                          <p className="text-xs text-slate-600">{formatValue(shipment?.originTerminal?.fax)}</p>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Email</p>
-                        <p className="text-xs text-slate-600">{formatValue(shipment?.originTerminal?.email)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Geo Coordinates</p>
-                        <p className="text-xs text-slate-600">
-                          {shipment?.originTerminal?.geoCoordinates && shipment.originTerminal.geoCoordinates.length > 0
-                            ? shipment.originTerminal.geoCoordinates.join(', ')
-                            : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Destination Terminal */}
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <h4 className="text-sm font-semibold text-slate-900 mb-3">Destination Terminal</h4>
-                    <div className="space-y-2">
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Number</p>
-                        <p className="text-sm font-semibold text-slate-900">{formatValue(shipment?.destinationTerminal?.number)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Name</p>
-                        <p className="text-sm text-slate-700">{formatValue(shipment?.destinationTerminal?.name)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Address</p>
-                        <p className="text-xs text-slate-600">{formatAddress(shipment?.destinationTerminal?.address)}</p>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Telephone</p>
-                          <p className="text-xs text-slate-600">{formatValue(shipment?.destinationTerminal?.telephone)}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Fax</p>
-                          <p className="text-xs text-slate-600">{formatValue(shipment?.destinationTerminal?.fax)}</p>
-                        </div>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Email</p>
-                        <p className="text-xs text-slate-600">{formatValue(shipment?.destinationTerminal?.email)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Geo Coordinates</p>
-                        <p className="text-xs text-slate-600">
-                          {shipment?.destinationTerminal?.geoCoordinates && shipment.destinationTerminal.geoCoordinates.length > 0
-                            ? shipment.destinationTerminal.geoCoordinates.join(', ')
-                            : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Document References */}
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Document References</h3>
-                {shipment?.documentReference && shipment.documentReference.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {shipment.documentReference.map((doc, index) => (
-                      <div key={index} className="p-3 bg-slate-50 rounded-lg">
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Document Type</p>
-                        <p className="text-sm font-semibold text-slate-900 mb-2">{formatValue(doc.documentType)}</p>
-                        <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">ID</p>
-                        <p className="text-sm text-slate-700">{formatValue(doc.id)}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-slate-500">N/A</p>
                 )}
               </div>
 
-              {/* Movement History */}
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
-                  <Truck className="h-5 w-5" />
-                  Movement History
-                </h3>
-                {shipment?.movementHistory && shipment.movementHistory.length > 0 ? (
-                  <div className="space-y-4">
-                    {shipment.movementHistory.map((movement, index) => (
-                      <div key={index} className="border border-slate-200 rounded-lg p-4">
-                        <div className="flex items-start gap-3 mb-3">
-                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                            <span className="text-xs font-semibold text-blue-700">{index + 1}</span>
-                          </div>
-                          <div className="flex-1">
-                            <div className="grid grid-cols-2 gap-4 mb-2">
-                              <div>
-                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">ID</p>
-                                <p className="text-sm font-semibold text-slate-900">{formatValue(movement.id)}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Description</p>
-                                <p className="text-sm font-semibold text-slate-900">{formatValue(movement.description)}</p>
-                              </div>
-                            </div>
-                            <div>
-                              <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Transport Event Type Code</p>
-                              <p className="text-sm text-slate-700">{formatValue(movement.transportEventTypeCode)}</p>
-                            </div>
-                            {movement.location && (
-                              <div className="mt-2 flex items-start gap-2">
-                                <MapPin className="h-4 w-4 text-slate-400 mt-0.5" />
-                                <div className="text-sm text-slate-600">
-                                  <p className="font-medium">{formatValue(movement.location.name)}</p>
-                                  <p className="text-xs text-slate-500">{formatAddress(movement.location.address)}</p>
-                                  <p className="text-xs text-slate-500 mt-1">
-                                    Code: {formatValue(movement.location.code)} | ID: {formatValue(movement.location.id)}
-                                  </p>
-                                  {movement.location.geoCoordinates && movement.location.geoCoordinates.length > 0 && (
-                                    <p className="text-xs text-slate-500">
-                                      Coordinates: {movement.location.geoCoordinates.join(', ')}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                            {movement.contact && (
-                              <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-500">
-                                <div>
-                                  <p>Telephone: {formatValue(movement.contact.telephone)}</p>
-                                </div>
-                                <div>
-                                  <p>Fax: {formatValue(movement.contact.fax)}</p>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        {movement.statusHistory && movement.statusHistory.length > 0 && (
-                          <div className="ml-11 space-y-2 border-t border-slate-200 pt-3">
-                            <p className="text-xs text-slate-500 uppercase tracking-wide mb-2">Status History</p>
-                            {movement.statusHistory.map((status, statusIndex) => (
-                              <div key={statusIndex} className="flex items-start gap-2 text-sm bg-slate-50 p-2 rounded">
-                                <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
-                                  status.isException ? 'bg-red-500' : 'bg-green-500'
-                                }`} />
-                                <div className="flex-1">
-                                  <p className="font-medium text-slate-900">{formatValue(status.conciseStatus)}</p>
-                                  <p className="text-xs text-slate-600">{formatValue(status.expandedStatus)}</p>
-                                  <div className="grid grid-cols-2 gap-2 mt-1">
-                                    <p className="text-xs text-slate-500">
-                                      Date: {formatValue(status.referenceDate)}
-                                    </p>
-                                    <p className="text-xs text-slate-500">
-                                      Time: {formatValue(status.referenceTime)}
-                                    </p>
-                                  </div>
-                                  {status.reasonCode && (
-                                    <p className="text-xs text-slate-500 mt-1">
-                                      Reason Code: {formatValue(status.reasonCode)} | Reason: {formatValue(status.reason)}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
+              {/* Reference Numbers Section */}
+              <div className="border border-slate-200 rounded-lg">
+                <button
+                  onClick={() => toggleSection('referenceNumbers')}
+                  className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                >
+                  <h3 className="text-lg font-semibold text-slate-900">Reference Numbers</h3>
+                  {collapsedSections.referenceNumbers ? (
+                    <ChevronDown className="h-5 w-5 text-slate-500" />
+                  ) : (
+                    <ChevronUp className="h-5 w-5 text-slate-500" />
+                  )}
+                </button>
+                {!collapsedSections.referenceNumbers && (
+                  <div className="p-6 grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Estes PRO Number</p>
+                      <p className="text-sm font-medium text-slate-900">{formatValue(shipment.pro)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Shipper Bill of Lading Number</p>
+                      <p className="text-sm font-medium text-slate-900">
+                        {bolNumber}
+                        {bolNumber !== 'N/A' && (
+                          <a href="#" className="ml-2 text-blue-600 text-xs hover:underline">View</a>
                         )}
-                      </div>
-                    ))}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">DIM</p>
+                      <p className="text-sm font-medium text-slate-900">{formatValue(shipment.cube)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Purchase Order Number</p>
+                      <p className="text-sm font-medium text-slate-900">NS</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Estes Pickup Request Number</p>
+                      <p className="text-sm font-medium text-slate-900">{formatValue(shipment.pickupRequestNumber)}</p>
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-sm text-slate-500">N/A</p>
                 )}
               </div>
 
-              {/* Disclaimers */}
-              <div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Disclaimers</h3>
-                {shipment?.disclaimers && shipment.disclaimers.length > 0 ? (
-                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <ul className="space-y-2">
-                      {shipment.disclaimers.map((disclaimer, index) => (
-                        <li key={index} className="text-sm text-yellow-800">{disclaimer}</li>
-                      ))}
-                    </ul>
+              {/* Destination Terminal Section */}
+              <div className="border border-slate-200 rounded-lg">
+                <button
+                  onClick={() => toggleSection('destinationTerminal')}
+                  className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                >
+                  <h3 className="text-lg font-semibold text-slate-900">Destination Terminal</h3>
+                  {collapsedSections.destinationTerminal ? (
+                    <ChevronDown className="h-5 w-5 text-slate-500" />
+                  ) : (
+                    <ChevronUp className="h-5 w-5 text-slate-500" />
+                  )}
+                </button>
+                {!collapsedSections.destinationTerminal && (
+                  <div className="p-6 grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Name</p>
+                      <p className="text-sm font-medium text-slate-900">{formatValue(shipment.destinationTerminal?.name)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Address</p>
+                      <p className="text-sm text-slate-700">{formatAddress(shipment.destinationTerminal?.address)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Telephone</p>
+                      <p className="text-sm font-medium text-slate-900">{formatValue(shipment.destinationTerminal?.telephone)}</p>
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-sm text-slate-500">N/A</p>
                 )}
               </div>
-
-              {/* Error Info */}
-              {data?.data?.error && (
-                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <h4 className="text-sm font-semibold text-red-900 mb-2">Error Information</h4>
-                  <div className="space-y-1">
-                    <p className="text-xs text-red-700">Code: {formatValue(data.data.error.code)}</p>
-                    <p className="text-xs text-red-700">Message: {formatValue(data.data.error.message)}</p>
-                    <p className="text-xs text-red-700">Details: {formatValue(data.data.error.details)}</p>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
           {!loading && !error && (!data || !data.data || !data.data.data || data.data.data.length === 0) && (
             <div className="text-center py-12">
-              <Package className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">No shipment history found</p>
+              <p className="text-slate-500">No tracking results found</p>
             </div>
           )}
-        </div>
-
-        <div className="p-6 border-t border-slate-200 flex items-center justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-          >
-            Close
-          </button>
         </div>
       </div>
     </div>
