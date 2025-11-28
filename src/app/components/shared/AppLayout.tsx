@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { ReactNode, useState, useEffect, useRef } from 'react';
-import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart, Truck, PackageSearch } from 'lucide-react';
+import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart, Truck, PackageSearch, Users } from 'lucide-react';
 import API_BASE_URL from '../../../../BaseUrl';
 import { MARKETPLACES, LOGISTICS_CARRIERS } from '@/Shared/constant';
 import { LogisticsAuthModal } from './LogisticsAuthModal';
@@ -97,6 +97,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     const hasActiveOrdersItem = pathname?.startsWith('/orders');
     const hasActiveLogisticsItem = pathname?.startsWith('/logistics');
     const hasActiveProcessedOrdersItem = pathname?.startsWith('/ProcessedOrders');
+    const hasActiveCustomerDetailsItem = pathname?.startsWith('/CustomerDetails');
 
     return (
         <div className="flex h-screen w-full bg-gradient-to-br from-slate-100 to-slate-200">
@@ -311,6 +312,25 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                                 className={hasActiveProcessedOrdersItem ? 'text-blue-600' : 'text-slate-400'}
                                             />
                                             <span className="text-sm font-medium flex-1 text-left">Processed Orders</span>
+                                        </div>
+                                    </Link>
+                                </div>
+
+                                {/* Customer Details Section */}
+                                <div>
+                                    <Link href="/CustomerDetails">
+                                        <div
+                                            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
+                                                hasActiveCustomerDetailsItem
+                                                    ? 'bg-blue-50 text-blue-700'
+                                                    : 'text-slate-700 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            <Users
+                                                size={18}
+                                                className={hasActiveCustomerDetailsItem ? 'text-blue-600' : 'text-slate-400'}
+                                            />
+                                            <span className="text-sm font-medium flex-1 text-left">Customer Details</span>
                                         </div>
                                     </Link>
                                 </div>
