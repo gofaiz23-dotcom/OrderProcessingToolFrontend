@@ -370,6 +370,7 @@ export const ProcessedOrdersList = ({
           ordersJsonb: selectedOrderForStatus.ordersJsonb,
           bolResponseJsonb: selectedOrderForStatus.bolResponseJsonb,
           rateQuotesResponseJsonb: selectedOrderForStatus.rateQuotesResponseJsonb,
+          pickupResponseJsonb: selectedOrderForStatus.pickupResponseJsonb,
         } : undefined}
       />
     </div>

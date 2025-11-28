@@ -47,7 +47,7 @@ export const getAllShippedOrders = async (): Promise<ShippedOrder[]> => {
   }
 
   const data = await res.json();
-  return data.data || [];
+  return data.orders || [];
 };
 
 // GET - Get shipped order by ID
@@ -65,7 +65,7 @@ export const getShippedOrderById = async (id: number): Promise<ShippedOrder> => 
   }
 
   const data = await res.json();
-  return data.data;
+  return data.data || data.order || data;
 };
 
 // POST - Create new shipped order
@@ -109,7 +109,7 @@ export const createShippedOrder = async (payload: CreateShippedOrderPayload): Pr
   }
 
   const data = await res.json();
-  return data.data;
+  return data.data || data.order || data;
 };
 
 // PUT - Update shipped order
@@ -158,7 +158,7 @@ export const updateShippedOrder = async (
   }
 
   const data = await res.json();
-  return data.data;
+  return data.data || data.order || data;
 };
 
 // DELETE - Delete shipped order by ID

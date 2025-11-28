@@ -57,19 +57,34 @@ export const createMultipleOrders = async (
  * Get all orders
  */
 export const getAllOrders = async (): Promise<GetAllOrdersResponse> => {
-  const response = await fetch(buildApiUrl('/orders/all'), {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    cache: 'no-store',
-  });
+  try {
+    const url = buildApiUrl('/orders/all');
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store',
+    });
 
-  if (!response.ok) {
-    await handleApiError(response);
+    if (!response.ok) {
+      await handleApiError(response);
+    }
+
+    return response.json();
+  } catch (error) {
+    // Handle network errors (CORS, connection refused, etc.)
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      const url = buildApiUrl('/orders/all');
+      throw new Error(
+        `Network error: Failed to connect to ${url}. Please check:\n` +
+        `1. The server is running and accessible\n` +
+        `2. CORS is properly configured on the server\n` +
+        `3. Your network connection is working`
+      );
+    }
+    throw error;
   }
-
-  return response.json();
 };
 
 /**
