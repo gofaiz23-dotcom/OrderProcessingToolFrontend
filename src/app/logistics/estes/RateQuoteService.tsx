@@ -15,6 +15,8 @@ import { BillOfLanding } from './BillOfLanding';
 import { PickupRequest } from './PickupRequest';
 import { ResponseSummary } from './components/ResponseSummary';
 import { getLogisticsShippedOrderById, getAllLogisticsShippedOrders } from '@/app/api/LogisticsApi/LogisticsShippedOrders';
+import { deleteOrder } from '@/app/api/OrderApi';
+import { ToastContainer } from '@/app/components/shared/Toast';
 
 type HandlingUnit = {
   id: string;
@@ -54,6 +56,8 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   const [isMounted, setIsMounted] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [loadingOrderData, setLoadingOrderData] = useState(false);
+  const [toasts, setToasts] = useState<Array<{ id: string; message: string; type?: 'success' | 'error' | 'info' }>>([]);
+  const [currentOrderId, setCurrentOrderId] = useState<number | undefined>(undefined);
 
   // Avoid hydration mismatch by getting token after mount
   useEffect(() => {
@@ -142,6 +146,30 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     }
   }, [initialOrderData]);
 
+  // Get orderId from URL params or sessionStorage
+  useEffect(() => {
+    const orderIdParam = searchParams?.get('orderId');
+    if (orderIdParam) {
+      const orderId = parseInt(orderIdParam, 10);
+      if (!isNaN(orderId)) {
+        setCurrentOrderId(orderId);
+      }
+    } else {
+      // Try to get from sessionStorage
+      const storedOrder = sessionStorage.getItem('selectedOrderForLogistics');
+      if (storedOrder) {
+        try {
+          const parsed = JSON.parse(storedOrder);
+          if (parsed.id) {
+            setCurrentOrderId(parsed.id);
+          }
+        } catch (e) {
+          console.error('Failed to parse stored order:', e);
+        }
+      }
+    }
+  }, [searchParams]);
+
   // Fetch order data from database when Response Summary step is reached
   useEffect(() => {
     const fetchOrderData = async () => {
@@ -156,6 +184,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
             // Fetch specific order by ID
             const orderId = parseInt(orderIdParam, 10);
             if (!isNaN(orderId)) {
+              setCurrentOrderId(orderId);
               const response = await getLogisticsShippedOrderById(orderId);
               if (response.data) {
                 setOrderData({
@@ -166,7 +195,29 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
               }
             }
           } else {
-            // Fetch the most recent order
+            // Try sessionStorage first
+            const storedOrder = sessionStorage.getItem('selectedOrderForLogistics');
+            if (storedOrder) {
+              try {
+                const parsed = JSON.parse(storedOrder);
+                if (parsed.id) {
+                  setCurrentOrderId(parsed.id);
+                }
+                if (parsed.sku && parsed.orderOnMarketPlace && parsed.jsonb) {
+                  setOrderData({
+                    sku: parsed.sku,
+                    orderOnMarketPlace: parsed.orderOnMarketPlace,
+                    ordersJsonb: parsed.jsonb,
+                  });
+                  setLoadingOrderData(false);
+                  return;
+                }
+              } catch (e) {
+                console.error('Failed to parse stored order:', e);
+              }
+            }
+            
+            // Fallback: Fetch the most recent order
             const response = await getAllLogisticsShippedOrders();
             if (response.data && response.data.length > 0) {
               const mostRecentOrder = response.data[0]; // Orders are sorted by createdAt desc
@@ -188,6 +239,60 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
 
     fetchOrderData();
   }, [currentStep, orderData, searchParams]);
+
+  // Handle submission success
+  const handleSubmitSuccess = async (orderId: number, sku: string) => {
+    try {
+      // Try to delete the order (optional - don't fail if order not found)
+      if (orderId) {
+        try {
+          await deleteOrder(orderId);
+          console.log(`Order (ID: ${orderId}) deleted successfully`);
+        } catch (deleteError) {
+          // Order might not exist or already deleted - that's okay
+          console.warn(`Order (ID: ${orderId}) could not be deleted:`, deleteError);
+          // Continue with cache clearing even if order deletion fails
+        }
+      }
+
+      // Clear all cache
+      sessionStorage.removeItem('selectedOrderForLogistics');
+      localStorage.clear();
+      
+      // Clear any other relevant caches
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(name => caches.delete(name)));
+      }
+
+      // Show success toast
+      const toastId = `toast-${Date.now()}`;
+      const deleteMessage = orderId 
+        ? `Order data (ID: ${orderId}, SKU: ${sku}) has been processed and all cache has been cleared. Data saved successfully!`
+        : `Order data (SKU: ${sku}) has been saved and all cache has been cleared. Data saved successfully!`;
+      
+      setToasts(prev => [...prev, {
+        id: toastId,
+        message: deleteMessage,
+        type: 'success',
+      }]);
+
+      // Show info message
+      console.log(`Order data saved successfully. Cache cleared.`);
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+      const toastId = `toast-${Date.now()}`;
+      setToasts(prev => [...prev, {
+        id: toastId,
+        message: 'Order submitted successfully, but cleanup failed. Please clear cache manually.',
+        type: 'error',
+      }]);
+    }
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
   
   // Store BOL PDF URL
   const [bolPdfUrl, setBolPdfUrl] = useState<string | null>(null);
@@ -1115,7 +1220,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         <div className="flex justify-end">
           <button
             type="submit"
-            disabled={!isMounted || loading || !storedToken}
+            disabled={!isMounted || loading}
             className="px-8 py-3 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors font-semibold text-lg disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {loading ? (
@@ -1247,6 +1352,11 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
             pickupResponseJsonb={pickupResponseData?.data || undefined}
             files={bolFiles}
             pdfUrl={bolPdfUrl}
+            orderId={currentOrderId}
+            onSubmitSuccess={handleSubmitSuccess}
+            onFilesChange={(updatedFiles) => {
+              setBolFiles(updatedFiles);
+            }}
             onDownloadPDF={() => {
               if (bolPdfUrl) {
                 const link = document.createElement('a');
@@ -1261,6 +1371,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           />
         </>
       )}
+
+      {/* Toast Notifications */}
+      {toasts.length > 0 && <ToastContainer toasts={toasts} onRemove={removeToast} />}
     </div>
   );
 };

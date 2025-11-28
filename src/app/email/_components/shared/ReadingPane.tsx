@@ -1,12 +1,12 @@
 'use client';
 
 import { memo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Reply, Forward } from 'lucide-react';
 import { EmailAttachment } from '@/app/types/email';
 import { InboxEmail } from '@/app/utils/Emails/Inbox';
 import { SentEmail } from '@/app/utils/Emails/Sent';
 import { ReadingPaneSkeleton } from './ReadingPaneSkeleton';
+import { InlineReply } from './InlineReply';
 
 type EmailWithDate = (InboxEmail & { dateField: 'receivedAt' }) | (SentEmail & { dateField: 'sentAt' });
 
@@ -43,7 +43,22 @@ const getAttachmentDataUrl = (attachment: EmailAttachment): string | null => {
 };
 
 export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }: ReadingPaneProps) => {
-  const router = useRouter();
+  const [showReply, setShowReply] = useState(false);
+  const [replyData, setReplyData] = useState<{
+    to: string[];
+    cc: string[];
+    bcc: string[];
+    subject: string;
+  } | null>(null);
+  const [showForward, setShowForward] = useState(false);
+  const [forwardData, setForwardData] = useState<{
+    to: string[];
+    cc: string[];
+    bcc: string[];
+    subject: string;
+    body: string;
+    attachments: File[];
+  } | null>(null);
 
   if (loading) {
     return <ReadingPaneSkeleton />;
@@ -75,7 +90,7 @@ export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }
       .filter(Boolean);
   };
 
-  // Handle Reply - navigate to compose page
+  // Handle Reply - show inline reply box
   const handleReply = () => {
     // Extract email address to reply to
     const fromEmail = email.from || '';
@@ -114,28 +129,49 @@ export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }
     // Combine original CC with other To recipients, avoiding duplicates
     const combinedCc = [...new Set([...ccList, ...otherToRecipients])].filter(addr => addr.includes('@'));
     
-    // Store reply data in sessionStorage to avoid URL length issues
-    const replyData = {
+    // Prepare reply data for inline reply
+    const newReplyData = {
       to: [replyTo],
       cc: combinedCc,
-      bcc: bccList.filter(addr => addr.includes('@')), // Include BCC from original (though typically BCC recipients don't see each other)
+      bcc: bccList.filter(addr => addr.includes('@')),
       subject: replySubject,
-      // No body - empty body for reply (user can type fresh reply)
     };
     
-    // Debug: Log the reply data
-    console.log('Reply data being stored:', replyData);
-    
-    sessionStorage.setItem('compose_reply_data', JSON.stringify(replyData));
-    
-    // Navigate to compose page with reply action
-    const params = new URLSearchParams({
-      action: 'reply',
-    });
-    router.push(`/email/compose?${params.toString()}`);
+    // Set reply data and show reply box
+    setReplyData(newReplyData);
+    setShowReply(true);
   };
 
-  // Handle Forward
+  // Handle closing reply
+  const handleCloseReply = () => {
+    setShowReply(false);
+    setReplyData(null);
+  };
+
+  // Handle successful send
+  const handleReplySent = () => {
+    setShowReply(false);
+    setReplyData(null);
+  };
+
+  // Helper function to convert base64 to File object
+  const base64ToFile = (base64: string, filename: string, mimeType: string): File => {
+    // Normalize base64 (handle URL-safe base64)
+    const normalizedBase64 = normalizeBase64(base64);
+    
+    // Convert base64 to binary
+    const byteCharacters = atob(normalizedBase64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: mimeType });
+    
+    return new File([blob], filename, { type: mimeType });
+  };
+
+  // Handle Forward - show inline forward box
   const handleForward = () => {
     const forwardSubject = email.subject.startsWith('Fwd: ') ? email.subject : `Fwd: ${email.subject}`;
     
@@ -144,16 +180,6 @@ export const ReadingPane = memo(({ email, loading = false, onAttachmentPreview }
     
     // Format date for email header
     const emailDateFormatted = formatDate(emailDate);
-    
-    // Build the forwarded message header (standard email format)
-    const forwardHeader = `
----------- Forwarded message ---------
-From: ${email.from}
-Date: ${emailDateFormatted}
-Subject: ${email.subject || '(No subject)'}
-To: ${email.to || ''}
-${email.cc ? `Cc: ${email.cc}` : ''}
-`.trim();
     
     // Create HTML version with proper styling
     const forwardHeaderHtml = `
@@ -184,35 +210,51 @@ ${originalBody}
 </div>`;
     }
 
-    // Store body in sessionStorage to avoid URL length issues
-    sessionStorage.setItem('compose_body', quotedBody);
-    
-    // Store attachments data for forwarding (only those with contentBase64)
+    // Convert attachments from base64 to File objects
+    const attachmentFiles: File[] = [];
     if (email.attachments && email.attachments.length > 0) {
-      const attachmentsData = email.attachments
+      email.attachments
         .filter(att => att.contentBase64) // Only include attachments with contentBase64
-        .map(att => ({
-          filename: att.filename,
-          mimeType: att.mimeType,
-          size: att.size,
-          contentBase64: att.contentBase64,
-        }));
+        .forEach(att => {
+          try {
+            const file = base64ToFile(att.contentBase64!, att.filename, att.mimeType);
+            attachmentFiles.push(file);
+          } catch (e) {
+            console.error(`Error converting attachment ${att.filename}:`, e);
+          }
+        });
       
-      if (attachmentsData.length > 0) {
-        sessionStorage.setItem('compose_forward_attachments', JSON.stringify(attachmentsData));
-        
-        // Warn if some attachments couldn't be included
-        if (attachmentsData.length < email.attachments.length) {
-          console.warn(`Some attachments couldn't be forwarded (missing contentBase64). Forwarding ${attachmentsData.length} of ${email.attachments.length} attachments.`);
-        }
+      // Warn if some attachments couldn't be included
+      if (attachmentFiles.length < email.attachments.length) {
+        console.warn(`Some attachments couldn't be forwarded (missing contentBase64). Forwarding ${attachmentFiles.length} of ${email.attachments.length} attachments.`);
       }
     }
     
-    const params = new URLSearchParams({
-      action: 'forward',
+    // Prepare forward data for inline forward
+    const newForwardData = {
+      to: [], // Empty - user needs to add recipients
+      cc: [],
+      bcc: [],
       subject: forwardSubject,
-    });
-    router.push(`/email/compose?${params.toString()}`);
+      body: quotedBody,
+      attachments: attachmentFiles,
+    };
+    
+    // Set forward data and show forward box
+    setForwardData(newForwardData);
+    setShowForward(true);
+  };
+
+  // Handle closing forward
+  const handleCloseForward = () => {
+    setShowForward(false);
+    setForwardData(null);
+  };
+
+  // Handle successful forward send
+  const handleForwardSent = () => {
+    setShowForward(false);
+    setForwardData(null);
   };
 
   return (
@@ -383,6 +425,34 @@ ${originalBody}
         )}
 
       </div>
+
+      {/* Inline Reply Box */}
+      {showReply && replyData && (
+        <InlineReply
+          to={replyData.to}
+          cc={replyData.cc}
+          bcc={replyData.bcc}
+          subject={replyData.subject}
+          mode="reply"
+          onClose={handleCloseReply}
+          onSent={handleReplySent}
+        />
+      )}
+
+      {/* Inline Forward Box */}
+      {showForward && forwardData && (
+        <InlineReply
+          to={forwardData.to}
+          cc={forwardData.cc}
+          bcc={forwardData.bcc}
+          subject={forwardData.subject}
+          initialBody={forwardData.body}
+          initialAttachments={forwardData.attachments}
+          mode="forward"
+          onClose={handleCloseForward}
+          onSent={handleForwardSent}
+        />
+      )}
     </article>
   );
 });
