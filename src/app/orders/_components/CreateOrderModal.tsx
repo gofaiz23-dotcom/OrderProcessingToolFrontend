@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type CSSProperties, type FC } from 'react';
 import { X, Loader2, Save, Plus, Trash2 } from 'lucide-react';
 import type { CreateOrderPayload } from '@/app/types/order';
-import { isValidJson, parseJsonSafely, formatJsonb } from '@/app/utils/Orders';
+import { formatJsonb } from '@/app/utils/Orders';
 import { detectValueType, parseValueByType } from '@/app/utils/Orders/valueTypeDetector';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 
@@ -22,14 +22,14 @@ type CreateOrderModalProps = {
   defaultMarketplace?: string | null;
 };
 
-export const CreateOrderModal = ({
+export const CreateOrderModal: FC<CreateOrderModalProps> = ({
   isOpen,
   onClose,
   onSave,
   loading = false,
   error,
   defaultMarketplace,
-}: CreateOrderModalProps) => {
+}) => {
   const [orderOnMarketPlace, setOrderOnMarketPlace] = useState('');
   const [keyValuePairs, setKeyValuePairs] = useState<KeyValuePair[]>([
     { id: '1', key: '', value: '' },
@@ -147,12 +147,12 @@ export const CreateOrderModal = ({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={onClose}
-      style={{ animation: 'fadeIn 0.2s ease-out' }}
+      style={{ animation: 'fadeIn 0.2s ease-out' } as CSSProperties}
     >
       <div
         className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
-        style={{ animation: 'slideUp 0.2s ease-out' }}
+        style={{ animation: 'slideUp 0.2s ease-out' } as CSSProperties}
       >
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between rounded-t-xl">
@@ -168,7 +168,7 @@ export const CreateOrderModal = ({
         </div>
 
         {/* Error display */}
-        {error && (
+        {error != null && (
           <div className="px-6 py-4 border-b border-red-200 bg-red-50/50">
             <ErrorDisplay error={error} />
           </div>
@@ -209,7 +209,7 @@ export const CreateOrderModal = ({
             </div>
 
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
-              {keyValuePairs.map((pair, index) => (
+              {keyValuePairs.map((pair) => (
                 <div
                   key={pair.id}
                   className="flex items-start gap-2 p-4 border border-slate-200 rounded-lg bg-slate-50/50 hover:bg-slate-50 transition-colors"

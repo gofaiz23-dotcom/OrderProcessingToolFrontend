@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Trash2, Edit, Info, ChevronLeft, ChevronRight, Calendar, PackageSearch, FileText, Eye } from 'lucide-react';
+import { Search, Trash2, Edit, Info, ChevronLeft, ChevronRight, Calendar, PackageSearch, FileText } from 'lucide-react';
 import { buildFileUrl } from '../../../../BaseUrl';
 import type { ShippedOrder } from '../utils/shippedOrdersApi';
 import { ProcessedOrderDetailsModal } from './ProcessedOrderDetailsModal';
