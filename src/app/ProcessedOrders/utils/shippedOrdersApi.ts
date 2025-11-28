@@ -10,11 +10,11 @@ export type ShippedOrder = {
   bolResponseJsonb?: Record<string, unknown>;
   pickupResponseJsonb?: Record<string, unknown>;
   uploads?: Array<{
-    filename: string;
+    filename?: string;
     path: string;
-    mimetype: string;
-    size: number;
-  }>;
+    mimetype?: string;
+    size?: number;
+  } | string>;
   createdAt?: string;
   updatedAt?: string;
 };

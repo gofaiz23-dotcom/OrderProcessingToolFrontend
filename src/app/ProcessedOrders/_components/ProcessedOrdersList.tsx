@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Trash2, Edit, Info, ChevronLeft, ChevronRight, Calendar, PackageSearch } from 'lucide-react';
+import { Search, Trash2, Edit, Info, ChevronLeft, ChevronRight, Calendar, PackageSearch, FileText, Eye } from 'lucide-react';
+import { buildFileUrl } from '../../../../BaseUrl';
 import type { ShippedOrder } from '../utils/shippedOrdersApi';
 import { ProcessedOrderDetailsModal } from './ProcessedOrderDetailsModal';
 import { ProcessedOrderEditModal } from './ProcessedOrderEditModal';
@@ -102,6 +103,29 @@ export const ProcessedOrdersList = ({
     }
   };
 
+  const formatFileSize = (bytes: number | null) => {
+    if (!bytes) return 'N/A';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const getFileCount = (order: ShippedOrder) => {
+    if (!order.uploads || order.uploads.length === 0) return 0;
+    return order.uploads.length;
+  };
+
+  const getTotalFileSize = (order: ShippedOrder) => {
+    if (!order.uploads || order.uploads.length === 0) return null;
+    let totalSize = 0;
+    order.uploads.forEach((upload) => {
+      if (typeof upload !== 'string' && upload.size) {
+        totalSize += upload.size;
+      }
+    });
+    return totalSize > 0 ? totalSize : null;
+  };
+
   if (loading && orders.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -163,6 +187,9 @@ export const ProcessedOrdersList = ({
                     <th className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Created At
                     </th>
+                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Files
+                    </th>
                     <th className="px-6 py-3 text-center text-xs font-bold text-slate-700 uppercase tracking-wider sticky top-0 right-0 bg-slate-100 z-30">
                       Actions
                     </th>
@@ -208,6 +235,75 @@ export const ProcessedOrdersList = ({
                         <div className="text-sm text-slate-900">
                           {formatDate(order.createdAt)}
                         </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {order.uploads && order.uploads.length > 0 ? (
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                             
+                            </div>
+                            
+                            <div className="flex flex-wrap gap-2">
+                              {order.uploads.slice(0, 3).map((upload, idx) => {
+                                const isString = typeof upload === 'string';
+                                const filePath = isString ? upload : (upload.path || upload.filename || '');
+                                const filename = isString 
+                                  ? filePath.split('/').pop() || filePath 
+                                  : (upload.filename || filePath.split('/').pop() || 'Unknown');
+                                const mimetype = isString ? 'application/octet-stream' : (upload.mimetype || 'application/octet-stream');
+                                const isImage = mimetype.startsWith('image/') || ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'].some(ext => filename.toLowerCase().endsWith(ext));
+                                const isPDF = mimetype === 'application/pdf' || filename.toLowerCase().endsWith('.pdf');
+                                const downloadUrl = buildFileUrl(filePath);
+                                
+                                return (
+                                  <a
+                                    key={idx}
+                                    href={downloadUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block w-[60px] h-[60px] rounded border border-slate-200 overflow-hidden bg-slate-100 hover:opacity-90 transition-opacity"
+                                    title={filename}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                    }}
+                                  >
+                                    {isImage ? (
+                                      <img
+                                        src={downloadUrl}
+                                        alt={filename}
+                                        className="w-full h-full object-contain"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).style.display = 'none';
+                                        }}
+                                      />
+                                    ) : isPDF ? (
+                                      <embed
+                                        src={`${downloadUrl}#page=1&zoom=50&toolbar=0&navpanes=0&scrollbar=0`}
+                                        type="application/pdf"
+                                        className="w-full h-full pointer-events-none"
+                                        style={{ border: 'none' }}
+                                        title={filename}
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <FileText className="h-12 w-12 text-slate-400" />
+                                      </div>
+                                    )}
+                                  </a>
+                                );
+                              })}
+                              {order.uploads.length > 3 && (
+                                <div className="w-full h-full rounded border border-slate-200 bg-slate-50 flex items-center justify-center">
+                                  <span className="text-sm text-slate-500">
+                                    +{order.uploads.length - 3} more
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-slate-400">No files</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-center sticky right-0 bg-slate-50 z-10">
                         <div className="flex items-center justify-center gap-2">
