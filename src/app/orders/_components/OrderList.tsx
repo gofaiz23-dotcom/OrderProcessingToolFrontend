@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Trash2, Edit, Plus, Search, ChevronDown, FileUp, Download, Filter, Info, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Trash2, Edit, Plus, Search, ChevronDown, FileUp, Download, Filter, Info, ChevronLeft, ChevronRight, Truck } from 'lucide-react';
 import type { Order } from '@/app/types/order';
 import { OrderDetailsModal } from './OrderDetailsModal';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { exportOrdersToCSV } from '@/app/utils/Orders/exportOrders';
+import { LOGISTICS_CARRIERS } from '@/Shared/constant';
 
 type OrderListProps = {
   orders: Order[];
@@ -32,8 +34,10 @@ export const OrderList = ({
   onOpenEditModal,
   onBulkDelete,
 }: OrderListProps) => {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
+  const [showLogisticsDropdown, setShowLogisticsDropdown] = useState(false);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<Order | null>(null);
   const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<Order | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
@@ -53,6 +57,7 @@ export const OrderList = ({
     loading: false,
   });
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const logisticsDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Close dropdown when clicking outside
@@ -61,15 +66,18 @@ export const OrderList = ({
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowDropdown(false);
       }
+      if (logisticsDropdownRef.current && !logisticsDropdownRef.current.contains(event.target as Node)) {
+        setShowLogisticsDropdown(false);
+      }
     };
 
-    if (showDropdown) {
+    if (showDropdown || showLogisticsDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
       };
     }
-  }, [showDropdown]);
+  }, [showDropdown, showLogisticsDropdown]);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -364,6 +372,60 @@ export const OrderList = ({
                   <FileUp className="h-4 w-4 text-slate-500" />
                   Import File
                 </button>
+                {selectedOrderIds.size > 0 && (
+                  <button
+                    onClick={() => {
+                      setShowLogisticsDropdown(!showLogisticsDropdown);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
+                  >
+                    <Truck className="h-4 w-4 text-slate-500" />
+                    Logistics
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Logistics Dropdown Menu */}
+            {showLogisticsDropdown && selectedOrderIds.size > 0 && (
+              <div ref={logisticsDropdownRef} className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+                {LOGISTICS_CARRIERS.map((carrier) => {
+                  // Get the selected order
+                  const selectedOrderId = Array.from(selectedOrderIds)[0];
+                  const selectedOrder = orders.find(order => order.id === selectedOrderId);
+                  
+                  return (
+                    <button
+                      key={carrier}
+                      onClick={() => {
+                        if (selectedOrder) {
+                          // Store order data in sessionStorage to pass to rate quote page
+                          sessionStorage.setItem('selectedOrderForLogistics', JSON.stringify({
+                            id: selectedOrder.id,
+                            orderOnMarketPlace: selectedOrder.orderOnMarketPlace,
+                            jsonb: selectedOrder.jsonb,
+                          }));
+                          
+                          // Redirect to the appropriate logistics rate quote page
+                          // Map carrier names to their route paths (default to estes if not found)
+                          const carrierRoutes: Record<string, string> = {
+                            'Estes': '/logistics/estes',
+                            'FedEx': '/logistics/estes', // Using estes as default for now
+                            'UPS': '/logistics/estes',   // Using estes as default for now
+                          };
+                          
+                          const route = carrierRoutes[carrier] || '/logistics/estes';
+                          router.push(`${route}?carrier=${encodeURIComponent(carrier)}&orderId=${selectedOrder.id}`);
+                        }
+                        setShowLogisticsDropdown(false);
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
+                    >
+                      <Truck className="h-4 w-4 text-slate-500" />
+                      {carrier}
+                    </button>
+                  );
+                })}
               </div>
             )}
 

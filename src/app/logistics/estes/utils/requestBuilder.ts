@@ -120,7 +120,7 @@ export const buildEstesRequestBody = (params: BuildRequestBodyParams) => {
         dimensionsUnit: 'Inches',
         isStackable: !unit.doNotStack,
         isTurnable: true,
-        lineItems: unit.items.map((item) => ({
+        lineItems: unit.items.map((item: { description?: string }) => ({
           description: item.description || undefined,
           weight: unit.weight || undefined,
           pieces: unit.quantity || undefined,

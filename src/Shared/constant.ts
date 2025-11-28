@@ -101,7 +101,7 @@ export const ESTES_BOL_AUTOFILL_DATA = {
   },
   "shipment": {
     "masterBol": "nw-abc123-wm",
-    "shipDate": "2025-11-27",
+    "shipDate": "2025-11-29",
     "quoteId": "LTW2WP2",
     "autoAssignPro": true
   },
