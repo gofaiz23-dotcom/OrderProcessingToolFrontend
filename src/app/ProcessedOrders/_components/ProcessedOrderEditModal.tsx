@@ -149,7 +149,7 @@ export const ProcessedOrderEditModal = ({
                   onChange={(e) => setSku(e.target.value)}
                   required
                   disabled={loading}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg  text-black focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50"
                 />
               </div>
 
@@ -163,7 +163,7 @@ export const ProcessedOrderEditModal = ({
                   onChange={(e) => setOrderOnMarketPlace(e.target.value)}
                   required
                   disabled={loading}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg  text-black focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50"
                 />
               </div>
 
@@ -175,7 +175,7 @@ export const ProcessedOrderEditModal = ({
                   value={status}
                   onChange={(e) => setStatus(e.target.value)}
                   disabled={loading}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg  text-black focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50"
                 >
                   <option value="pending">Pending</option>
                   <option value="in_progress">In Progress</option>
@@ -192,7 +192,7 @@ export const ProcessedOrderEditModal = ({
                 onChange={(e) => setOrdersJsonb(e.target.value)}
                 disabled={loading}
                 rows={4}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:bg-slate-50"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg  text-black focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:bg-slate-50"
               />
             </div>
 
@@ -203,7 +203,7 @@ export const ProcessedOrderEditModal = ({
                 onChange={(e) => setRateQuotesResponseJsonb(e.target.value)}
                 disabled={loading}
                 rows={4}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:bg-slate-50"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg  text-black focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:bg-slate-50"
               />
             </div>
 
@@ -214,7 +214,7 @@ export const ProcessedOrderEditModal = ({
                 onChange={(e) => setBolResponseJsonb(e.target.value)}
                 disabled={loading}
                 rows={4}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:bg-slate-50"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg  text-black focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:bg-slate-50"
               />
             </div>
 
@@ -225,7 +225,7 @@ export const ProcessedOrderEditModal = ({
                 onChange={(e) => setPickupResponseJsonb(e.target.value)}
                 disabled={loading}
                 rows={4}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:bg-slate-50"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg  text-black focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm disabled:bg-slate-50"
               />
             </div>
 
@@ -236,7 +236,7 @@ export const ProcessedOrderEditModal = ({
                 multiple
                 onChange={(e) => setFiles(Array.from(e.target.files || []))}
                 disabled={loading}
-                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg  text-black focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50"
               />
             </div>
           </div>

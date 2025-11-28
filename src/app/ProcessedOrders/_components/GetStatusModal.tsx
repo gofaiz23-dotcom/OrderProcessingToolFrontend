@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { X, Loader2, Search, AlertCircle, ChevronDown } from 'lucide-react';
-import { getShipmentHistory, type ShipmentHistoryParams } from '../utils/shipmentHistoryApi';
-import { ShipmentHistoryModal } from './ShipmentHistoryModal';
+import { X, Loader2, Search, AlertCircle, ChevronDown, ChevronUp, CheckCircle, Circle, Truck } from 'lucide-react';
+import { getShipmentHistory, type ShipmentHistoryParams, type ShipmentHistoryResponse } from '../utils/shipmentHistoryApi';
+import { useLogisticsStore } from '@/store/logisticsStore';
 
 type SearchByType = 'pro' | 'po' | 'bol' | 'pur' | 'ldn' | 'exl' | 'interlinePro';
 
@@ -25,17 +25,22 @@ export const GetStatusModal = ({
   orderId,
   orderData,
 }: GetStatusModalProps) => {
+  const getToken = useLogisticsStore((state) => state.getToken);
   const [searchBy, setSearchBy] = useState<SearchByType>('pro');
   const [trackingNumbers, setTrackingNumbers] = useState<string>('');
   const [fieldError, setFieldError] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [historyData, setHistoryData] = useState<any>(null);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyData, setHistoryData] = useState<ShipmentHistoryResponse | null>(null);
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
+    shipmentDetails: false,
+    deliveryDetails: false,
+    movementHistory: false,
+  });
 
-  // Extract tracking numbers from order data and auto-fill
+  // Extract first available tracking number from order data and auto-fill
   useEffect(() => {
-    if (orderData && isOpen) {
+    if (orderData && isOpen && !loading) {
       const extractValue = (obj: Record<string, unknown>, keys: string[]): string => {
         for (const key of keys) {
           if (obj[key]) {
@@ -46,46 +51,94 @@ export const GetStatusModal = ({
         return '';
       };
 
-      // Auto-fill based on selected search type
+      // Find the first available tracking number in priority order
+      let foundTracking: { type: SearchByType; value: string } | null = null;
+
+      // 1. PRO - check bolResponseJsonb first (highest priority)
       let value = '';
-      
-      switch (searchBy) {
-        case 'pro':
-          value = extractValue(orderData.ordersJsonb || {}, ['pro', 'PRO', 'Pro', 'trackingNumber', 'tracking_number']);
-          // Also check pickupResponseJsonb for PRO
-          if (!value && orderData.pickupResponseJsonb) {
-            value = extractValue(orderData.pickupResponseJsonb, ['Pro', 'pro', 'PRO', 'pickupRequestNumber']);
-          }
-          break;
-        case 'po':
-          value = extractValue(orderData.ordersJsonb || {}, ['po', 'PO', 'Po', 'purchaseOrder', 'purchase_order']);
-          break;
-        case 'bol':
-          value = extractValue(orderData.bolResponseJsonb || {}, ['bol', 'BOL', 'Bol', 'billOfLading', 'bill_of_lading', 'bolNumber']);
-          break;
-        case 'pur':
-          value = extractValue(orderData.rateQuotesResponseJsonb || {}, ['pur', 'PUR', 'Pur', 'pickupRequest', 'pickup_request']);
-          if (!value && orderData.pickupResponseJsonb) {
-            value = extractValue(orderData.pickupResponseJsonb, ['pur', 'PUR', 'Pur', 'pickupRequestNumber']);
-          }
-          break;
-        case 'ldn':
-          value = extractValue(orderData.ordersJsonb || {}, ['ldn', 'LDN', 'Ldn', 'loadNumber', 'load_number']);
-          break;
-        case 'exl':
-          value = extractValue(orderData.ordersJsonb || {}, ['exl', 'EXL', 'Exl', 'exlaId', 'exla_id']);
-          break;
-        case 'interlinePro':
-          value = extractValue(orderData.ordersJsonb || {}, ['interlinePro', 'interline_pro', 'InterlinePro']);
-          break;
+      if (orderData.bolResponseJsonb) {
+        value = extractValue(orderData.bolResponseJsonb, ['pro', 'PRO', 'Pro']);
+        if (value) {
+          foundTracking = { type: 'pro', value };
+        }
+      }
+      // Check ordersJsonb for PRO
+      if (!foundTracking) {
+        value = extractValue(orderData.ordersJsonb || {}, ['pro', 'PRO', 'Pro', 'trackingNumber', 'tracking_number']);
+        if (value) {
+          foundTracking = { type: 'pro', value };
+        }
+      }
+      // Check pickupResponseJsonb for PRO
+      if (!foundTracking && orderData.pickupResponseJsonb) {
+        value = extractValue(orderData.pickupResponseJsonb, ['Pro', 'pro', 'PRO', 'pickupRequestNumber']);
+        if (value) {
+          foundTracking = { type: 'pro', value };
+        }
       }
 
-      if (value) {
-        setTrackingNumbers(value);
+      // 2. BOL
+      if (!foundTracking && orderData.bolResponseJsonb) {
+        value = extractValue(orderData.bolResponseJsonb, ['bol', 'BOL', 'Bol', 'billOfLading', 'bill_of_lading', 'bolNumber']);
+        if (value) {
+          foundTracking = { type: 'bol', value };
+        }
+      }
+
+      // 3. PUR
+      if (!foundTracking) {
+        value = extractValue(orderData.rateQuotesResponseJsonb || {}, ['pur', 'PUR', 'Pur', 'pickupRequest', 'pickup_request']);
+        if (value) {
+          foundTracking = { type: 'pur', value };
+        }
+      }
+      if (!foundTracking && orderData.pickupResponseJsonb) {
+        value = extractValue(orderData.pickupResponseJsonb, ['pur', 'PUR', 'Pur', 'pickupRequestNumber']);
+        if (value) {
+          foundTracking = { type: 'pur', value };
+        }
+      }
+
+      // 4. PO
+      if (!foundTracking) {
+        value = extractValue(orderData.ordersJsonb || {}, ['po', 'PO', 'Po', 'purchaseOrder', 'purchase_order']);
+        if (value) {
+          foundTracking = { type: 'po', value };
+        }
+      }
+
+      // 5. LDN
+      if (!foundTracking) {
+        value = extractValue(orderData.ordersJsonb || {}, ['ldn', 'LDN', 'Ldn', 'loadNumber', 'load_number']);
+        if (value) {
+          foundTracking = { type: 'ldn', value };
+        }
+      }
+
+      // 6. EXL
+      if (!foundTracking) {
+        value = extractValue(orderData.ordersJsonb || {}, ['exl', 'EXL', 'Exl', 'exlaId', 'exla_id']);
+        if (value) {
+          foundTracking = { type: 'exl', value };
+        }
+      }
+
+      // 7. Interline PRO
+      if (!foundTracking) {
+        value = extractValue(orderData.ordersJsonb || {}, ['interlinePro', 'interline_pro', 'InterlinePro']);
+        if (value) {
+          foundTracking = { type: 'interlinePro', value };
+        }
+      }
+
+      // Fill the form with the first found tracking number
+      if (foundTracking) {
+        setSearchBy(foundTracking.type);
+        setTrackingNumbers(foundTracking.value);
         setFieldError('');
       }
     }
-  }, [orderData, isOpen, searchBy]);
+  }, [orderData, isOpen, loading]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -110,7 +163,6 @@ export const GetStatusModal = ({
       setFieldError('');
       setError(null);
       setHistoryData(null);
-      setShowHistoryModal(false);
     }
   }, [isOpen]);
 
@@ -157,10 +209,11 @@ export const GetStatusModal = ({
         }
       });
 
-      const data = await getShipmentHistory(params);
+      // Get bearer token from Zustand store (for 'estes' carrier)
+      const token = getToken('estes');
+
+      const data = await getShipmentHistory(params, token || undefined);
       setHistoryData(data);
-      setShowHistoryModal(true);
-      onClose(); // Close the GetStatusModal when history is fetched
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch shipment history');
     } finally {
@@ -180,11 +233,77 @@ export const GetStatusModal = ({
     { value: 'interlinePro', label: 'Interline PRO' },
   ];
 
+  const formatValue = (value: string | number | boolean | undefined | null): string => {
+    if (value === null || value === undefined || value === '') return 'N/A';
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+    return String(value);
+  };
+
+  const formatDate = (date?: string, time?: string): string => {
+    if (!date) return 'N/A';
+    if (time) {
+      return `${date} ${time}`;
+    }
+    return date;
+  };
+
+  const formatAddress = (address?: {
+    line?: string[];
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+  }): string => {
+    if (!address) return 'N/A';
+    const parts: string[] = [];
+    if (address.line && address.line.length > 0) parts.push(address.line.join(', '));
+    if (address.city) parts.push(address.city);
+    if (address.state) parts.push(address.state);
+    if (address.postalCode) parts.push(address.postalCode);
+    if (address.country) parts.push(address.country);
+    return parts.length > 0 ? parts.join(', ') : 'N/A';
+  };
+
+  const getStatusColor = (status?: string): string => {
+    if (!status) return 'text-slate-500';
+    const lowerStatus = status.toLowerCase();
+    if (lowerStatus.includes('delivered')) return 'text-green-600';
+    if (lowerStatus.includes('transit')) return 'text-blue-600';
+    if (lowerStatus.includes('picked')) return 'text-green-600';
+    return 'text-slate-500';
+  };
+
+  const getStatusStage = (status?: string): { pickedUp: boolean; inTransit: boolean; outForDelivery: boolean; delivered: boolean } => {
+    if (!status) return { pickedUp: false, inTransit: false, outForDelivery: false, delivered: false };
+    const lowerStatus = status.toLowerCase();
+    return {
+      pickedUp: lowerStatus.includes('picked') || lowerStatus.includes('pickup'),
+      inTransit: lowerStatus.includes('transit') || lowerStatus.includes('in transit'),
+      outForDelivery: lowerStatus.includes('delivery') && !lowerStatus.includes('delivered'),
+      delivered: lowerStatus.includes('delivered'),
+    };
+  };
+
+  const toggleSection = (section: string) => {
+    setCollapsedSections(prev => ({
+      ...prev,
+      [section]: !prev[section],
+    }));
+  };
+
+  const shipment = historyData?.data?.data?.[0];
+  const status = shipment?.status?.conciseStatus || 'Unknown';
+  const statusStages = getStatusStage(status);
+  const bolNumber = shipment?.documentReference?.find(doc => 
+    doc.documentType?.toLowerCase().includes('lading') || 
+    doc.documentType?.toLowerCase().includes('bol')
+  )?.id || 'N/A';
+
   return (
     <>
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-100">
-        <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full mx-4 relative z-[10000]">
-          <div className="p-6">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-gray-100 overflow-y-auto">
+        <div className="bg-white rounded-lg shadow-lg max-w-5xl w-full mx-4 my-8 relative z-[10000] max-h-[90vh] flex flex-col">
+          <div className="p-6 overflow-y-auto flex-1">
             {/* Header with title and red line */}
             <div className="mb-6">
               <div className="flex items-center justify-between">
@@ -292,24 +411,180 @@ export const GetStatusModal = ({
                 </div>
               </div>
             </form>
+
+            {/* Tracking Details Display */}
+            {historyData && shipment && (
+              <div className="mt-6 space-y-4">
+                <div className="h-px bg-slate-200"></div>
+                
+                {/* Summary Card */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">PRO Number</p>
+                      <p className="text-sm font-semibold text-slate-900">{formatValue(shipment.pro)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">BOL Number</p>
+                      <p className="text-sm font-semibold text-slate-900">{bolNumber}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Pickup Date</p>
+                      <p className="text-sm font-semibold text-slate-900">{formatDate(shipment.pickupDate)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase mb-1">Status</p>
+                      <p className={`text-sm font-semibold ${getStatusColor(status)}`}>{status}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status Progress */}
+                <div className="bg-white border border-slate-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    {[
+                      { label: 'Picked Up', completed: statusStages.pickedUp, icon: CheckCircle },
+                      { label: 'In Transit', completed: statusStages.inTransit, icon: Truck },
+                      { label: 'Out for Delivery', completed: statusStages.outForDelivery, icon: Circle },
+                      { label: 'Delivered', completed: statusStages.delivered, icon: CheckCircle },
+                    ].map((stage, index) => {
+                      const Icon = stage.icon;
+                      const isActive = stage.completed;
+                      return (
+                        <div key={index} className="flex-1 flex flex-col items-center">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center mb-2 ${
+                            isActive ? 'bg-green-100' : 'bg-slate-100'
+                          }`}>
+                            <Icon className={`h-4 w-4 ${isActive ? 'text-green-600' : 'text-slate-400'}`} />
+                          </div>
+                          <span className={`text-xs font-medium ${isActive ? 'text-green-600' : 'text-slate-400'}`}>
+                            {stage.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Status Message */}
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
+                  <Truck className="h-4 w-4 text-green-600 flex-shrink-0" />
+                  <span className="text-sm font-medium text-green-800">
+                    {formatValue(shipment.status?.expandedStatus || shipment.status?.conciseStatus)}
+                  </span>
+                </div>
+
+                {/* Shipment Details */}
+                <div className="border border-slate-200 rounded-lg">
+                  <button
+                    onClick={() => toggleSection('shipmentDetails')}
+                    className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                  >
+                    <h3 className="text-sm font-semibold text-slate-900">Shipment Details</h3>
+                    {collapsedSections.shipmentDetails ? (
+                      <ChevronDown className="h-4 w-4 text-slate-500" />
+                    ) : (
+                      <ChevronUp className="h-4 w-4 text-slate-500" />
+                    )}
+                  </button>
+                  {!collapsedSections.shipmentDetails && (
+                    <div className="p-4 grid grid-cols-2 gap-4 bg-white">
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase mb-1">Shipper Name</p>
+                        <p className="text-sm font-medium text-slate-900">{formatValue(shipment.shipperParty?.name)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase mb-1">Shipper Address</p>
+                        <p className="text-sm text-slate-700">{formatAddress(shipment.shipperParty?.address)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase mb-1">Consignee Name</p>
+                        <p className="text-sm font-medium text-slate-900">{formatValue(shipment.consigneeParty?.name)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase mb-1">Consignee Address</p>
+                        <p className="text-sm text-slate-700">{formatAddress(shipment.consigneeParty?.address)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase mb-1">Pieces</p>
+                        <p className="text-sm font-medium text-slate-900">{formatValue(shipment.piecesCount)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 uppercase mb-1">Weight (lbs.)</p>
+                        <p className="text-sm font-medium text-slate-900">{formatValue(shipment.totalWeight)}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Delivery Details */}
+                {shipment.deliveryDate && (
+                  <div className="border border-slate-200 rounded-lg">
+                    <button
+                      onClick={() => toggleSection('deliveryDetails')}
+                      className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                    >
+                      <h3 className="text-sm font-semibold text-slate-900">Delivery Details</h3>
+                      {collapsedSections.deliveryDetails ? (
+                        <ChevronDown className="h-4 w-4 text-slate-500" />
+                      ) : (
+                        <ChevronUp className="h-4 w-4 text-slate-500" />
+                      )}
+                    </button>
+                    {!collapsedSections.deliveryDetails && (
+                      <div className="p-4 grid grid-cols-2 gap-4 bg-white">
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase mb-1">Delivery Date</p>
+                          <p className="text-sm font-medium text-slate-900">{formatDate(shipment.deliveryDate, shipment.deliveryTime)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase mb-1">Received By</p>
+                          <p className="text-sm font-medium text-slate-900">{formatValue(shipment.receivedBy)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500 uppercase mb-1">Transit Days</p>
+                          <p className="text-sm font-medium text-slate-900">{formatValue(shipment.transitDays)}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Movement History */}
+                {shipment.movementHistory && shipment.movementHistory.length > 0 && (
+                  <div className="border border-slate-200 rounded-lg">
+                    <button
+                      onClick={() => toggleSection('movementHistory')}
+                      className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                    >
+                      <h3 className="text-sm font-semibold text-slate-900">Movement History</h3>
+                      {collapsedSections.movementHistory ? (
+                        <ChevronDown className="h-4 w-4 text-slate-500" />
+                      ) : (
+                        <ChevronUp className="h-4 w-4 text-slate-500" />
+                      )}
+                    </button>
+                    {!collapsedSections.movementHistory && (
+                      <div className="p-4 space-y-3 bg-white">
+                        {shipment.movementHistory.map((movement, index) => (
+                          <div key={index} className="border-l-2 border-blue-500 pl-4 py-2">
+                            <p className="text-sm font-medium text-slate-900">{formatValue(movement.description)}</p>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {formatValue(movement.location?.name)} - {formatDate(movement.statusHistory?.[0]?.referenceDate, movement.statusHistory?.[0]?.referenceTime)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      {/* Shipment History Modal */}
-      {showHistoryModal && historyData && (
-        <ShipmentHistoryModal
-          isOpen={showHistoryModal}
-          onClose={() => {
-            setShowHistoryModal(false);
-            setHistoryData(null);
-          }}
-          data={historyData}
-          loading={false}
-          error={null}
-        />
-      )}
     </>
   );
 };
+
 
