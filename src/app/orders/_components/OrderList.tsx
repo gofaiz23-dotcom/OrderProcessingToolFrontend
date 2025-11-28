@@ -78,106 +78,26 @@ export const OrderList = ({
       };
     }
   }, [showDropdown, showLogisticsDropdown]);
-  'use client';
 
-  import { useState, useRef, useEffect, useMemo } from 'react';
-  import { useRouter } from 'next/navigation';
-  import { Trash2, Edit, Plus, Search, ChevronDown, FileUp, Download, Filter, Info, ChevronLeft, ChevronRight, Truck } from 'lucide-react';
-  import type { Order } from '@/app/types/order';
-  import { OrderDetailsModal } from './OrderDetailsModal';
-  import { ConfirmDeleteModal } from './ConfirmDeleteModal';
-  import { exportOrdersToCSV } from '@/app/utils/Orders/exportOrders';
-  import { LOGISTICS_CARRIERS } from '@/Shared/constant';
-
-  type OrderListProps = {
-    orders: Order[];
-    selectedOrderId: number | null;
-    loading?: boolean;
-    onOrderSelect: (order: Order) => void;
-    onOrderDelete: (id: number) => void;
-    onOrderEdit: (order: Order) => void;
-    onCreateNew: () => void;
-    onImportFile: (file: File) => void;
-    onOpenEditModal?: (order: Order | null) => void;
-    onBulkDelete?: (ids: number[]) => void;
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      onImportFile(file);
+    }
+    // Reset input so same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    setShowDropdown(false);
   };
 
-  export const OrderList = ({
-    orders,
-    selectedOrderId,
-    loading = false,
-    onOrderSelect,
-    onOrderDelete,
-    onOrderEdit,
-    onCreateNew,
-    onImportFile,
-    onOpenEditModal,
-    onBulkDelete,
-  }: OrderListProps) => {
-    const router = useRouter();
-    const [searchQuery, setSearchQuery] = useState('');
-    const [showDropdown, setShowDropdown] = useState(false);
-    const [showLogisticsDropdown, setShowLogisticsDropdown] = useState(false);
-    const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<Order | null>(null);
-    const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<Order | null>(null);
-    const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
-    const [currentPage, setCurrentPage] = useState(1);
-    const ITEMS_PER_PAGE = 20;
-    const [deleteModalState, setDeleteModalState] = useState<{
-      isOpen: boolean;
-      type: 'single' | 'bulk' | null;
-      orderId: number | null;
-      orderIds: number[];
-      loading: boolean;
-    }>({
-      isOpen: false,
-      type: null,
-      orderId: null,
-      orderIds: [],
-      loading: false,
-    });
-    const dropdownRef = useRef<HTMLDivElement>(null);
-    const logisticsDropdownRef = useRef<HTMLDivElement>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+    setShowDropdown(false);
+  };
 
-    // Close dropdown when clicking outside
-    useEffect(() => {
-      const handleClickOutside = (event: MouseEvent) => {
-        if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-          setShowDropdown(false);
-        }
-        if (logisticsDropdownRef.current && !logisticsDropdownRef.current.contains(event.target as Node)) {
-          setShowLogisticsDropdown(false);
-        }
-      };
-
-      if (showDropdown || showLogisticsDropdown) {
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-          document.removeEventListener('mousedown', handleClickOutside);
-        };
-      }
-    }, [showDropdown, showLogisticsDropdown]);
-
-    const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (file) {
-        onImportFile(file);
-      }
-      // Reset input so same file can be selected again
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-      setShowDropdown(false);
-    };
-
-    const handleImportClick = () => {
-      fileInputRef.current?.click();
-      setShowDropdown(false);
-    };
-
-    // Helper function to extract value from JSONB with flexible key matching
-    const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
+  // Helper function to extract value from JSONB with flexible key matching
+  const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
       if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '-';
       const obj = jsonb as Record<string, unknown>;
       
@@ -223,9 +143,9 @@ export const OrderList = ({
       }
       
       return '-';
-    };
+  };
 
-    const filteredOrders = useMemo(() => {
+  const filteredOrders = useMemo(() => {
       return orders.filter((order) => {
         if (!searchQuery.trim()) return true;
         const query = searchQuery.toLowerCase().trim();
@@ -258,223 +178,191 @@ export const OrderList = ({
         
         return false;
       });
-    }, [orders, searchQuery]);
+  }, [orders, searchQuery]);
 
-    // Reset to page 1 when filtered orders change
-    useEffect(() => {
-      setCurrentPage(1);
-    }, [filteredOrders.length, searchQuery]);
+  // Reset to page 1 when filtered orders change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filteredOrders.length, searchQuery]);
 
-    // Calculate pagination
-    const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    const endIndex = startIndex + ITEMS_PER_PAGE;
-    const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
 
-    // Handle individual checkbox selection
-    const handleCheckboxChange = (orderId: number, checked: boolean) => {
-      setSelectedOrderIds((prev) => {
-        const newSet = new Set(prev);
-        if (checked) {
-          newSet.add(orderId);
-        } else {
-          newSet.delete(orderId);
-        }
-        return newSet;
-      });
-    };
-
-    // Handle select all (only for current page)
-    const handleSelectAll = (checked: boolean) => {
+  // Handle individual checkbox selection
+  const handleCheckboxChange = (orderId: number, checked: boolean) => {
+    setSelectedOrderIds((prev) => {
+      const newSet = new Set(prev);
       if (checked) {
-        const newSelectedIds = new Set(selectedOrderIds);
-        paginatedOrders.forEach((order) => newSelectedIds.add(order.id));
-        setSelectedOrderIds(newSelectedIds);
+        newSet.add(orderId);
       } else {
-        const newSelectedIds = new Set(selectedOrderIds);
-        paginatedOrders.forEach((order) => newSelectedIds.delete(order.id));
-        setSelectedOrderIds(newSelectedIds);
+        newSet.delete(orderId);
       }
-    };
+      return newSet;
+    });
+  };
 
-    // Check if all orders on current page are selected
-    const allSelected = paginatedOrders.length > 0 && paginatedOrders.every((order) => selectedOrderIds.has(order.id));
-    const someSelected = paginatedOrders.some((order) => selectedOrderIds.has(order.id));
+  // Handle select all (only for current page)
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const newSelectedIds = new Set(selectedOrderIds);
+      paginatedOrders.forEach((order) => newSelectedIds.add(order.id));
+      setSelectedOrderIds(newSelectedIds);
+    } else {
+      const newSelectedIds = new Set(selectedOrderIds);
+      paginatedOrders.forEach((order) => newSelectedIds.delete(order.id));
+      setSelectedOrderIds(newSelectedIds);
+    }
+  };
 
-    // Handle bulk delete click
-    const handleBulkDeleteClick = () => {
-      const idsToDelete = Array.from(selectedOrderIds);
-      if (idsToDelete.length === 0) return;
+  // Check if all orders on current page are selected
+  const allSelected = paginatedOrders.length > 0 && paginatedOrders.every((order) => selectedOrderIds.has(order.id));
+  const someSelected = paginatedOrders.some((order) => selectedOrderIds.has(order.id));
 
-      setDeleteModalState({
+  // Handle bulk delete click
+  const handleBulkDeleteClick = () => {
+    const idsToDelete = Array.from(selectedOrderIds);
+    if (idsToDelete.length === 0) return;
+
+    setDeleteModalState({
         isOpen: true,
         type: 'bulk',
         orderId: null,
         orderIds: idsToDelete,
         loading: false,
       });
-    };
+  };
 
-    // Handle single delete click
-    const handleSingleDeleteClick = (orderId: number) => {
+  // Handle single delete click
+  const handleSingleDeleteClick = (orderId: number) => {
+    setDeleteModalState({
+      isOpen: true,
+      type: 'single',
+      orderId,
+      orderIds: [],
+      loading: false,
+    });
+  };
+
+  // Confirm delete action
+  const handleConfirmDelete = async () => {
+    setDeleteModalState((prev) => ({ ...prev, loading: true }));
+
+    try {
+      if (deleteModalState.type === 'bulk') {
+        const idsToDelete = deleteModalState.orderIds;
+        if (onBulkDelete) {
+          await onBulkDelete(idsToDelete);
+          setSelectedOrderIds(new Set());
+        } else {
+          // Fallback: delete one by one
+          for (const id of idsToDelete) {
+            await onOrderDelete(id);
+          }
+          setSelectedOrderIds(new Set());
+        }
+      } else if (deleteModalState.type === 'single' && deleteModalState.orderId) {
+        await onOrderDelete(deleteModalState.orderId);
+      }
+
+      // Close modal on success
       setDeleteModalState({
-        isOpen: true,
-        type: 'single',
-        orderId,
+        isOpen: false,
+        type: null,
+        orderId: null,
         orderIds: [],
         loading: false,
       });
-    };
+    } catch (error) {
+      console.error('Error deleting orders:', error);
+      setDeleteModalState((prev) => ({ ...prev, loading: false }));
+      // Error handling is done by parent component
+    }
+  };
 
-    // Confirm delete action
-    const handleConfirmDelete = async () => {
-      setDeleteModalState((prev) => ({ ...prev, loading: true }));
-
-      try {
-        if (deleteModalState.type === 'bulk') {
-          const idsToDelete = deleteModalState.orderIds;
-          if (onBulkDelete) {
-            await onBulkDelete(idsToDelete);
-            setSelectedOrderIds(new Set());
-          } else {
-            // Fallback: delete one by one
-            for (const id of idsToDelete) {
-              await onOrderDelete(id);
-            }
-            setSelectedOrderIds(new Set());
-          }
-        } else if (deleteModalState.type === 'single' && deleteModalState.orderId) {
-          await onOrderDelete(deleteModalState.orderId);
-        }
-
-        // Close modal on success
-        setDeleteModalState({
-          isOpen: false,
-          type: null,
-          orderId: null,
-          orderIds: [],
-          loading: false,
-        });
-      } catch (error) {
-        console.error('Error deleting orders:', error);
-        setDeleteModalState((prev) => ({ ...prev, loading: false }));
-        // Error handling is done by parent component
-      }
-    };
-
-    if (loading) {
-      return (
-        <div className="flex h-full flex-col">
-          <div className="p-4 border-b border-slate-200">
-            <div className="h-10 bg-slate-200 rounded animate-pulse" />
-          </div>
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="w-full">
-              <div className="h-12 bg-slate-200 rounded animate-pulse mb-2" />
-              {[1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="h-16 bg-slate-100 rounded animate-pulse mb-2" />
-              ))}
-            </div>
+  if (loading) {
+    return (
+      <div className="flex h-full flex-col">
+        <div className="p-4 border-b border-slate-200">
+          <div className="h-10 bg-slate-200 rounded animate-pulse" />
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="w-full">
+            <div className="h-12 bg-slate-200 rounded animate-pulse mb-2" />
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="h-16 bg-slate-100 rounded animate-pulse mb-2" />
+            ))}
           </div>
         </div>
-      );
-    }
+      </div>
+    );
+  }
 
-    return (
-      <div className="flex h-full flex-col bg-white overflow-hidden p-6">
-        {/* Page Title */}
-        <h1 className="text-3xl font-bold text-slate-900 mb-6">Orders</h1>
+  return (
+    <div className="flex h-full flex-col bg-white overflow-hidden p-6">
+      {/* Page Title */}
+      <h1 className="text-3xl font-bold text-slate-900 mb-6">Orders</h1>
 
-        {/* Search and Action Buttons */}
-        <div className="flex items-center justify-between gap-3 mb-6">
-          <div className="flex-1 relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search orders..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-            />
-          </div>
+      {/* Search and Action Buttons */}
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="flex-1 relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search orders..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+          />
+        </div>
 
-          {/* Right Side Buttons */}
-          <div className="flex items-center gap-3">
-            {/* Logistics Dropdown Button - Show only when exactly one order is selected */}
-            {selectedOrderIds.size === 1 && (
-              <div className="relative" ref={logisticsDropdownRef}>
-                <button
-                  onClick={() => setShowLogisticsDropdown(!showLogisticsDropdown)}
-                  className="inline-flex items-center gap-2 px-4 py-2  text-orange-600 rounded-lg  transition-colors text-sm font-medium"
-                >
-                  <Truck className="h-4 w-4" />
-                  Logistics
-                  <ChevronDown className={`h-4 w-4 transition-transform ${showLogisticsDropdown ? 'rotate-180' : ''}`} />
-                </button>
-                {selectedOrderIds.size > 0 && (
-                  <button
-                    onClick={() => {
-                      setShowLogisticsDropdown(!showLogisticsDropdown);
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
-                  >
-                    <Truck className="h-4 w-4 text-slate-500" />
-                    Logistics
-                  </button>
-                )}
-              </div>
-            )}
+        {/* Right Side Buttons */}
+        <div className="flex items-center gap-3">
+          {/* Logistics Dropdown Button - Show only when exactly one order is selected */}
+          {selectedOrderIds.size === 1 && (
+            <div className="relative" ref={logisticsDropdownRef}>
+              <button
+                onClick={() => setShowLogisticsDropdown(!showLogisticsDropdown)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
+              >
+                <Truck className="h-4 w-4" />
+                Logistics
+                <ChevronDown className={`h-4 w-4 transition-transform ${showLogisticsDropdown ? 'rotate-180' : ''}`} />
+              </button>
 
-            {/* Logistics Dropdown Menu */}
-            {showLogisticsDropdown && selectedOrderIds.size > 0 && (
-              <div ref={logisticsDropdownRef} className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-                {LOGISTICS_CARRIERS.map((carrier) => {
-                  // Get the selected order
-                  const selectedOrderId = Array.from(selectedOrderIds)[0];
-                  const selectedOrder = orders.find(order => order.id === selectedOrderId);
-                  
-                  return (
-                    <button
-                      key={carrier}
-                      onClick={() => {
-                        if (selectedOrder) {
-                          // Store order data in sessionStorage to pass to rate quote page
-                          sessionStorage.setItem('selectedOrderForLogistics', JSON.stringify({
-                            id: selectedOrder.id,
-                            orderOnMarketPlace: selectedOrder.orderOnMarketPlace,
-                            jsonb: selectedOrder.jsonb,
-                          }));
-                          
-                          // Redirect to the appropriate logistics rate quote page
-                          // Map carrier names to their route paths (default to estes if not found)
-                          const carrierRoutes: Record<string, string> = {
-                            'Estes': '/logistics/estes',
-                            'FedEx': '/logistics/estes', // Using estes as default for now
-                            'UPS': '/logistics/estes',   // Using estes as default for now
-                          };
-                          
-                          const route = carrierRoutes[carrier] || '/logistics/estes';
-                          router.push(`${route}?carrier=${encodeURIComponent(carrier)}&orderId=${selectedOrder.id}`);
-                        }
-                        setShowLogisticsDropdown(false);
-                      }}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
-                    >
-                      <Truck className="h-4 w-4 text-slate-500" />
-                      {carrier}
-                    </button>
-                  );
-                })}
-
-
-                {/* Logistics Dropdown Menu */}
-                {showLogisticsDropdown && (
-                  <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-                    {LOGISTICS_CARRIERS.map((carrier) => (
+              {/* Logistics Dropdown Menu */}
+              {showLogisticsDropdown && (
+                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+                  {LOGISTICS_CARRIERS.map((carrier) => {
+                    // Get the selected order
+                    const selectedOrderId = Array.from(selectedOrderIds)[0];
+                    const selectedOrder = orders.find(order => order.id === selectedOrderId);
+                    
+                    return (
                       <button
                         key={carrier}
                         onClick={() => {
-                          router.push(`/logistics?carrier=${encodeURIComponent(carrier)}`);
+                          if (selectedOrder) {
+                            // Store order data in sessionStorage to pass to rate quote page
+                            sessionStorage.setItem('selectedOrderForLogistics', JSON.stringify({
+                              id: selectedOrder.id,
+                              orderOnMarketPlace: selectedOrder.orderOnMarketPlace,
+                              jsonb: selectedOrder.jsonb,
+                            }));
+                            
+                            // Redirect to the appropriate logistics rate quote page
+                            // Map carrier names to their route paths (default to estes if not found)
+                            const carrierRoutes: Record<string, string> = {
+                              'Estes': '/logistics/estes',
+                              'FedEx': '/logistics/estes', // Using estes as default for now
+                              'UPS': '/logistics/estes',   // Using estes as default for now
+                            };
+                            
+                            const route = carrierRoutes[carrier] || '/logistics/estes';
+                            router.push(`${route}?carrier=${encodeURIComponent(carrier)}&orderId=${selectedOrder.id}`);
+                          }
                           setShowLogisticsDropdown(false);
                         }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
@@ -482,102 +370,100 @@ export const OrderList = ({
                         <Truck className="h-4 w-4 text-slate-500" />
                         {carrier}
                       </button>
-                    ))}
-                  </div>
-                )}
-
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
             
 
-            {/* Add New Button with Dropdown */}
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setShowDropdown(!showDropdown)}
-                className="inline-flex items-center gap-2 px-4 py-2  text-blue-600 rounded-lg  transition-colors text-sm font-medium"
-              >
-                <Plus className="h-4 w-4" />
-                Add New
-                <ChevronDown className={`h-4 w-4 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
-              </button>
-
-              {/* Dropdown Menu */}
-              {showDropdown && (
-                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
-                  <button
-                    onClick={() => {
-                      onCreateNew();
-                      setShowDropdown(false);
-                    }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
-                  >
-                    <Plus className="h-4 w-4 text-slate-500" />
-                    Add New
-                  </button>
-                  <button
-                    onClick={handleImportClick}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
-                  >
-                    <FileUp className="h-4 w-4 text-slate-500" />
-                    Import File
-                  </button>
-                </div>
-              )}
-
-              {/* Hidden file input */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,.xlsx,.xls,.ods"
-                onChange={handleFileSelect}
-                className="hidden"
-              />
-            </div>
-
-            {/* Bulk Delete Button - Show only when orders are selected */}
-            {selectedOrderIds.size > 0 && (
-              <button
-                onClick={handleBulkDeleteClick}
-                className="inline-flex items-center gap-2 px-4 py-2  text-red-600 rounded-lg  transition-colors text-sm font-medium"
-              >
-                <Trash2 className="h-4 w-4" />
-                ({selectedOrderIds.size})
-              </button>
-            )}
-
-            {/* Export Button */}
+          {/* Add New Button with Dropdown */}
+          <div className="relative" ref={dropdownRef}>
             <button
-              onClick={() => exportOrdersToCSV(filteredOrders)}
-              disabled={filteredOrders.length === 0}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={() => setShowDropdown(!showDropdown)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
             >
-              <Download className="h-4 w-4" />
-              
+              <Plus className="h-4 w-4" />
+              Add New
+              <ChevronDown className={`h-4 w-4 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
             </button>
 
-
-          </div>
-        </div>
-
-        {/* Orders Table */}
-        <div className="flex-1 overflow-hidden flex flex-col">
-          {filteredOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-slate-500 p-8">
-              <p className="text-sm">
-                {searchQuery ? 'No orders match your search' : 'No orders found'}
-              </p>
-              {!searchQuery && (
+            {/* Dropdown Menu */}
+            {showDropdown && (
+              <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
                 <button
-                  onClick={onCreateNew}
-                  className="mt-4 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  onClick={() => {
+                    onCreateNew();
+                    setShowDropdown(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
                 >
-                  Create your first order
+                  <Plus className="h-4 w-4 text-slate-500" />
+                  Add New
                 </button>
-              )}
-            </div>
-          ) : (
-            <div className="flex-1 overflow-hidden relative">
+                <button
+                  onClick={handleImportClick}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
+                >
+                  <FileUp className="h-4 w-4 text-slate-500" />
+                  Import File
+                </button>
+              </div>
+            )}
+
+            {/* Hidden file input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,.xlsx,.xls,.ods"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+          </div>
+
+          {/* Bulk Delete Button - Show only when orders are selected */}
+          {selectedOrderIds.size > 0 && (
+            <button
+              onClick={handleBulkDeleteClick}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete ({selectedOrderIds.size})
+            </button>
+          )}
+
+          {/* Export Button */}
+          <button
+            onClick={() => exportOrdersToCSV(filteredOrders)}
+            disabled={filteredOrders.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </button>
+        </div>
+      </div>
+
+      {/* Orders Table */}
+      <div className="flex-1 overflow-hidden flex flex-col">
+        {filteredOrders.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-slate-500 p-8">
+            <p className="text-sm">
+              {searchQuery ? 'No orders match your search' : 'No orders found'}
+            </p>
+            {!searchQuery && (
+              <button
+                onClick={onCreateNew}
+                className="mt-4 text-blue-600 hover:text-blue-700 text-sm font-medium"
+              >
+                Create your first order
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex-1 overflow-hidden relative">
               <div className="bg-white border border-slate-200 rounded-lg shadow-sm h-full flex flex-col">
                 <div className="overflow-auto flex-1">
                   <table className="min-w-full divide-y divide-slate-200">
