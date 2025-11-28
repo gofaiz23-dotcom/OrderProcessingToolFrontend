@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { CheckCircle2, FileText, Download, Copy, ChevronDown, ChevronUp, Loader2, Send, Eye, X, Upload } from 'lucide-react';
 import { createLogisticsShippedOrder } from '@/app/api/LogisticsApi/LogisticsShippedOrders';
+import { Toast } from '@/app/components/shared/Toast';
 
 type ResponseSummaryProps = {
   orderData?: {
@@ -42,6 +43,8 @@ export const ResponseSummary = ({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [selectedPdfUrl, setSelectedPdfUrl] = useState<string | null>(null);
   const [selectedPdfName, setSelectedPdfName] = useState<string>('');
   const [files, setFiles] = useState<File[]>(initialFiles || []);
@@ -115,35 +118,47 @@ export const ResponseSummary = ({
     }
   };
 
-  const handleSubmit = async () => {
-    if (!orderData?.sku || !orderData?.orderOnMarketPlace || !orderData?.ordersJsonb) {
-      setSubmitError('Missing required order data (SKU, Marketplace, or Orders JSONB)');
-      return;
-    }
 
+  const handleSubmit = async () => {
     setIsSubmitting(true);
     setSubmitError(null);
+    setSubmitSuccess(null);
+    setShowSuccessToast(false);
 
     try {
       const payload = {
-        sku: orderData.sku,
-        orderOnMarketPlace: orderData.orderOnMarketPlace,
-        ordersJsonb: orderData.ordersJsonb,
+        sku: orderData?.sku || '',
+        orderOnMarketPlace: orderData?.orderOnMarketPlace || '',
+        ordersJsonb: orderData?.ordersJsonb || {},
         rateQuotesResponseJsonb: rateQuotesResponseJsonb,
         bolResponseJsonb: bolResponseJsonb,
         pickupResponseJsonb: pickupResponseJsonb,
         files: files || [],
       };
 
+      // Step 1: Save to database first
       const response = await createLogisticsShippedOrder(payload);
+      console.log('Order saved to database successfully:', response);
 
-      // Call success callback if provided
+      // Step 2: Wait a moment to ensure DB save is complete, then delete order
+      // Call success callback which will handle deletion
       if (onSubmitSuccess && orderId) {
-        onSubmitSuccess(orderId, orderData.sku);
+        // Wait a small delay to ensure DB transaction is committed
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await onSubmitSuccess(orderId, orderData?.sku || '');
       }
 
-      // Show success message
-      console.log('Order submitted successfully:', response);
+      // Show "Data saved successfully!" in toast
+      setShowSuccessToast(true);
+
+      // Show order processing message below submit button in red
+      const processingMessage = orderId && orderData?.sku
+        ? `Order data (ID: ${orderId}, SKU: ${orderData.sku}) has been processed and all cache has been cleared`
+        : orderData?.sku
+        ? `Order data (SKU: ${orderData.sku}) has been processed and all cache has been cleared`
+        : 'Order data has been processed and all cache has been cleared';
+      
+      setSubmitSuccess(processingMessage);
     } catch (error) {
       console.error('Error submitting order:', error);
       setSubmitError(error instanceof Error ? error.message : 'Failed to submit order');
@@ -490,36 +505,47 @@ export const ResponseSummary = ({
         </div>
 
         {/* Submit Button */}
-        <div className="mt-6 pt-6 border-t border-slate-200 flex justify-end">
-          {submitError && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-              {submitError}
-            </div>
-          )}
-          <div className="flex flex-col items-end gap-2">
-            {submitError && (
-              <div className="p-2 bg-red-50 border border-red-200 rounded-lg text-red-800 text-xs max-w-xs">
-                {submitError}
+        <div className="mt-6 pt-6 border-t border-slate-200">
+          <div className="flex flex-col gap-4">
+            {/* Messages above button */}
+            {(submitError || submitSuccess) && (
+              <div className="w-full">
+                {/* Error message */}
+                {submitError && (
+                  <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg shadow-sm">
+                    <p className="text-sm font-medium text-red-800 leading-relaxed">{submitError}</p>
+                  </div>
+                )}
+                {/* Order processing message */}
+                {submitSuccess && (
+                  <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg shadow-sm">
+                    <p className="text-sm font-medium text-red-800 leading-relaxed">{submitSuccess}</p>
+                  </div>
+                )}
               </div>
             )}
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isSubmitting || !orderData?.sku || !orderData?.orderOnMarketPlace}
-              className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Submitting...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4" />
-                  Submit
-                </>
-              )}
-            </button>
+            
+            {/* Submit Button */}
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={isSubmitting}
+                className="flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Submitting...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4" />
+                    Submit
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -554,6 +580,15 @@ export const ResponseSummary = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Success Toast */}
+      {showSuccessToast && (
+        <Toast
+          message="Data saved successfully!"
+          type="success"
+          onClose={() => setShowSuccessToast(false)}
+        />
       )}
     </div>
   );
