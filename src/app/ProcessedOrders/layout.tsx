@@ -1,10 +1,12 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { Suspense, ReactNode } from 'react';
 import { AppLayout } from '../components/shared';
 
 const ProcessedOrdersLayout = ({ children }: { children: ReactNode }) => (
-  <AppLayout>{children}</AppLayout>
+  <Suspense fallback={<div className="flex h-screen items-center justify-center"><div className="text-slate-600">Loading...</div></div>}>
+    <AppLayout>{children}</AppLayout>
+  </Suspense>
 );
 
 export default ProcessedOrdersLayout;

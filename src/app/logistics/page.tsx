@@ -1,11 +1,12 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { RateQuoteTab, BillOfLadingTab } from './_components';
 import { useLogisticsStore } from '@/store/logisticsStore';
 
-export default function LogisticsPage() {
+function LogisticsPageContent() {
   const searchParams = useSearchParams();
   const selectedCarrier = searchParams?.get('carrier') || 'FedEx';
   const [activeTab, setActiveTab] = useState('rate-quote');
@@ -48,6 +49,18 @@ export default function LogisticsPage() {
         {activeTab === 'bill-of-lading' && <BillOfLadingTab carrier={selectedCarrier} token={storedToken || undefined} />}
       </div>
     </div>
+  );
+}
+
+export default function LogisticsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-full items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
+      </div>
+    }>
+      <LogisticsPageContent />
+    </Suspense>
   );
 }
 

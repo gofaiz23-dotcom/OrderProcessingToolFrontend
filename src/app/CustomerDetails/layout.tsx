@@ -1,3 +1,4 @@
+import { Suspense } from 'react';
 import AppLayout from '@/app/components/shared/AppLayout';
 
 export default function CustomerDetailsLayout({
@@ -5,6 +6,10 @@ export default function CustomerDetailsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <AppLayout>{children}</AppLayout>;
+  return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><div className="text-slate-600">Loading...</div></div>}>
+      <AppLayout>{children}</AppLayout>
+    </Suspense>
+  );
 }
 

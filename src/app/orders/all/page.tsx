@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { OrderList, CreateOrderModal, EditOrderModal, Toast } from '../_components';
 import {
@@ -15,7 +15,7 @@ import type { Order, CreateOrderPayload, UpdateOrderPayload } from '@/app/types/
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { Loader2 } from 'lucide-react';
 
-export default function AllOrdersPage() {
+function AllOrdersPageContent() {
   const searchParams = useSearchParams();
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -299,3 +299,14 @@ export default function AllOrdersPage() {
   );
 }
 
+export default function AllOrdersPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    }>
+      <AllOrdersPageContent />
+    </Suspense>
+  );
+}

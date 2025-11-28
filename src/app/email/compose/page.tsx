@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState, useEffect, useRef } from 'react';
+import { Suspense, FormEvent, useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -1331,7 +1331,15 @@ export const ComposeEmailView = () => (
   </div>
 );
 
-const ComposeEmailPage = () => <ComposeEmailView />;
+const ComposeEmailPage = () => (
+  <Suspense fallback={
+    <div className="flex h-full items-center justify-center">
+      <div className="text-slate-600">Loading...</div>
+    </div>
+  }>
+    <ComposeEmailView />
+  </Suspense>
+);
 
 export default ComposeEmailPage;
 

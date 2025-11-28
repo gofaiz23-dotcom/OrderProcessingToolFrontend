@@ -1,11 +1,12 @@
 'use client';
 
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { EstesRateQuoteService } from './RateQuoteService';
 import { useLogisticsStore } from '@/store/logisticsStore';
 
-export default function EstesRateQuotePage() {
+function EstesRateQuotePageContent() {
   const searchParams = useSearchParams();
   const selectedCarrier = searchParams?.get('carrier') || 'Estes';
   const orderId = searchParams?.get('orderId');
@@ -71,6 +72,18 @@ export default function EstesRateQuotePage() {
         orderData={orderData || undefined}
       />
     </div>
+  );
+}
+
+export default function EstesRateQuotePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex h-full items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
+      </div>
+    }>
+      <EstesRateQuotePageContent />
+    </Suspense>
   );
 }
 
