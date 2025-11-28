@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Loader2, Calendar, Info, X, Plus, Save, HelpCircle, CheckCircle2, Clock, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { buildApiUrl } from '../../../../BaseUrl';
@@ -13,6 +14,7 @@ import { StepIndicator } from './components/StepIndicator';
 import { BillOfLanding } from './BillOfLanding';
 import { PickupRequest } from './PickupRequest';
 import { ResponseSummary } from './components/ResponseSummary';
+import { getLogisticsShippedOrderById, getAllLogisticsShippedOrders } from '@/app/api/LogisticsApi/LogisticsShippedOrders';
 
 type HandlingUnit = {
   id: string;
@@ -46,10 +48,12 @@ type RateQuoteServiceProps = {
 };
 
 export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderData }: RateQuoteServiceProps) => {
+  const searchParams = useSearchParams();
   const { getToken } = useLogisticsStore();
   const [storedToken, setStoredToken] = useState<string>('');
   const [isMounted, setIsMounted] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [loadingOrderData, setLoadingOrderData] = useState(false);
 
   // Avoid hydration mismatch by getting token after mount
   useEffect(() => {
@@ -137,6 +141,53 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       setOrderData(initialOrderData);
     }
   }, [initialOrderData]);
+
+  // Fetch order data from database when Response Summary step is reached
+  useEffect(() => {
+    const fetchOrderData = async () => {
+      // Only fetch if we're on step 4 (Response Summary) and don't already have order data
+      if (currentStep === 4 && !orderData) {
+        setLoadingOrderData(true);
+        try {
+          // Check if orderId is in URL params
+          const orderIdParam = searchParams?.get('orderId');
+          
+          if (orderIdParam) {
+            // Fetch specific order by ID
+            const orderId = parseInt(orderIdParam, 10);
+            if (!isNaN(orderId)) {
+              const response = await getLogisticsShippedOrderById(orderId);
+              if (response.data) {
+                setOrderData({
+                  sku: response.data.sku,
+                  orderOnMarketPlace: response.data.orderOnMarketPlace,
+                  ordersJsonb: response.data.ordersJsonb as Record<string, unknown>,
+                });
+              }
+            }
+          } else {
+            // Fetch the most recent order
+            const response = await getAllLogisticsShippedOrders();
+            if (response.data && response.data.length > 0) {
+              const mostRecentOrder = response.data[0]; // Orders are sorted by createdAt desc
+              setOrderData({
+                sku: mostRecentOrder.sku,
+                orderOnMarketPlace: mostRecentOrder.orderOnMarketPlace,
+                ordersJsonb: mostRecentOrder.ordersJsonb as Record<string, unknown>,
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Failed to fetch order data:', error);
+          // Don't set error state here, just log it - order data is optional
+        } finally {
+          setLoadingOrderData(false);
+        }
+      }
+    };
+
+    fetchOrderData();
+  }, [currentStep, orderData, searchParams]);
   
   // Store BOL PDF URL
   const [bolPdfUrl, setBolPdfUrl] = useState<string | null>(null);
@@ -511,7 +562,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     handleStepComplete(4);
   };
   
-  // Extract BOL PDF URL when BOL response is available
+  // Extract BOL PDF URL and create File when BOL response is available
   useEffect(() => {
     if (bolResponseData?.data?.images?.bol) {
       try {
@@ -524,10 +575,21 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         const blob = new Blob([bytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         setBolPdfUrl(url);
+        
+        // Create File object from blob and add to bolFiles
+        const proNumber = bolResponseData?.data?.referenceNumbers?.pro || 'BOL';
+        const fileName = `BillOfLading_${proNumber}.pdf`;
+        const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
+        setBolFiles([pdfFile]);
       } catch (err) {
         console.error('Failed to create PDF URL:', err);
         setBolPdfUrl(null);
+        setBolFiles([]);
       }
+    } else {
+      // Clear files if no BOL response
+      setBolFiles([]);
+      setBolPdfUrl(null);
     }
   }, [bolResponseData]);
 
@@ -1171,25 +1233,33 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
 
       {/* Step 4: Response Summary */}
       {currentStep === 4 && (
-        <ResponseSummary
-          orderData={orderData || undefined}
-          rateQuotesResponseJsonb={response?.data || undefined}
-          bolResponseJsonb={bolResponseData?.data || undefined}
-          pickupResponseJsonb={pickupResponseData?.data || undefined}
-          files={bolFiles}
-          pdfUrl={bolPdfUrl}
-          onDownloadPDF={() => {
-            if (bolPdfUrl) {
-              const link = document.createElement('a');
-              link.href = bolPdfUrl;
-              const proNumber = bolResponseData?.data?.referenceNumbers?.pro || 'BOL';
-              link.download = `BillOfLading_${proNumber}.pdf`;
-              document.body.appendChild(link);
-              link.click();
-              document.body.removeChild(link);
-            }
-          }}
-        />
+        <>
+          {loadingOrderData && (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="animate-spin text-blue-500" size={24} />
+              <span className="ml-2 text-slate-600">Loading order data...</span>
+            </div>
+          )}
+          <ResponseSummary
+            orderData={orderData || undefined}
+            rateQuotesResponseJsonb={response?.data || undefined}
+            bolResponseJsonb={bolResponseData?.data || undefined}
+            pickupResponseJsonb={pickupResponseData?.data || undefined}
+            files={bolFiles}
+            pdfUrl={bolPdfUrl}
+            onDownloadPDF={() => {
+              if (bolPdfUrl) {
+                const link = document.createElement('a');
+                link.href = bolPdfUrl;
+                const proNumber = bolResponseData?.data?.referenceNumbers?.pro || 'BOL';
+                link.download = `BillOfLading_${proNumber}.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }
+            }}
+          />
+        </>
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { CheckCircle2, FileText, Download, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 
 type ResponseSummaryProps = {
@@ -52,6 +52,19 @@ export const ResponseSummary = ({
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   };
+
+  // Create object URLs for PDF previews and clean them up
+  const fileUrls = useMemo(() => {
+    if (!files || files.length === 0) return [];
+    return files.map(file => URL.createObjectURL(file));
+  }, [files]);
+
+  // Cleanup object URLs on unmount or when files change
+  useEffect(() => {
+    return () => {
+      fileUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [fileUrls]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-8">
@@ -220,40 +233,19 @@ export const ResponseSummary = ({
           {showSections.bol && (
             <div className="p-6 space-y-4">
               {bolResponseJsonb ? (
-                <>
-                  <div className="relative">
-                    <pre className="px-4 py-3 border border-slate-300 bg-slate-50 text-slate-900 rounded-lg overflow-auto max-h-64 text-sm font-mono">
-                      {JSON.stringify(bolResponseJsonb, null, 2)}
-                    </pre>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(JSON.stringify(bolResponseJsonb, null, 2))}
-                      className="absolute top-2 right-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-                      title="Copy to clipboard"
-                    >
-                      <Copy size={16} />
-                    </button>
-                  </div>
-                  {pdfUrl && (
-                    <div className="mt-4">
-                      <iframe
-                        src={pdfUrl}
-                        className="w-full h-[600px] border border-slate-200 rounded-lg"
-                        title="BOL PDF Preview"
-                      />
-                      {onDownloadPDF && (
-                        <button
-                          type="button"
-                          onClick={onDownloadPDF}
-                          className="mt-4 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-                        >
-                          <Download size={18} />
-                          Download PDF
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </>
+                <div className="relative">
+                  <pre className="px-4 py-3 border border-slate-300 bg-slate-50 text-slate-900 rounded-lg overflow-auto max-h-64 text-sm font-mono">
+                    {JSON.stringify(bolResponseJsonb, null, 2)}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(JSON.stringify(bolResponseJsonb, null, 2))}
+                    className="absolute top-2 right-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                    title="Copy to clipboard"
+                  >
+                    <Copy size={16} />
+                  </button>
+                </div>
               ) : (
                 <p className="text-sm text-slate-500">No BOL response available</p>
               )}
@@ -327,31 +319,47 @@ export const ResponseSummary = ({
           {showSections.files && (
             <div className="p-6 space-y-4">
               {files && files.length > 0 ? (
-                <div className="space-y-2">
-                  {files.map((file, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileText className="text-blue-500" size={20} />
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{file.name}</p>
-                          <p className="text-xs text-slate-500">
-                            {(file.size / 1024).toFixed(2)} KB
-                          </p>
+                <div className="space-y-4">
+                  {files.map((file, index) => {
+                    const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+                    const fileUrl = fileUrls[index];
+                    
+                    return (
+                      <div key={index} className="space-y-3">
+                        {/* File Info and Download */}
+                        <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <FileText className="text-blue-500" size={20} />
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">{file.name}</p>
+                              <p className="text-xs text-slate-500">
+                                {(file.size / 1024).toFixed(2)} KB
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => downloadFile(file)}
+                            className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+                          >
+                            <Download size={16} />
+                            Download
+                          </button>
                         </div>
+                        
+                        {/* PDF Preview */}
+                        {isPDF && fileUrl && (
+                          <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+                            <iframe
+                              src={fileUrl}
+                              className="w-full h-[600px] border-0"
+                              title={`PDF Preview - ${file.name}`}
+                            />
+                          </div>
+                        )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => downloadFile(file)}
-                        className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
-                      >
-                        <Download size={16} />
-                        Download
-                      </button>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-sm text-slate-500">No files available</p>
