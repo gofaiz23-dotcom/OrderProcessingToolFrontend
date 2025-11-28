@@ -25,7 +25,13 @@ export const buildApiUrl = (resourcePath = '/') => {
 // Build file URL: BACKEND_URL/UPLOAD_PATH/filepath
 export const buildFileUrl = (filePath: string) => {
   if (!filePath) return '';
-
+ 
+  const backendUrl = getBackendBaseUrl();
+  const uploadPath = getUploadPath();
+ 
+  // Remove leading slash from filePath if present
+  let cleanFilePath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+ 
   // If filePath already starts with upload path, remove it
   if (cleanFilePath.startsWith(`${uploadPath}/`)) {
     cleanFilePath = cleanFilePath.replace(`${uploadPath}/`, '');
@@ -34,11 +40,10 @@ export const buildFileUrl = (filePath: string) => {
   if (cleanFilePath.startsWith('uploads/')) {
     cleanFilePath = cleanFilePath.replace('uploads/', '');
   }
-
+ 
+  const cleanUploadPath = uploadPath.replace(/\/$/, '');
+ 
   return `${backendUrl}/${cleanUploadPath}/${cleanFilePath}`;
 };
 
 export default API_BASE_URL;
-
-
-
