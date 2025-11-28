@@ -1,3 +1,77 @@
+'use client';
+
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { Search, Plus, FileUp, Trash2, Download, ChevronLeft, ChevronRight, Edit, Info, Truck, ChevronDown } from 'lucide-react';
+import type { Order } from '@/app/types/order';
+import { OrderDetailsModal } from './OrderDetailsModal';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
+import { exportOrdersToCSV } from '@/app/utils/Orders/exportOrders';
+import { LOGISTICS_CARRIERS } from '@/Shared/constant';
+
+type OrderListProps = {
+  orders: Order[];
+  selectedOrderId?: number | null;
+  loading?: boolean;
+  onOrderSelect: (order: Order) => void;
+  onOrderDelete: (id: number) => Promise<void>;
+  onOrderEdit?: (order: Order) => void;
+  onCreateNew: () => void;
+  onImportFile: (file: File) => Promise<void>;
+  onOpenEditModal?: (order: Order) => void;
+  onBulkDelete?: (ids: number[]) => Promise<void>;
+};
+
+const ITEMS_PER_PAGE = 20;
+
+export const OrderList = ({
+  orders,
+  selectedOrderId,
+  loading = false,
+  onOrderSelect,
+  onOrderDelete,
+  onOrderEdit,
+  onCreateNew,
+  onImportFile,
+  onOpenEditModal,
+  onBulkDelete,
+}: OrderListProps) => {
+  const router = useRouter();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [showLogisticsDropdown, setShowLogisticsDropdown] = useState(false);
+  const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<Order | null>(null);
+  const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<Order | null>(null);
+  const [deleteModalState, setDeleteModalState] = useState<{
+    isOpen: boolean;
+    type: 'single' | 'bulk' | null;
+    orderId: number | null;
+    orderIds: number[];
+    loading: boolean;
+  }>({
+    isOpen: false,
+    type: null,
+    orderId: null,
+    orderIds: [],
+    loading: false,
+  });
+
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const logisticsDropdownRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Handle click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+      if (logisticsDropdownRef.current && !logisticsDropdownRef.current.contains(event.target as Node)) {
+        setShowLogisticsDropdown(false);
+      }
+    };
 
     if (showDropdown || showLogisticsDropdown) {
       document.addEventListener('mousedown', handleClickOutside);
@@ -253,7 +327,7 @@
             <div className="relative" ref={logisticsDropdownRef}>
               <button
                 onClick={() => setShowLogisticsDropdown(!showLogisticsDropdown)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors text-sm font-medium"
+                className="inline-flex items-center gap-2 px-4 py-2 text-orange-600  rounded-lg  transition-colors text-sm font-medium"
               >
                 <Truck className="h-4 w-4" />
                 Logistics
@@ -311,7 +385,7 @@
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setShowDropdown(!showDropdown)}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+              className="inline-flex items-center gap-2 px-4 py-2 text-blue-600  rounded-lg  transition-colors text-sm font-medium"
             >
               <Plus className="h-4 w-4" />
               Add New
@@ -320,20 +394,20 @@
 
             {/* Dropdown Menu */}
             {showDropdown && (
-              <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+              <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 transition-colors shadow-lg rounded-lg  z-50">
                 <button
                   onClick={() => {
                     onCreateNew();
                     setShowDropdown(false);
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700   hover:bg-slate-50 transition-colors text-left"
                 >
                   <Plus className="h-4 w-4 text-slate-500" />
                   Add New
                 </button>
                 <button
                   onClick={handleImportClick}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700  hover:bg-slate-50 transition-colors text-left"
                 >
                   <FileUp className="h-4 w-4 text-slate-500" />
                   Import File
@@ -355,10 +429,10 @@
           {selectedOrderIds.size > 0 && (
             <button
               onClick={handleBulkDeleteClick}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+              className="inline-flex items-center gap-2 px-4 py-2 text-red-600   rounded-lg  transition-colors text-sm font-medium"
             >
               <Trash2 className="h-4 w-4" />
-              Delete ({selectedOrderIds.size})
+               ({selectedOrderIds.size})
             </button>
           )}
 
@@ -366,10 +440,10 @@
           <button
             onClick={() => exportOrdersToCSV(filteredOrders)}
             disabled={filteredOrders.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 px-4 py-2 shadow-lg bg-white  text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="h-4 w-4" />
-            Export
+            
           </button>
         </div>
       </div>

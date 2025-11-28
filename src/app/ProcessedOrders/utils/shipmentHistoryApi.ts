@@ -176,8 +176,18 @@ export const getShipmentHistory = async (params: ShipmentHistoryParams, token?: 
     queryParams.append('interlinePro', params.interlinePro);
   }
 
-  // Use backend endpoint (backend will proxy to Estes API to avoid CORS issues)
-  const url = buildApiUrl(`/Logistics/shipment-history?${queryParams.toString()}`);
+  // For testing: use direct Estes API endpoint
+  // TODO: Remove this and use backend endpoint in production
+  const useDirectEndpoint = true;
+  
+  let url: string;
+  if (useDirectEndpoint && params.pro) {
+    // Use direct Estes API for testing
+    url = `https://cloudapi.estes-express.com/v1/shipments/history?pro=${params.pro}`;
+  } else {
+    // Use backend endpoint
+    url = buildApiUrl(`/Logistics/shipment-history?${queryParams.toString()}`);
+  }
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -199,6 +209,20 @@ export const getShipmentHistory = async (params: ShipmentHistoryParams, token?: 
   }
 
   const data = await res.json();
+  
+  // If using direct Estes API, transform response to match expected format
+  if (useDirectEndpoint && params.pro) {
+    // Transform Estes API response to match ShipmentHistoryResponse format
+    return {
+      message: 'Shipment history retrieved successfully',
+      shippingCompanyName: 'Estes',
+      data: {
+        data: Array.isArray(data) ? data : (data.data || [data]),
+        error: data.error,
+      },
+    };
+  }
+  
   return data;
 };
 

@@ -1,11 +1,9 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Loader2, Search, AlertCircle, ChevronDown } from 'lucide-react';
 import { getShipmentHistory, type ShipmentHistoryParams } from '../utils/shipmentHistoryApi';
 import { ShipmentHistoryModal } from './ShipmentHistoryModal';
-import { useLogisticsStore } from '@/store/logisticsStore';
-import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
 
 type SearchByType = 'pro' | 'po' | 'bol' | 'pur' | 'ldn' | 'exl' | 'interlinePro';
 
@@ -34,17 +32,6 @@ export const GetStatusModal = ({
   const [error, setError] = useState<string | null>(null);
   const [historyData, setHistoryData] = useState<any>(null);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const initialAutoFillDone = useRef(false);
-  const { getToken } = useLogisticsStore();
-  
-  // Default carrier for shipment tracking (can be made configurable)
-  const carrier = 'estes';
-  
-  // Get token from store (will be refreshed on each render)
-  const getAuthToken = () => {
-    return getToken(carrier);
-  };
 
   // Extract tracking numbers from order data and auto-fill
   useEffect(() => {
@@ -59,70 +46,46 @@ export const GetStatusModal = ({
         return '';
       };
 
-      // Try to find all available tracking numbers and prioritize
-      const findTrackingNumber = (): { type: SearchByType; value: string } | null => {
-        // Check PRO first (most common)
-        let proValue = extractValue(orderData.ordersJsonb || {}, ['pro', 'PRO', 'Pro', 'trackingNumber', 'tracking_number']);
-        if (!proValue && orderData.pickupResponseJsonb) {
-          proValue = extractValue(orderData.pickupResponseJsonb, ['Pro', 'pro', 'PRO', 'pickupRequestNumber']);
-        }
-        if (proValue && /^\d{10}$/.test(proValue)) {
-          return { type: 'pro', value: proValue };
-        }
-
-        // Check BOL
-        const bolValue = extractValue(orderData.bolResponseJsonb || {}, ['bol', 'BOL', 'Bol', 'billOfLading', 'bill_of_lading', 'bolNumber', 'bol_number']);
-        if (bolValue) {
-          return { type: 'bol', value: bolValue };
-        }
-
-        // Check PUR
-        let purValue = extractValue(orderData.rateQuotesResponseJsonb || {}, ['pur', 'PUR', 'Pur', 'pickupRequest', 'pickup_request']);
-        if (!purValue && orderData.pickupResponseJsonb) {
-          purValue = extractValue(orderData.pickupResponseJsonb, ['pur', 'PUR', 'Pur', 'pickupRequestNumber']);
-        }
-        if (purValue) {
-          return { type: 'pur', value: purValue };
-        }
-
-        // Check PO
-        const poValue = extractValue(orderData.ordersJsonb || {}, ['po', 'PO', 'Po', 'purchaseOrder', 'purchase_order']);
-        if (poValue) {
-          return { type: 'po', value: poValue };
-        }
-
-        // Check LDN
-        const ldnValue = extractValue(orderData.ordersJsonb || {}, ['ldn', 'LDN', 'Ldn', 'loadNumber', 'load_number']);
-        if (ldnValue) {
-          return { type: 'ldn', value: ldnValue };
-        }
-
-        // Check EXL
-        const exlValue = extractValue(orderData.ordersJsonb || {}, ['exl', 'EXL', 'Exl', 'exlaId', 'exla_id']);
-        if (exlValue) {
-          return { type: 'exl', value: exlValue };
-        }
-
-        // Check Interline PRO
-        const interlineProValue = extractValue(orderData.ordersJsonb || {}, ['interlinePro', 'interline_pro', 'InterlinePro', 'interlinePRO']);
-        if (interlineProValue) {
-          return { type: 'interlinePro', value: interlineProValue };
-        }
-
-        return null;
-      };
-
-      const trackingInfo = findTrackingNumber();
-      if (trackingInfo) {
-        setSearchBy(trackingInfo.type);
-        setTrackingNumbers(trackingInfo.value);
-        setFieldError('');
-        initialAutoFillDone.current = true;
+      // Auto-fill based on selected search type
+      let value = '';
+      
+      switch (searchBy) {
+        case 'pro':
+          value = extractValue(orderData.ordersJsonb || {}, ['pro', 'PRO', 'Pro', 'trackingNumber', 'tracking_number']);
+          // Also check pickupResponseJsonb for PRO
+          if (!value && orderData.pickupResponseJsonb) {
+            value = extractValue(orderData.pickupResponseJsonb, ['Pro', 'pro', 'PRO', 'pickupRequestNumber']);
+          }
+          break;
+        case 'po':
+          value = extractValue(orderData.ordersJsonb || {}, ['po', 'PO', 'Po', 'purchaseOrder', 'purchase_order']);
+          break;
+        case 'bol':
+          value = extractValue(orderData.bolResponseJsonb || {}, ['bol', 'BOL', 'Bol', 'billOfLading', 'bill_of_lading', 'bolNumber']);
+          break;
+        case 'pur':
+          value = extractValue(orderData.rateQuotesResponseJsonb || {}, ['pur', 'PUR', 'Pur', 'pickupRequest', 'pickup_request']);
+          if (!value && orderData.pickupResponseJsonb) {
+            value = extractValue(orderData.pickupResponseJsonb, ['pur', 'PUR', 'Pur', 'pickupRequestNumber']);
+          }
+          break;
+        case 'ldn':
+          value = extractValue(orderData.ordersJsonb || {}, ['ldn', 'LDN', 'Ldn', 'loadNumber', 'load_number']);
+          break;
+        case 'exl':
+          value = extractValue(orderData.ordersJsonb || {}, ['exl', 'EXL', 'Exl', 'exlaId', 'exla_id']);
+          break;
+        case 'interlinePro':
+          value = extractValue(orderData.ordersJsonb || {}, ['interlinePro', 'interline_pro', 'InterlinePro']);
+          break;
       }
-    } else {
-      initialAutoFillDone.current = false;
+
+      if (value) {
+        setTrackingNumbers(value);
+        setFieldError('');
+      }
     }
-  }, [orderData, isOpen]);
+  }, [orderData, isOpen, searchBy]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -139,64 +102,6 @@ export const GetStatusModal = ({
     }
   }, [isOpen, loading, onClose]);
 
-  // Auto-fill when searchBy changes (only if user manually changed it after initial auto-fill)
-  useEffect(() => {
-    // Skip if initial auto-fill just happened
-    if (!initialAutoFillDone.current && orderData && isOpen) {
-      return;
-    }
-
-    if (orderData && isOpen) {
-      const extractValue = (obj: Record<string, unknown>, keys: string[]): string => {
-        for (const key of keys) {
-          if (obj[key]) {
-            const value = String(obj[key]);
-            if (value && value.trim()) return value.trim();
-          }
-        }
-        return '';
-      };
-
-      let value = '';
-      
-      switch (searchBy) {
-        case 'pro':
-          value = extractValue(orderData.ordersJsonb || {}, ['pro', 'PRO', 'Pro', 'trackingNumber', 'tracking_number']);
-          if (!value && orderData.pickupResponseJsonb) {
-            value = extractValue(orderData.pickupResponseJsonb, ['Pro', 'pro', 'PRO', 'pickupRequestNumber']);
-          }
-          break;
-        case 'po':
-          value = extractValue(orderData.ordersJsonb || {}, ['po', 'PO', 'Po', 'purchaseOrder', 'purchase_order']);
-          break;
-        case 'bol':
-          value = extractValue(orderData.bolResponseJsonb || {}, ['bol', 'BOL', 'Bol', 'billOfLading', 'bill_of_lading', 'bolNumber', 'bol_number']);
-          break;
-        case 'pur':
-          value = extractValue(orderData.rateQuotesResponseJsonb || {}, ['pur', 'PUR', 'Pur', 'pickupRequest', 'pickup_request']);
-          if (!value && orderData.pickupResponseJsonb) {
-            value = extractValue(orderData.pickupResponseJsonb, ['pur', 'PUR', 'Pur', 'pickupRequestNumber']);
-          }
-          break;
-        case 'ldn':
-          value = extractValue(orderData.ordersJsonb || {}, ['ldn', 'LDN', 'Ldn', 'loadNumber', 'load_number']);
-          break;
-        case 'exl':
-          value = extractValue(orderData.ordersJsonb || {}, ['exl', 'EXL', 'Exl', 'exlaId', 'exla_id']);
-          break;
-        case 'interlinePro':
-          value = extractValue(orderData.ordersJsonb || {}, ['interlinePro', 'interline_pro', 'InterlinePro', 'interlinePRO']);
-          break;
-      }
-
-      // Auto-fill if value exists
-      if (value) {
-        setTrackingNumbers(value);
-        setFieldError('');
-      }
-    }
-  }, [searchBy, orderData, isOpen]);
-
   // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -206,7 +111,6 @@ export const GetStatusModal = ({
       setError(null);
       setHistoryData(null);
       setShowHistoryModal(false);
-      initialAutoFillDone.current = false;
     }
   }, [isOpen]);
 
@@ -226,14 +130,6 @@ export const GetStatusModal = ({
     const numbers = trackingNumbers.trim().split('\n').filter(n => n.trim());
     if (numbers.length === 0) {
       setFieldError('This field is required.');
-      return;
-    }
-
-    // Get token fresh from store each time
-    const token = getAuthToken();
-    if (!token || token.trim() === '') {
-      setIsAuthModalOpen(true);
-      setError('Authentication required. Please login to continue.');
       return;
     }
 
@@ -261,29 +157,12 @@ export const GetStatusModal = ({
         }
       });
 
-      // Make sure token is passed
-      if (!token) {
-        throw new Error('Authentication token is missing. Please login again.');
-      }
-
-      const data = await getShipmentHistory(params, token);
+      const data = await getShipmentHistory(params);
       setHistoryData(data);
       setShowHistoryModal(true);
       onClose(); // Close the GetStatusModal when history is fetched
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch shipment history';
-      setError(errorMessage);
-      
-      // Check if error is related to authentication
-      if (
-        errorMessage.includes('401') || 
-        errorMessage.includes('Unauthorized') || 
-        errorMessage.includes('Authentication required') ||
-        errorMessage.includes('authenticate') ||
-        errorMessage.includes('token')
-      ) {
-        setIsAuthModalOpen(true);
-      }
+      setError(err instanceof Error ? err.message : 'Failed to fetch shipment history');
     } finally {
       setLoading(false);
     }
@@ -343,9 +222,8 @@ export const GetStatusModal = ({
                       <select
                         value={searchBy}
                         onChange={(e) => {
-                          const newSearchBy = e.target.value as SearchByType;
-                          setSearchBy(newSearchBy);
-                          // Don't clear tracking numbers - let the auto-fill effect handle it
+                          setSearchBy(e.target.value as SearchByType);
+                          setTrackingNumbers('');
                           setFieldError('');
                         }}
                         disabled={loading}
@@ -431,18 +309,6 @@ export const GetStatusModal = ({
           error={null}
         />
       )}
-
-      {/* Logistics Authentication Modal */}
-      <LogisticsAuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => {
-          setIsAuthModalOpen(false);
-          // After authentication, token will be available in store
-          // Clear error so user can try again
-          setError(null);
-        }}
-        carrier={carrier}
-      />
     </>
   );
 };
