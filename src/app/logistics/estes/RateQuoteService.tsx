@@ -240,14 +240,17 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     fetchOrderData();
   }, [currentStep, orderData, searchParams]);
 
-  // Handle submission success
+  // Handle submission success - Delete order AFTER database save is confirmed
   const handleSubmitSuccess = async (orderId: number, sku: string) => {
     try {
-      // Try to delete the order (optional - don't fail if order not found)
+      // Step 1: Database save is already complete at this point
+      console.log(`Database save confirmed for Order ID: ${orderId}, SKU: ${sku}`);
+      
+      // Step 2: Now delete the order (after DB save is confirmed)
       if (orderId) {
         try {
           await deleteOrder(orderId);
-          console.log(`Order (ID: ${orderId}) deleted successfully`);
+          console.log(`Order (ID: ${orderId}) deleted successfully after database save`);
         } catch (deleteError) {
           // Order might not exist or already deleted - that's okay
           console.warn(`Order (ID: ${orderId}) could not be deleted:`, deleteError);
@@ -255,7 +258,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         }
       }
 
-      // Clear all cache
+      // Step 3: Clear all cache after deletion
       sessionStorage.removeItem('selectedOrderForLogistics');
       localStorage.clear();
       
@@ -265,20 +268,8 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         await Promise.all(cacheNames.map(name => caches.delete(name)));
       }
 
-      // Show success toast
-      const toastId = `toast-${Date.now()}`;
-      const deleteMessage = orderId 
-        ? `Order data (ID: ${orderId}, SKU: ${sku}) has been processed and all cache has been cleared. Data saved successfully!`
-        : `Order data (SKU: ${sku}) has been saved and all cache has been cleared. Data saved successfully!`;
-      
-      setToasts(prev => [...prev, {
-        id: toastId,
-        message: deleteMessage,
-        type: 'success',
-      }]);
-
       // Show info message
-      console.log(`Order data saved successfully. Cache cleared.`);
+      console.log(`Order data saved successfully. Order deleted. Cache cleared.`);
     } catch (error) {
       console.error('Error during cleanup:', error);
       const toastId = `toast-${Date.now()}`;
