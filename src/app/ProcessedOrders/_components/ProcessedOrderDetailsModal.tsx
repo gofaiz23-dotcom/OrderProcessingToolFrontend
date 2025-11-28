@@ -49,7 +49,7 @@ export const ProcessedOrderDetailsModal = ({
           <div className="space-y-6">
             {/* Basic Information */}
             <div>
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Basic Information</h3>
+              <h3 className="text-sm font-semibold text-black mb-3">Basic Information</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs text-slate-500">ID</label>
@@ -99,8 +99,8 @@ export const ProcessedOrderDetailsModal = ({
             {/* JSONB Fields */}
             {order.ordersJsonb && Object.keys(order.ordersJsonb).length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-slate-700 mb-3">Orders JSONB</h3>
-                <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs">
+                <h3 className="text-sm font-semibold text-black mb-3">Orders JSONB</h3>
+                <pre className="p-4 bg-slate-50 border text-black border-slate-200 rounded-lg overflow-auto text-xs">
                   {JSON.stringify(order.ordersJsonb, null, 2)}
                 </pre>
               </div>
@@ -108,8 +108,8 @@ export const ProcessedOrderDetailsModal = ({
 
             {order.rateQuotesResponseJsonb && Object.keys(order.rateQuotesResponseJsonb).length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-slate-700 mb-3">Rate Quotes Response JSONB</h3>
-                <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs">
+                <h3 className="text-sm font-semibold text-black mb-3">Rate Quotes Response JSONB</h3>
+                <pre className="p-4 bg-slate-50 border text-black border-slate-200 rounded-lg overflow-auto text-xs">
                   {JSON.stringify(order.rateQuotesResponseJsonb, null, 2)}
                 </pre>
               </div>
@@ -117,8 +117,8 @@ export const ProcessedOrderDetailsModal = ({
 
             {order.bolResponseJsonb && Object.keys(order.bolResponseJsonb).length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-slate-700 mb-3">BOL Response JSONB</h3>
-                <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs">
+                <h3 className="text-sm font-semibold text-black mb-3">BOL Response JSONB</h3>
+                <pre className="p-4 bg-slate-50 border text-black border-slate-200 rounded-lg overflow-auto text-xs">
                   {JSON.stringify(order.bolResponseJsonb, null, 2)}
                 </pre>
               </div>
@@ -126,8 +126,8 @@ export const ProcessedOrderDetailsModal = ({
 
             {order.pickupResponseJsonb && Object.keys(order.pickupResponseJsonb).length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-slate-700 mb-3">Pickup Response JSONB</h3>
-                <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs">
+                <h3 className="text-sm font-semibold text-black mb-3">Pickup Response JSONB</h3>
+                <pre className="p-4 bg-slate-50 border text-black border-slate-200 rounded-lg overflow-auto text-xs">
                   {JSON.stringify(order.pickupResponseJsonb, null, 2)}
                 </pre>
               </div>
@@ -136,10 +136,10 @@ export const ProcessedOrderDetailsModal = ({
             {/* Uploads */}
             {order.uploads && order.uploads.length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-slate-700 mb-3">Uploaded Files</h3>
+                <h3 className="text-sm font-semibold text-black mb-3">Uploaded Files</h3>
                 <div className="space-y-2">
                   {order.uploads.map((upload, index) => (
-                    <div key={index} className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+                    <div key={index} className="p-3 bg-slate-50 border text-black border-slate-200 rounded-lg">
                       <p className="text-sm font-medium text-slate-900">{upload.filename}</p>
                       <p className="text-xs text-slate-500">{upload.mimetype} • {(upload.size / 1024).toFixed(2)} KB</p>
                     </div>
@@ -153,7 +153,7 @@ export const ProcessedOrderDetailsModal = ({
         <div className="p-6 border-t border-slate-200 flex items-center justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+            className="px-4 py-2 text-sm font-medium text-black bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
           >
             Close
           </button>
