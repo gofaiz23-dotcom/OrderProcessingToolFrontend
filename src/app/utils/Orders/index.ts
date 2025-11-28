@@ -14,14 +14,20 @@ export const loadOrders = async (): Promise<Order[]> => {
   const response = await getAllOrders();
   
   // Normalize jsonb - Prisma JSON type should already be parsed, but handle string case
-  return response.orders.map((order) => ({
-    ...order,
+  return response.orders.map((order) => {
+    let normalizedJsonb: Order['jsonb'] = order.jsonb;
+    
     // Ensure jsonb is properly parsed if it's a string (shouldn't happen with Prisma, but safe)
-    jsonb:
-      typeof order.jsonb === 'string'
-        ? parseJsonSafely(order.jsonb) ?? order.jsonb
-        : order.jsonb,
-  }));
+    if (typeof order.jsonb === 'string') {
+      const parsed = parseJsonSafely(order.jsonb);
+      normalizedJsonb = parsed !== null ? parsed as Order['jsonb'] : null;
+    }
+    
+    return {
+      ...order,
+      jsonb: normalizedJsonb,
+    };
+  });
 };
 
 /**

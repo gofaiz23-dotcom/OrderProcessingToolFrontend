@@ -211,7 +211,7 @@ export default function AllOrdersPage() {
   };
 
   // Show error banner at top if there's a global error
-  const hasGlobalError = error || importError;
+  const hasGlobalError = error != null || importError != null;
 
   return (
     <div className="flex h-full flex-col">

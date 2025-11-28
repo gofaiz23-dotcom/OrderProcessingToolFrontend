@@ -6,7 +6,7 @@ import { OrderDetail } from '../_components';
 import {
   createNewOrder,
 } from '@/app/utils/Orders';
-import type { CreateOrderPayload } from '@/app/types/order';
+import type { CreateOrderPayload, UpdateOrderPayload } from '@/app/types/order';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 
 export default function CreateOrderPage() {
@@ -14,12 +14,20 @@ export default function CreateOrderPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
-  const handleSave = async (payload: CreateOrderPayload) => {
+  const handleSave = async (payload: CreateOrderPayload | UpdateOrderPayload) => {
     setSaving(true);
     setError(null);
 
     try {
-      await createNewOrder(payload);
+      // Type guard: ensure we have CreateOrderPayload (required fields)
+      if (!payload.orderOnMarketPlace || payload.jsonb === undefined) {
+        throw new Error('Order on Marketplace and JSONB data are required');
+      }
+      const createPayload: CreateOrderPayload = {
+        orderOnMarketPlace: payload.orderOnMarketPlace,
+        jsonb: payload.jsonb,
+      };
+      await createNewOrder(createPayload);
       // Redirect to all orders page after successful creation
       router.push('/orders/all');
     } catch (err) {
@@ -36,7 +44,7 @@ export default function CreateOrderPage() {
 
   return (
     <div className="flex h-full flex-col">
-      {error && (
+      {error != null && (
         <div className="p-4 border-b border-red-200 bg-red-50 rounded-lg mb-4">
           <ErrorDisplay error={error} />
         </div>
