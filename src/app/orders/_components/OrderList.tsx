@@ -2,17 +2,35 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Plus, FileUp, Trash2, Download, ChevronLeft, ChevronRight, Edit, Info, Truck, ChevronDown } from 'lucide-react';
-import type { Order } from '@/app/types/order';
+import { Search, Plus, FileUp, Trash2, Download, ChevronLeft, ChevronRight, Edit, Info, Truck, ChevronDown, Loader2 } from 'lucide-react';
+import type { Order, PaginationMeta } from '@/app/types/order';
 import { OrderDetailsModal } from './OrderDetailsModal';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { exportOrdersToCSV } from '@/app/utils/Orders/exportOrders';
 import { LOGISTICS_CARRIERS } from '@/Shared/constant';
+import { DateFilter } from '@/app/components/shared/DateFilter';
+import { useAuthStore } from '@/app/UserAuthentication/store/authStore';
+import { UserAuthModal } from '@/app/components/shared/UserAuthModal';
+
+type DateFilterOption = 'all' | 'today' | 'thisWeek' | 'specificDate' | 'custom';
 
 type OrderListProps = {
   orders: Order[];
   selectedOrderId?: number | null;
   loading?: boolean;
+  pagination?: PaginationMeta | null;
+  currentPage?: number;
+  searchQuery?: string;
+  onSearchChange?: (query: string) => void;
+  onSearch?: () => void;
+  onClearSearch?: () => void;
+  dateFilter?: DateFilterOption;
+  startDate?: string;
+  endDate?: string;
+  onDateFilterChange?: (option: DateFilterOption) => void;
+  onStartDateChange?: (value: string) => void;
+  onEndDateChange?: (value: string) => void;
+  onPageChange?: (page: number) => void;
   onOrderSelect: (order: Order) => void;
   onOrderDelete: (id: number) => Promise<void>;
   onOrderEdit?: (order: Order) => void;
@@ -22,12 +40,23 @@ type OrderListProps = {
   onBulkDelete?: (ids: number[]) => Promise<void>;
 };
 
-const ITEMS_PER_PAGE = 20;
-
 export const OrderList = ({
   orders,
   selectedOrderId,
   loading = false,
+  pagination,
+  currentPage: currentPageProp = 1,
+  searchQuery: searchQueryProp = '',
+  onSearchChange,
+  onSearch,
+  onClearSearch,
+  dateFilter = 'all',
+  startDate = '',
+  endDate = '',
+  onDateFilterChange,
+  onStartDateChange,
+  onEndDateChange,
+  onPageChange,
   onOrderSelect,
   onOrderDelete,
   onOrderEdit,
@@ -37,13 +66,20 @@ export const OrderList = ({
   onBulkDelete,
 }: OrderListProps) => {
   const router = useRouter();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  // Use prop searchQuery if provided, otherwise use local state
+  const searchQuery = searchQueryProp !== undefined ? searchQueryProp : '';
+  const setSearchQuery = onSearchChange || (() => {});
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
   const [showDropdown, setShowDropdown] = useState(false);
   const [showLogisticsDropdown, setShowLogisticsDropdown] = useState(false);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<Order | null>(null);
   const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<Order | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [pendingLogisticsAction, setPendingLogisticsAction] = useState<{
+    carrier: string;
+    order: Order;
+  } | null>(null);
   const [deleteModalState, setDeleteModalState] = useState<{
     isOpen: boolean;
     type: 'single' | 'bulk' | null;
@@ -61,6 +97,10 @@ export const OrderList = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const logisticsDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Use pagination from backend if available, otherwise use client-side pagination for search
+  const currentPage = pagination?.page ?? currentPageProp;
+  const totalPages = pagination?.totalPages ?? 1;
 
   // Handle click outside to close dropdowns
   useEffect(() => {
@@ -96,6 +136,36 @@ export const OrderList = ({
   const handleImportClick = () => {
     fileInputRef.current?.click();
     setShowDropdown(false);
+  };
+
+  // Handle logistics redirect after authentication
+  const handleLogisticsRedirect = (carrier: string, order: Order) => {
+    // Store order data in sessionStorage to pass to rate quote page
+    sessionStorage.setItem('selectedOrderForLogistics', JSON.stringify({
+      id: order.id,
+      orderOnMarketPlace: order.orderOnMarketPlace,
+      jsonb: order.jsonb,
+    }));
+    
+    // Redirect to the appropriate logistics rate quote page
+    // Map carrier names to their route paths (default to estes if not found)
+    const carrierRoutes: Record<string, string> = {
+      'Estes': '/logistics/estes',
+      'FedEx': '/logistics/estes', // Using estes as default for now
+      'UPS': '/logistics/estes',   // Using estes as default for now
+    };
+    
+    const route = carrierRoutes[carrier] || '/logistics/estes';
+    router.push(`${route}?carrier=${encodeURIComponent(carrier)}&orderId=${order.id}`);
+    setShowLogisticsDropdown(false);
+  };
+
+  // Handle successful authentication
+  const handleAuthSuccess = () => {
+    if (pendingLogisticsAction) {
+      handleLogisticsRedirect(pendingLogisticsAction.carrier, pendingLogisticsAction.order);
+      setPendingLogisticsAction(null);
+    }
   };
 
   // Helper function to extract value from JSONB with flexible key matching
@@ -147,51 +217,8 @@ export const OrderList = ({
       return '-';
   };
 
-  const filteredOrders = useMemo(() => {
-      return orders.filter((order) => {
-        if (!searchQuery.trim()) return true;
-        const query = searchQuery.toLowerCase().trim();
-        
-        // Search in Order ID
-        if (order.id.toString().includes(query)) return true;
-        
-        // Search in Marketplace
-        if (order.orderOnMarketPlace.toLowerCase().includes(query)) return true;
-        
-        // Search in all JSONB fields that are displayed in the table
-        const poNumber = getJsonbValue(order.jsonb, 'PO#').toLowerCase();
-        const sku = getJsonbValue(order.jsonb, 'SKU').toLowerCase();
-        const orderNumber = getJsonbValue(order.jsonb, 'Order#').toLowerCase();
-        const customerName = getJsonbValue(order.jsonb, 'Customer Name').toLowerCase();
-        const trackingNumber = getJsonbValue(order.jsonb, 'Tracking Number').toLowerCase();
-        
-        // Check each field
-        if (poNumber.includes(query) && poNumber !== '-') return true;
-        if (sku.includes(query) && sku !== '-') return true;
-        if (orderNumber.includes(query) && orderNumber !== '-') return true;
-        if (customerName.includes(query) && customerName !== '-') return true;
-        if (trackingNumber.includes(query) && trackingNumber !== '-') return true;
-        
-        // Search in entire JSONB as fallback (for any other fields)
-        const jsonbStr = typeof order.jsonb === 'string' 
-          ? order.jsonb.toLowerCase()
-          : JSON.stringify(order.jsonb).toLowerCase();
-        if (jsonbStr.includes(query)) return true;
-        
-        return false;
-      });
-  }, [orders, searchQuery]);
-
-  // Reset to page 1 when filtered orders change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filteredOrders.length, searchQuery]);
-
-  // Calculate pagination
-  const totalPages = Math.ceil(filteredOrders.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
-  const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
+  // No client-side filtering - backend handles search
+  const displayOrders = orders;
 
   // Handle individual checkbox selection
   const handleCheckboxChange = (orderId: number, checked: boolean) => {
@@ -210,18 +237,27 @@ export const OrderList = ({
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
       const newSelectedIds = new Set(selectedOrderIds);
-      paginatedOrders.forEach((order) => newSelectedIds.add(order.id));
+      displayOrders.forEach((order) => newSelectedIds.add(order.id));
       setSelectedOrderIds(newSelectedIds);
     } else {
       const newSelectedIds = new Set(selectedOrderIds);
-      paginatedOrders.forEach((order) => newSelectedIds.delete(order.id));
+      displayOrders.forEach((order) => newSelectedIds.delete(order.id));
       setSelectedOrderIds(newSelectedIds);
     }
   };
 
   // Check if all orders on current page are selected
-  const allSelected = paginatedOrders.length > 0 && paginatedOrders.every((order) => selectedOrderIds.has(order.id));
-  const someSelected = paginatedOrders.some((order) => selectedOrderIds.has(order.id));
+  const allSelected = displayOrders.length > 0 && displayOrders.every((order) => selectedOrderIds.has(order.id));
+  const someSelected = displayOrders.some((order) => selectedOrderIds.has(order.id));
+
+  // Handle page changes
+  const handlePageChange = (page: number) => {
+    if (onPageChange) {
+      onPageChange(page);
+    }
+    // Clear selections when changing pages
+    setSelectedOrderIds(new Set());
+  };
 
   // Handle bulk delete click
   const handleBulkDeleteClick = () => {
@@ -308,16 +344,68 @@ export const OrderList = ({
       <h1 className="text-3xl font-bold text-slate-900 mb-6">Orders</h1>
 
       {/* Search and Action Buttons */}
-      <div className="flex items-center justify-between gap-3 mb-6">
-        <div className="flex-1 relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input
-            type="text"
-            placeholder="Search orders..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-          />
+      <div className="flex items-end justify-between gap-3 mb-6 relative z-50 flex-wrap">
+        <div className="flex items-end gap-3 flex-1 flex-wrap">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-slate-900">Search</span>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search orders..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && onSearch) {
+                    e.preventDefault();
+                    onSearch();
+                  }
+                }}
+                className="w-48 pl-9 pr-3 py-1.5 border border-slate-300 bg-white text-slate-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition-colors"
+              />
+            </div>
+          </label>
+          {onDateFilterChange && onStartDateChange && onEndDateChange && (
+            <DateFilter
+              dateFilter={dateFilter}
+              startDate={startDate}
+              endDate={endDate}
+              onDateFilterChange={onDateFilterChange}
+              onStartDateChange={onStartDateChange}
+              onEndDateChange={onEndDateChange}
+            />
+          )}
+          {onSearch && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-900 opacity-0">Actions</span>
+              <button
+                onClick={onSearch}
+                disabled={loading}
+                className="px-4 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Searching...
+                  </>
+                ) : (
+                  'Search'
+                )}
+              </button>
+            </div>
+          )}
+          {(searchQuery || (dateFilter !== 'all' && onClearSearch)) && onClearSearch && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-slate-900 opacity-0">Clear</span>
+              <button
+                onClick={onClearSearch}
+                className="px-4 py-1.5 text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors text-sm"
+                title="Clear filters"
+              >
+                Clear
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Right Side Buttons */}
@@ -347,25 +435,18 @@ export const OrderList = ({
                         key={carrier}
                         onClick={() => {
                           if (selectedOrder) {
-                            // Store order data in sessionStorage to pass to rate quote page
-                            sessionStorage.setItem('selectedOrderForLogistics', JSON.stringify({
-                              id: selectedOrder.id,
-                              orderOnMarketPlace: selectedOrder.orderOnMarketPlace,
-                              jsonb: selectedOrder.jsonb,
-                            }));
-                            
-                            // Redirect to the appropriate logistics rate quote page
-                            // Map carrier names to their route paths (default to estes if not found)
-                            const carrierRoutes: Record<string, string> = {
-                              'Estes': '/logistics/estes',
-                              'FedEx': '/logistics/estes', // Using estes as default for now
-                              'UPS': '/logistics/estes',   // Using estes as default for now
-                            };
-                            
-                            const route = carrierRoutes[carrier] || '/logistics/estes';
-                            router.push(`${route}?carrier=${encodeURIComponent(carrier)}&orderId=${selectedOrder.id}`);
+                            // Check if user is authenticated
+                            if (!isAuthenticated) {
+                              // Store the pending logistics action
+                              setPendingLogisticsAction({ carrier, order: selectedOrder });
+                              // Show login modal
+                              setShowAuthModal(true);
+                              setShowLogisticsDropdown(false);
+                            } else {
+                              // User is authenticated, proceed with logistics
+                              handleLogisticsRedirect(carrier, selectedOrder);
+                            }
                           }
-                          setShowLogisticsDropdown(false);
                         }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
                       >
@@ -438,8 +519,8 @@ export const OrderList = ({
 
           {/* Export Button */}
           <button
-            onClick={() => exportOrdersToCSV(filteredOrders)}
-            disabled={filteredOrders.length === 0}
+            onClick={() => exportOrdersToCSV(displayOrders)}
+            disabled={displayOrders.length === 0}
             className="inline-flex items-center gap-2 px-4 py-2 shadow-lg bg-white  text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="h-4 w-4" />
@@ -450,10 +531,10 @@ export const OrderList = ({
 
       {/* Orders Table */}
       <div className="flex-1 overflow-hidden flex flex-col">
-        {filteredOrders.length === 0 ? (
+        {displayOrders.length === 0 && !loading ? (
           <div className="flex flex-col items-center justify-center h-full text-slate-500 p-8">
             <p className="text-sm">
-              {searchQuery ? 'No orders match your search' : 'No orders found'}
+              {searchQuery ? 'No orders match your search on this page' : 'No orders found'}
             </p>
             {!searchQuery && (
               <button
@@ -538,7 +619,7 @@ export const OrderList = ({
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-200">
-                    {paginatedOrders.map((order) => {
+                    {displayOrders.map((order) => {
                       const isSelected = selectedOrderId === order.id;
                       const isChecked = selectedOrderIds.has(order.id);
                       
@@ -668,20 +749,24 @@ export const OrderList = ({
                 </div>
                 
                 {/* Pagination Controls */}
-                {filteredOrders.length > ITEMS_PER_PAGE && (
+                {pagination && pagination.totalPages > 1 && (
                   <div className="border-t border-slate-200 bg-white px-6 py-4 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className="text-sm text-slate-700">
-                        Showing <span className="font-medium">{startIndex + 1}</span> to{' '}
-                        <span className="font-medium">{Math.min(endIndex, filteredOrders.length)}</span> of{' '}
-                        <span className="font-medium">{filteredOrders.length}</span> orders
+                        Showing <span className="font-medium">
+                          {pagination.totalCount === 0 ? 0 : (currentPage - 1) * pagination.limit + 1}
+                        </span> to{' '}
+                        <span className="font-medium">
+                          {Math.min(currentPage * pagination.limit, pagination.totalCount)}
+                        </span> of{' '}
+                        <span className="font-medium">{pagination.totalCount}</span> orders
                       </span>
                     </div>
                     
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={!pagination.hasPreviousPage}
                         className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
                       >
                         <ChevronLeft className="h-4 w-4" />
@@ -707,7 +792,7 @@ export const OrderList = ({
                                   <span className="px-2 text-sm text-slate-500">...</span>
                                 )}
                                 <button
-                                  onClick={() => setCurrentPage(page)}
+                                  onClick={() => handlePageChange(page)}
                                   className={`min-w-[36px] px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
                                     currentPage === page
                                       ? 'bg-blue-600 text-white'
@@ -722,8 +807,8 @@ export const OrderList = ({
                       </div>
                       
                       <button
-                        onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages}
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={!pagination.hasNextPage}
                         className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
                       >
                         Next
@@ -770,6 +855,16 @@ export const OrderList = ({
               : `Are you sure you want to delete order #${deleteModalState.orderId}? This action cannot be undone.`
           }
           loading={deleteModalState.loading}
+        />
+
+        {/* User Authentication Modal */}
+        <UserAuthModal
+          isOpen={showAuthModal}
+          onClose={() => {
+            setShowAuthModal(false);
+            setPendingLogisticsAction(null);
+          }}
+          onSuccess={handleAuthSuccess}
         />
       </div>
     );

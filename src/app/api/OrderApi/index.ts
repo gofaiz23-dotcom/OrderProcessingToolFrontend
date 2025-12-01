@@ -54,12 +54,37 @@ export const createMultipleOrders = async (
 };
 
 /**
- * Get all orders
+ * Query options for getting all orders
  */
-export const getAllOrders = async (): Promise<GetAllOrdersResponse> => {
+export type GetAllOrdersQueryOptions = {
+  page?: number;
+  limit?: number;
+  orderOnMarketPlace?: string;
+  search?: string;
+};
+
+/**
+ * Get all orders with pagination support
+ */
+export const getAllOrders = async (
+  options: GetAllOrdersQueryOptions = {}
+): Promise<GetAllOrdersResponse> => {
   try {
-    const url = buildApiUrl('/orders/all');
-    const response = await fetch(url, {
+    const { page = 1, limit = 50, orderOnMarketPlace, search } = options;
+    
+    const endpoint = new URL(buildApiUrl('/orders/all'));
+    endpoint.searchParams.set('page', String(page));
+    endpoint.searchParams.set('limit', String(Math.min(Math.max(limit, 1), 100))); // Clamp between 1-100
+    
+    if (orderOnMarketPlace) {
+      endpoint.searchParams.set('orderOnMarketPlace', orderOnMarketPlace);
+    }
+    
+    if (search && search.trim()) {
+      endpoint.searchParams.set('search', search.trim());
+    }
+    
+    const response = await fetch(endpoint.toString(), {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

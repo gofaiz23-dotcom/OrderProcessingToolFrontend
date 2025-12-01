@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { X, Eye, Download, FileText, Image as ImageIcon, File } from 'lucide-react';
 import type { ShippedOrder } from '../utils/shippedOrdersApi';
-import { buildFileUrl } from '../../../../BaseUrl';
+import { getBackendBaseUrl } from '../../../../BaseUrl';
 
 type ProcessedOrderDetailsModalProps = {
   isOpen: boolean;
@@ -196,8 +196,15 @@ export const ProcessedOrderDetailsModal = ({
                         const mimetype = isString ? 'application/octet-stream' : (upload.mimetype || 'application/octet-stream');
                         const size = isString ? null : (upload.size || null);
                         
-                        // Build download URL: BACKEND_URL/UPLOAD_PATH/filepath
-                        const downloadUrl = buildFileUrl(filePath);
+                        // Build shipping document URL: BaseUrl/FhsOrdersMedia/ShippingDocuments/filename
+                        const buildShippingDocumentUrl = (filename: string) => {
+                          const backendUrl = getBackendBaseUrl();
+                          // Clean filename - remove any path separators
+                          const cleanFilename = filename.split('/').pop() || filename.split('\\').pop() || filename;
+                          return `${backendUrl}/FhsOrdersMedia/ShippingDocuments/${cleanFilename}`;
+                        };
+                        
+                        const downloadUrl = buildShippingDocumentUrl(filename);
                         const FileIcon = getFileIcon(mimetype, filename);
                         const showPreview = canPreview(mimetype, filename);
                         const isImage = mimetype.startsWith('image/') || ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'].some(ext => filename.toLowerCase().endsWith(ext));

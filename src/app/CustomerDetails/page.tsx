@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Search, Loader2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Search, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { getAllOrdersJsonb, type OrdersJsonbItem } from '@/app/api/LogisticsApi/CustomerDetails';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
+import { DateFilter } from '@/app/components/shared/DateFilter';
+
+type DateFilterOption = 'all' | 'today' | 'thisWeek' | 'specificDate' | 'custom';
 
 type ColumnDefinition = {
   key: string;
@@ -55,35 +58,98 @@ export default function CustomerDetailsPage() {
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const [hasNextPage, setHasNextPage] = useState(false);
   const [hasPreviousPage, setHasPreviousPage] = useState(false);
+  const [dateFilter, setDateFilter] = useState<DateFilterOption>('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const ITEMS_PER_PAGE = 50;
 
-  // Client-side search filter function
-  const applySearchFilter = (orders: OrdersJsonbItem[], query: string) => {
-    const trimmedQuery = query.trim().toLowerCase();
+  // Helper function to get date range based on filter option
+  const getDateRange = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     
-    if (trimmedQuery === '') {
-      setFilteredOrders(orders);
-      return;
-    }
-
-    const filtered = orders.filter((order) => {
-      // Search in marketplace
-      const marketplace = (order.orderOnMarketPlace || '').toLowerCase();
-      if (marketplace.includes(trimmedQuery)) return true;
-
-      // Search in all columns from ordersJsonb
-      for (const column of COLUMNS) {
-        if (column.key === 'marketplace') continue; // Already checked above
+    switch (dateFilter) {
+      case 'today': {
+        const todayEnd = new Date(today);
+        todayEnd.setHours(23, 59, 59, 999);
+        return { start: today, end: todayEnd };
+      }
+      case 'thisWeek': {
+        const startOfWeek = new Date(today);
+        const day = startOfWeek.getDay();
+        const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Adjust when day is Sunday
+        startOfWeek.setDate(diff);
+        startOfWeek.setHours(0, 0, 0, 0);
         
-        const value = getFieldValue(order.ordersJsonb, column);
-        if (value !== '-' && value.toLowerCase().includes(trimmedQuery)) {
-          return true;
-        }
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+        endOfWeek.setHours(23, 59, 59, 999);
+        return { start: startOfWeek, end: endOfWeek };
+      }
+      case 'specificDate': {
+        if (!startDate) return null;
+        const date = new Date(startDate);
+        date.setHours(0, 0, 0, 0);
+        const dateEnd = new Date(date);
+        dateEnd.setHours(23, 59, 59, 999);
+        return { start: date, end: dateEnd };
+      }
+      case 'custom': {
+        if (!startDate || !endDate) return null;
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        return { start, end };
+      }
+      default:
+        return null;
+    }
+  }, [dateFilter, startDate, endDate]);
+
+  // Apply date filter to orders
+  const applyDateFilter = useMemo(() => {
+    return (orders: OrdersJsonbItem[]) => {
+      if (dateFilter === 'all' || !getDateRange) {
+        return orders;
       }
 
-      return false;
-    });
+      return orders.filter((order) => {
+        if (!order.createdAt) return false;
+        const orderDate = new Date(order.createdAt);
+        return orderDate >= getDateRange.start && orderDate <= getDateRange.end;
+      });
+    };
+  }, [dateFilter, getDateRange]);
+
+  // Client-side search and date filter function
+  const applyFilters = (orders: OrdersJsonbItem[], query: string) => {
+    // First apply date filter
+    let filtered = applyDateFilter(orders);
+    
+    // Then apply search filter
+    const trimmedQuery = query.trim().toLowerCase();
+    
+    if (trimmedQuery !== '') {
+      filtered = filtered.filter((order) => {
+        // Search in marketplace
+        const marketplace = (order.orderOnMarketPlace || '').toLowerCase();
+        if (marketplace.includes(trimmedQuery)) return true;
+
+        // Search in all columns from ordersJsonb
+        for (const column of COLUMNS) {
+          if (column.key === 'marketplace') continue; // Already checked above
+          
+          const value = getFieldValue(order.ordersJsonb, column);
+          if (value !== '-' && value.toLowerCase().includes(trimmedQuery)) {
+            return true;
+          }
+        }
+
+        return false;
+      });
+    }
 
     setFilteredOrders(filtered);
   };
@@ -104,8 +170,8 @@ export default function CustomerDetailsPage() {
       // Store all orders for client-side filtering
       setAllOrders(response.orders);
       
-      // Apply client-side filtering
-      applySearchFilter(response.orders, searchQuery);
+      // Apply client-side filtering (search + date)
+      applyFilters(response.orders, searchQuery);
       
       setTotalPages(response.pagination.totalPages);
       setTotalCount(response.pagination.totalCount);
@@ -125,11 +191,11 @@ export default function CustomerDetailsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage]);
 
-  // Apply client-side search filter when searchQuery or allOrders change
+  // Apply client-side filters when searchQuery, allOrders, or date filter changes
   useEffect(() => {
-    applySearchFilter(allOrders, searchQuery);
+    applyFilters(allOrders, searchQuery);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchQuery, allOrders]);
+  }, [searchQuery, allOrders, dateFilter, startDate, endDate]);
 
   const handleSearch = () => {
     // Trim the search query - filtering will happen automatically via useEffect
@@ -165,49 +231,73 @@ export default function CustomerDetailsPage() {
         <p className="text-sm text-slate-600">View and edit customer order information</p>
       </div>
 
-      {/* Search Bar */}
-      <div className="mb-6 flex items-center gap-3">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search in table..."
-            value={searchQuery}
-            onChange={(e) => {
-              const value = e.target.value;
-              setSearchQuery(value);
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleSearch();
-              }
-            }}
-            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-slate-900 placeholder:text-slate-400"
-          />
-        </div>
-        <button
-          onClick={handleSearch}
-          disabled={loading}
-          className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Searching...
-            </>
-          ) : (
-            'Search'
-          )}
-        </button>
-        {searchQuery && (
+      {/* Search Bar and Date Filter */}
+      <div className="mb-6 flex items-end gap-4 flex-wrap relative z-50">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-900">Search</span>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search in table..."
+              value={searchQuery}
+              onChange={(e) => {
+                const value = e.target.value;
+                setSearchQuery(value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleSearch();
+                }
+              }}
+              className="w-48 pl-9 pr-3 py-1.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 bg-white text-slate-900 placeholder:text-slate-400"
+            />
+          </div>
+        </label>
+        
+        <DateFilter
+          dateFilter={dateFilter}
+          startDate={startDate}
+          endDate={endDate}
+          onDateFilterChange={setDateFilter}
+          onStartDateChange={setStartDate}
+          onEndDateChange={setEndDate}
+        />
+        
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-900 opacity-0">Actions</span>
           <button
-            onClick={handleClearSearch}
-            className="px-4 py-2 text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
-            title="Clear search"
+            onClick={handleSearch}
+            disabled={loading}
+            className="px-4 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2"
           >
-            Clear
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Searching...
+              </>
+            ) : (
+              'Search'
+            )}
           </button>
+        </div>
+        {(searchQuery || dateFilter !== 'all') && (
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-slate-900 opacity-0">Clear</span>
+            <button
+              onClick={() => {
+                handleClearSearch();
+                setDateFilter('all');
+                setStartDate('');
+                setEndDate('');
+              }}
+              className="px-4 py-1.5 text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors text-sm"
+              title="Clear filters"
+            >
+              Clear
+            </button>
+          </div>
         )}
       </div>
 
@@ -262,162 +352,71 @@ export default function CustomerDetailsPage() {
       </div>
 
       {/* Pagination */}
-      {(totalCount > 0 || filteredOrders.length > 0) && (
-        <div className="mt-6 w-full bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
-          <div className="flex flex-col lg:flex-row items-center justify-between gap-4">
-            {/* Results Info */}
-            <div className="text-sm text-slate-600 whitespace-nowrap">
-              {searchQuery.trim() ? (
-                <>
-                  Showing <span className="font-semibold text-slate-900">{filteredOrders.length}</span> of{' '}
-                  <span className="font-semibold text-slate-900">{totalCount}</span> results
-                  {filteredOrders.length < totalCount && (
-                    <span className="text-slate-500 ml-2">(filtered)</span>
-                  )}
-                </>
-              ) : (
-                <>
-                  Showing <span className="font-semibold text-slate-900">{((currentPage - 1) * itemsPerPage) + 1}</span> to{' '}
-                  <span className="font-semibold text-slate-900">{Math.min(currentPage * itemsPerPage, totalCount)}</span> of{' '}
-                  <span className="font-semibold text-slate-900">{totalCount}</span> results
-                </>
-              )}
-            </div>
-
-            {/* Pagination Controls */}
-            <div className="flex items-center gap-2 flex-wrap justify-center">
-            {/* First Page Button */}
+      {totalPages > 1 && (
+        <div className="mt-6 border-t border-slate-200 bg-white px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-700">
+              Showing <span className="font-medium">
+                {totalCount === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}
+              </span> to{' '}
+              <span className="font-medium">
+                {Math.min(currentPage * itemsPerPage, totalCount)}
+              </span> of{' '}
+              <span className="font-medium">{totalCount}</span> results
+            </span>
+          </div>
+          
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setCurrentPage(1)}
+              onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
               disabled={!hasPreviousPage}
-              className="p-2 text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              title="First page"
-            >
-              <ChevronsLeft className="h-4 w-4" />
-            </button>
-
-            {/* Previous Button */}
-            <button
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              disabled={!hasPreviousPage}
-              className="px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-all"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
             >
               <ChevronLeft className="h-4 w-4" />
-              <span className="hidden sm:inline">Previous</span>
+              Previous
             </button>
-
-            {/* Page Numbers */}
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1">
-                {(() => {
-                  const pages: (number | string)[] = [];
-                  const maxVisible = 5;
-                  let startPage = Math.max(1, currentPage - Math.floor(maxVisible / 2));
-                  let endPage = Math.min(totalPages, startPage + maxVisible - 1);
-
-                  if (endPage - startPage < maxVisible - 1) {
-                    startPage = Math.max(1, endPage - maxVisible + 1);
-                  }
-
-                  if (startPage > 1) {
-                    pages.push(1);
-                    if (startPage > 2) {
-                      pages.push('...');
-                    }
-                  }
-
-                  for (let i = startPage; i <= endPage; i++) {
-                    pages.push(i);
-                  }
-
-                  if (endPage < totalPages) {
-                    if (endPage < totalPages - 1) {
-                      pages.push('...');
-                    }
-                    pages.push(totalPages);
-                  }
-
-                  return pages.map((page, index) => {
-                    if (page === '...') {
-                      return (
-                        <span key={`ellipsis-${index}`} className="px-2 py-1 text-slate-400">
-                          ...
-                        </span>
-                      );
-                    }
-
-                    const pageNum = page as number;
-                    const isActive = pageNum === currentPage;
-
-                    return (
+            
+            <div className="flex items-center gap-1">
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((page) => {
+                  // Show first page, last page, current page, and pages around current
+                  if (totalPages <= 7) return true;
+                  if (page === 1 || page === totalPages) return true;
+                  if (Math.abs(page - currentPage) <= 1) return true;
+                  return false;
+                })
+                .map((page, index, array) => {
+                  // Add ellipsis if there's a gap
+                  const showEllipsisBefore = index > 0 && page - array[index - 1] > 1;
+                  
+                  return (
+                    <div key={page} className="flex items-center gap-1">
+                      {showEllipsisBefore && (
+                        <span className="px-2 text-sm text-slate-500">...</span>
+                      )}
                       <button
-                        key={pageNum}
-                        onClick={() => setCurrentPage(pageNum)}
-                        className={`min-w-[36px] px-3 py-2 text-sm font-medium rounded-lg transition-all ${
-                          isActive
-                            ? 'bg-blue-600 text-white shadow-md hover:bg-blue-700'
-                            : 'text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 hover:border-slate-400'
+                        onClick={() => setCurrentPage(page)}
+                        className={`min-w-[36px] px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
+                          currentPage === page
+                            ? 'bg-blue-600 text-white'
+                            : 'text-slate-700 bg-white border border-slate-300 hover:bg-slate-50'
                         }`}
                       >
-                        {pageNum}
+                        {page}
                       </button>
-                    );
-                  });
-                })()}
-              </div>
-            )}
-
-            {/* Next Button */}
+                    </div>
+                  );
+                })}
+            </div>
+            
             <button
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               disabled={!hasNextPage}
-              className="px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1 transition-all"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white"
             >
-              <span className="hidden sm:inline">Next</span>
+              Next
               <ChevronRight className="h-4 w-4" />
             </button>
-
-            {/* Last Page Button */}
-            <button
-              onClick={() => setCurrentPage(totalPages)}
-              disabled={!hasNextPage}
-              className="p-2 text-slate-600 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 hover:text-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-              title="Last page"
-            >
-              <ChevronsRight className="h-4 w-4" />
-            </button>
-          </div>
-
-            {/* Page Input (Optional) */}
-            {totalPages > 1 && (
-              <div className="flex items-center gap-2 whitespace-nowrap">
-                <span className="text-sm text-slate-600">Go to:</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={totalPages}
-                  value={currentPage}
-                  onChange={(e) => {
-                    const page = parseInt(e.target.value);
-                    if (page >= 1 && page <= totalPages) {
-                      setCurrentPage(page);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const page = parseInt(e.currentTarget.value);
-                      if (page >= 1 && page <= totalPages) {
-                        setCurrentPage(page);
-                      } else {
-                        e.currentTarget.value = currentPage.toString();
-                      }
-                    }
-                  }}
-                  className="w-16 px-2 py-1 text-sm text-center border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <span className="text-sm text-slate-600">/ {totalPages}</span>
-              </div>
-            )}
           </div>
         </div>
       )}

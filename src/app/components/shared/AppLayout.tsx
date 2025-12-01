@@ -4,11 +4,12 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { ReactNode, useState, useEffect, useRef } from 'react';
-import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart, Truck, PackageSearch, Users } from 'lucide-react';
+import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart, Truck, PackageSearch, Users, LogOut, User } from 'lucide-react';
 import API_BASE_URL from '../../../../BaseUrl';
 import { MARKETPLACES, LOGISTICS_CARRIERS } from '@/Shared/constant';
 import { LogisticsAuthModal } from './LogisticsAuthModal';
 import { useLogisticsStore } from '@/store/logisticsStore';
+import { useAuthStore } from '@/app/UserAuthentication/store/authStore';
 
 const emailSubItems = [
     { href: '/email/inbox', label: 'Inbox', icon: Inbox },
@@ -33,6 +34,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     const searchParams = useSearchParams();
     const router = useRouter();
     const { getToken } = useLogisticsStore();
+    const { user, logout } = useAuthStore();
     const [isEmailExpanded, setIsEmailExpanded] = useState(true);
     const [isOrdersExpanded, setIsOrdersExpanded] = useState(false);
     const [isLogisticsExpanded, setIsLogisticsExpanded] = useState(false);
@@ -42,6 +44,12 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     const ordersDropdownRef = useRef<HTMLDivElement>(null);
     const logisticsDropdownRef = useRef<HTMLDivElement>(null);
     const processedOrdersDropdownRef = useRef<HTMLDivElement>(null);
+
+    const handleLogout = () => {
+        logout();
+        router.push('/UserAuthentication/dashboard');
+        router.refresh();
+    };
 
     // Auto-expand Email section if on inbox, sent, or compose page
     useEffect(() => {
@@ -71,24 +79,37 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         }
     }, [pathname]);
 
-    // Close orders dropdown when clicking outside
+    // Close orders dropdown when clicking outside or when navigating
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (ordersDropdownRef.current && !ordersDropdownRef.current.contains(event.target as Node)) {
+            const target = event.target as HTMLElement;
+            // Check if click is on a link or inside a link
+            const isLink = target.closest('a[href]');
+            
+            // If clicking on a link, allow navigation to proceed but close dropdowns
+            if (isLink) {
+                if (isOrdersExpanded) setIsOrdersExpanded(false);
+                if (isLogisticsExpanded) setIsLogisticsExpanded(false);
+                if (isProcessedOrdersExpanded) setIsProcessedOrdersExpanded(false);
+                return; // Don't prevent link navigation
+            }
+            
+            // For non-link clicks, close dropdowns if clicking outside
+            if (ordersDropdownRef.current && !ordersDropdownRef.current.contains(target)) {
                 setIsOrdersExpanded(false);
             }
-            if (logisticsDropdownRef.current && !logisticsDropdownRef.current.contains(event.target as Node)) {
+            if (logisticsDropdownRef.current && !logisticsDropdownRef.current.contains(target)) {
                 setIsLogisticsExpanded(false);
             }
-            if (processedOrdersDropdownRef.current && !processedOrdersDropdownRef.current.contains(event.target as Node)) {
+            if (processedOrdersDropdownRef.current && !processedOrdersDropdownRef.current.contains(target)) {
                 setIsProcessedOrdersExpanded(false);
             }
         };
 
         if (isOrdersExpanded || isLogisticsExpanded || isProcessedOrdersExpanded) {
-            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('click', handleClickOutside);
             return () => {
-                document.removeEventListener('mousedown', handleClickOutside);
+                document.removeEventListener('click', handleClickOutside);
             };
         }
     }, [isOrdersExpanded, isLogisticsExpanded, isProcessedOrdersExpanded]);
@@ -107,15 +128,30 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                 <div className="flex-1 overflow-y-auto">
                     <div className="p-6">
                         {/* Header */}
-                        <div className="mb-8 pb-6 border-b border-slate-200 flex justify-center">
-                            <Image
-                                src="/logo.png"
-                                alt="Order Processing Tool"
-                                width={120}
-                                height={30}
-                                className="h-auto w-auto object-contain"
-                                priority
-                            />
+                        <div className="mb-6 pb-6 border-b border-slate-200">
+                            <div className="flex justify-center mb-4">
+                                <Image
+                                    src="/logo.png"
+                                    alt="Order Processing Tool"
+                                    width={120}
+                                    height={30}
+                                    className="h-auto w-auto object-contain"
+                                    priority
+                                />
+                            </div>
+                            
+                            {/* User Info */}
+                            {user && (
+                                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200">
+                                    <div className="bg-blue-100 rounded-full p-1.5">
+                                        <User size={14} className="text-blue-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium text-slate-800 truncate">{user.name}</p>
+                                        <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* OVERVIEW Section */}
@@ -299,7 +335,15 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
 
                                 {/* Processed Orders Section */}
                                 <div ref={processedOrdersDropdownRef}>
-                                    <Link href="/ProcessedOrders">
+                                    <Link 
+                                        href="/ProcessedOrders"
+                                        onClick={() => {
+                                            // Close all dropdowns when navigating
+                                            setIsOrdersExpanded(false);
+                                            setIsLogisticsExpanded(false);
+                                            setIsProcessedOrdersExpanded(false);
+                                        }}
+                                    >
                                         <div
                                             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
                                                 hasActiveProcessedOrdersItem
@@ -318,7 +362,15 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
 
                                 {/* Customer Details Section */}
                                 <div>
-                                    <Link href="/CustomerDetails">
+                                    <Link 
+                                        href="/CustomerDetails"
+                                        onClick={() => {
+                                            // Close all dropdowns when navigating
+                                            setIsOrdersExpanded(false);
+                                            setIsLogisticsExpanded(false);
+                                            setIsProcessedOrdersExpanded(false);
+                                        }}
+                                    >
                                         <div
                                             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
                                                 hasActiveCustomerDetailsItem
@@ -339,8 +391,9 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                     </div>
                 </div>
 
-                {/* Refresh Token Button at Bottom */}
-                <div className="border-t border-slate-200 p-6">
+                {/* Actions at Bottom */}
+                <div className="border-t border-slate-200 p-6 space-y-3">
+                    {/* Refresh Token Button */}
                     <div className="relative group">
                         <a
                             href={refreshItem.href}
@@ -382,6 +435,15 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                             Refresh token lasts 5 days - use only when needed
                         </span>
                     </div>
+
+                    {/* Logout Button */}
+                    <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-700 hover:bg-red-50 hover:text-red-700 transition-colors"
+                    >
+                        <LogOut size={18} className="text-slate-400" />
+                        <span className="text-sm font-medium">Logout</span>
+                    </button>
                 </div>
             </aside>
 

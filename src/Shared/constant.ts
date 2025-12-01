@@ -193,3 +193,140 @@ export const ESTES_BOL_AUTOFILL_DATA = {
   }
 } as const;
 
+export type User = {
+  id: string;
+  username: string;
+  password: string;
+  email: string;
+  name: string;
+};
+
+/**
+ * Parse allowed users from environment variable
+ * Returns empty array if env variable is not set or invalid
+ */
+const parseAllowedUsers = (): User[] => {
+  const envUsers = process.env.NEXT_PUBLIC_ALLOWED_USERS;
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  
+  // Check if env variable exists and is not the string "undefined"
+  if (!envUsers || envUsers === 'undefined' || envUsers === 'null') {
+    if (isDevelopment) {
+      console.error('⚠️ NEXT_PUBLIC_ALLOWED_USERS environment variable is not set.');
+      console.error('💡 Create a .env.local file in the OrderProcessingToolFrontend folder with:');
+      console.error('   NEXT_PUBLIC_ALLOWED_USERS=[{"id":"1","username":"user","password":"pass","email":"email@example.com","name":"Name"}]');
+      console.error('💡 Then restart your dev server (npm run dev)');
+    }
+    return [];
+  }
+  
+  // Trim whitespace from the environment variable
+  let trimmedEnvUsers = envUsers.trim();
+  
+  if (!trimmedEnvUsers || trimmedEnvUsers === 'undefined' || trimmedEnvUsers === 'null') {
+    if (isDevelopment) {
+      console.error('⚠️ NEXT_PUBLIC_ALLOWED_USERS environment variable is empty after trimming.');
+    }
+    return [];
+  }
+  
+  // Remove surrounding quotes if present (common issue with env vars)
+  if (
+    (trimmedEnvUsers.startsWith('"') && trimmedEnvUsers.endsWith('"')) ||
+    (trimmedEnvUsers.startsWith("'") && trimmedEnvUsers.endsWith("'"))
+  ) {
+    trimmedEnvUsers = trimmedEnvUsers.slice(1, -1);
+  }
+  
+  try {
+    const parsed = JSON.parse(trimmedEnvUsers);
+    
+    // Validate that it's an array
+    if (!Array.isArray(parsed)) {
+      if (isDevelopment) {
+        console.error('NEXT_PUBLIC_ALLOWED_USERS must be a JSON array.');
+      }
+      return [];
+    }
+    
+    if (parsed.length === 0) {
+      if (isDevelopment) {
+        console.error('NEXT_PUBLIC_ALLOWED_USERS array is empty. No users will be allowed to login.');
+      }
+      return [];
+    }
+    
+    // Validate each user has required fields
+    const isValid = parsed.every(
+      (user: any) =>
+        user.id &&
+        user.username &&
+        user.password &&
+        user.email &&
+        user.name
+    );
+    
+    if (!isValid) {
+      if (isDevelopment) {
+        console.error('Invalid user format in NEXT_PUBLIC_ALLOWED_USERS. Each user must have: id, username, password, email, name.');
+      }
+      return [];
+    }
+    
+    // Decode URL-encoded passwords if present (for special characters like #, !, @)
+    const decodedUsers = parsed.map((user: any) => {
+      if (user.password && user.password.includes('%')) {
+        try {
+          user.password = decodeURIComponent(user.password);
+        } catch (e) {
+          // If decoding fails, keep original password
+        }
+      }
+      return user;
+    });
+    
+    if (isDevelopment) {
+      console.log(`✅ Successfully loaded ${decodedUsers.length} user(s) from NEXT_PUBLIC_ALLOWED_USERS`);
+      // Log usernames for reference (not passwords for security)
+      console.log('📋 Available usernames:', decodedUsers.map((u: User) => u.username).join(', '));
+    }
+    return decodedUsers as User[];
+  } catch (error) {
+    // Log the actual value first (only in development)
+    if (isDevelopment) {
+      console.error('❌ ========== JSON Parse Error ==========');
+      console.error('Raw env value:', envUsers);
+      console.error('Trimmed value:', trimmedEnvUsers);
+      console.error('Value length:', trimmedEnvUsers.length);
+      console.error('First 500 chars:', trimmedEnvUsers.substring(0, 500));
+      
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorDetails = error instanceof Error ? {
+        name: error.name,
+        message: error.message,
+        stack: error.stack?.substring(0, 200)
+      } : { error: String(error) };
+      
+      console.error('Error details:', errorDetails);
+      console.error('💡 Expected format: [{"id":"1","username":"user","password":"pass","email":"email@example.com","name":"Name"}]');
+      console.error('💡 Make sure your .env.local file has the variable set correctly');
+      console.error('💡 Restart your dev server after changing .env.local');
+      console.error('==========================================');
+    }
+    return [];
+  }
+};
+
+// Safely parse allowed users, with fallback to empty array if parsing fails
+let ALLOWED_USERS: User[] = [];
+try {
+  ALLOWED_USERS = parseAllowedUsers();
+} catch (error) {
+  if (process.env.NODE_ENV === 'development') {
+    console.error('❌ Critical error parsing ALLOWED_USERS. App will continue but authentication may not work:', error);
+  }
+  ALLOWED_USERS = [];
+}
+
+export { ALLOWED_USERS };
+
