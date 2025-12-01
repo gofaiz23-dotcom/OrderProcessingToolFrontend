@@ -28,10 +28,11 @@ export type GetAllLogisticsShippedOrdersResponse = {
 
 /**
  * Get logistics shipped order by ID
+ * Returns null if order is not found (404)
  */
 export const getLogisticsShippedOrderById = async (
   id: number,
-): Promise<GetLogisticsShippedOrderResponse> => {
+): Promise<GetLogisticsShippedOrderResponse | null> => {
   const response = await fetch(buildApiUrl(`/Logistics/shipped-orders/${id}`), {
     method: 'GET',
     headers: {
@@ -39,6 +40,11 @@ export const getLogisticsShippedOrderById = async (
     },
     cache: 'no-store',
   });
+
+  // Handle 404 (not found) gracefully - return null instead of throwing
+  if (response.status === 404) {
+    return null;
+  }
 
   if (!response.ok) {
     await handleApiError(response);

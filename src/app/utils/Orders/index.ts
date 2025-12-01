@@ -4,17 +4,20 @@ import {
   createMultipleOrders,
   updateOrder,
   deleteOrder,
+  type GetAllOrdersQueryOptions,
 } from '@/app/api/OrderApi';
-import type { Order, CreateOrderPayload, UpdateOrderPayload } from '@/app/types/order';
+import type { Order, CreateOrderPayload, UpdateOrderPayload, GetAllOrdersResponse, PaginationMeta } from '@/app/types/order';
 
 /**
- * Load all orders from the API
+ * Load orders from the API with pagination support
  */
-export const loadOrders = async (): Promise<Order[]> => {
-  const response = await getAllOrders();
+export const loadOrders = async (
+  options: GetAllOrdersQueryOptions = {}
+): Promise<{ orders: Order[]; pagination: PaginationMeta }> => {
+  const response: GetAllOrdersResponse = await getAllOrders(options);
   
   // Normalize jsonb - Prisma JSON type should already be parsed, but handle string case
-  return response.orders.map((order) => {
+  const normalizedOrders = response.orders.map((order) => {
     let normalizedJsonb: Order['jsonb'] = order.jsonb;
     
     // Ensure jsonb is properly parsed if it's a string (shouldn't happen with Prisma, but safe)
@@ -28,6 +31,11 @@ export const loadOrders = async (): Promise<Order[]> => {
       jsonb: normalizedJsonb,
     };
   });
+  
+  return {
+    orders: normalizedOrders,
+    pagination: response.pagination,
+  };
 };
 
 /**

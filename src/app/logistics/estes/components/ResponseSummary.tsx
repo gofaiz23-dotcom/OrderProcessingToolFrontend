@@ -69,12 +69,6 @@ export const ResponseSummary = ({
     URL.revokeObjectURL(url);
   };
 
-  // Create object URLs for PDF previews and clean them up
-  const fileUrls = useMemo(() => {
-    if (!files || files.length === 0) return [];
-    return files.map(file => URL.createObjectURL(file));
-  }, [files]);
-
   // Update files when initialFiles prop changes
   useEffect(() => {
     if (initialFiles) {
@@ -82,12 +76,14 @@ export const ResponseSummary = ({
     }
   }, [initialFiles]);
 
-  // Cleanup object URLs on unmount or when files change
+  // Cleanup: Revoke object URL when component unmounts or when selectedPdfUrl changes
   useEffect(() => {
     return () => {
-      fileUrls.forEach(url => URL.revokeObjectURL(url));
+      if (selectedPdfUrl && selectedPdfUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(selectedPdfUrl);
+      }
     };
-  }, [fileUrls]);
+  }, [selectedPdfUrl]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = event.target.files;
@@ -126,9 +122,45 @@ export const ResponseSummary = ({
     setShowSuccessToast(false);
 
     try {
+      // Extract sku and orderOnMarketPlace from orderData or ordersJsonb
+      let sku = orderData?.sku || '';
+      let orderOnMarketPlace = orderData?.orderOnMarketPlace || '';
+      
+      // If not in orderData, try to extract from ordersJsonb
+      if (!sku || !orderOnMarketPlace) {
+        const ordersJsonb = orderData?.ordersJsonb || {};
+        
+        // Try different possible field names for SKU
+        if (!sku) {
+          sku = (ordersJsonb as any)?.SKU || 
+                (ordersJsonb as any)?.sku || 
+                (ordersJsonb as any)?.Sku ||
+                (ordersJsonb as any)?.orderId ||
+                '';
+        }
+        
+        // Try different possible field names for marketplace
+        if (!orderOnMarketPlace) {
+          orderOnMarketPlace = (ordersJsonb as any)?.orderOnMarketPlace ||
+                               (ordersJsonb as any)?.marketplace ||
+                               (ordersJsonb as any)?.Marketplace ||
+                               (ordersJsonb as any)?.marketPlace ||
+                               '';
+        }
+      }
+      
+      // Validate required fields
+      if (!sku || sku.trim() === '') {
+        throw new Error('SKU is required. Please ensure the order data contains a SKU.');
+      }
+      
+      if (!orderOnMarketPlace || orderOnMarketPlace.trim() === '') {
+        throw new Error('Order Marketplace is required. Please ensure the order data contains a marketplace.');
+      }
+
       const payload = {
-        sku: orderData?.sku || '',
-        orderOnMarketPlace: orderData?.orderOnMarketPlace || '',
+        sku: sku.trim(),
+        orderOnMarketPlace: orderOnMarketPlace.trim(),
         ordersJsonb: orderData?.ordersJsonb || {},
         rateQuotesResponseJsonb: rateQuotesResponseJsonb,
         bolResponseJsonb: bolResponseJsonb,
@@ -179,6 +211,29 @@ export const ResponseSummary = ({
             <p className="text-sm text-slate-600">Complete shipment information</p>
           </div>
         </div>
+
+        {/* Warning if required fields are missing */}
+        {(!orderData?.sku || !orderData?.orderOnMarketPlace) && (
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <div className="flex items-start gap-2">
+              <FileText className="text-amber-600 mt-0.5" size={20} />
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold text-amber-900 mb-1">Missing Required Information</h3>
+                <p className="text-sm text-amber-800">
+                  {!orderData?.sku && !orderData?.orderOnMarketPlace && (
+                    <>SKU and Marketplace are required to submit. Please ensure order data is loaded.</>
+                  )}
+                  {!orderData?.sku && orderData?.orderOnMarketPlace && (
+                    <>SKU is required to submit. Please ensure the order data contains a SKU.</>
+                  )}
+                  {orderData?.sku && !orderData?.orderOnMarketPlace && (
+                    <>Marketplace is required to submit. Please ensure the order data contains a marketplace.</>
+                  )}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Order Information */}
         <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
@@ -444,7 +499,6 @@ export const ResponseSummary = ({
                 <div className="space-y-4">
                   {files.map((file, index) => {
                     const isPDF = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
-                    const fileUrl = fileUrls[index];
                     
                     return (
                       <div key={index} className="space-y-3">
@@ -459,11 +513,13 @@ export const ResponseSummary = ({
                                   {(file.size / 1024).toFixed(2)} KB
                                 </p>
                               </div>
-                              {isPDF && fileUrl && (
+                              {isPDF && (
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    setSelectedPdfUrl(fileUrl);
+                                    // Create a fresh object URL when opening the preview
+                                    const url = URL.createObjectURL(file);
+                                    setSelectedPdfUrl(url);
                                     setSelectedPdfName(file.name);
                                   }}
                                   className="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -527,24 +583,54 @@ export const ResponseSummary = ({
             
             {/* Submit Button */}
             <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={isSubmitting}
-                className="flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" />
-                    Submit
-                  </>
-                )}
-              </button>
+              {(() => {
+                // Check if required fields are available
+                let sku = orderData?.sku || '';
+                let orderOnMarketPlace = orderData?.orderOnMarketPlace || '';
+                
+                // Try to extract from ordersJsonb if not in orderData
+                if (!sku || !orderOnMarketPlace) {
+                  const ordersJsonb = orderData?.ordersJsonb || {};
+                  if (!sku) {
+                    sku = (ordersJsonb as any)?.SKU || 
+                          (ordersJsonb as any)?.sku || 
+                          (ordersJsonb as any)?.Sku ||
+                          (ordersJsonb as any)?.orderId ||
+                          '';
+                  }
+                  if (!orderOnMarketPlace) {
+                    orderOnMarketPlace = (ordersJsonb as any)?.orderOnMarketPlace ||
+                                         (ordersJsonb as any)?.marketplace ||
+                                         (ordersJsonb as any)?.Marketplace ||
+                                         (ordersJsonb as any)?.marketPlace ||
+                                         '';
+                  }
+                }
+                
+                const hasRequiredFields = sku.trim() !== '' && orderOnMarketPlace.trim() !== '';
+                
+                return (
+                  <button
+                    type="button"
+                    onClick={handleSubmit}
+                    disabled={isSubmitting || !hasRequiredFields}
+                    className="flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
+                    title={!hasRequiredFields ? 'SKU and Marketplace are required to submit' : ''}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4" />
+                        Submit
+                      </>
+                    )}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -560,6 +646,10 @@ export const ResponseSummary = ({
               <button
                 type="button"
                 onClick={() => {
+                  // Revoke the object URL when closing the modal
+                  if (selectedPdfUrl) {
+                    URL.revokeObjectURL(selectedPdfUrl);
+                  }
                   setSelectedPdfUrl(null);
                   setSelectedPdfName('');
                 }}
@@ -572,11 +662,20 @@ export const ResponseSummary = ({
             
             {/* PDF Preview */}
             <div className="flex-1 overflow-hidden">
-              <iframe
-                src={selectedPdfUrl}
-                className="w-full h-full border-0"
-                title={`PDF Preview - ${selectedPdfName}`}
-              />
+              {selectedPdfUrl ? (
+                <iframe
+                  src={`${selectedPdfUrl}#view=FitH&zoom=page-width&toolbar=1&navpanes=1&scrollbar=1`}
+                  className="w-full h-full border-0"
+                  title={`PDF Preview - ${selectedPdfName}`}
+                  onError={() => {
+                    console.error('Failed to load PDF in iframe');
+                  }}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-full">
+                  <p className="text-slate-500">Failed to load PDF preview</p>
+                </div>
+              )}
             </div>
           </div>
         </div>

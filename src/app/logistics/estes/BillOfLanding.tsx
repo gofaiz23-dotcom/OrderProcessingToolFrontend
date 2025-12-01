@@ -1033,7 +1033,6 @@ export const BillOfLanding = ({
 
     try {
       const requestBody = buildRequestBody();
-      console.log('Submitting BOL Request:', JSON.stringify(requestBody, null, 2));
 
       const res = await fetch(buildApiUrl('/Logistics/create-bill-of-lading'), {
         method: 'POST',
@@ -1045,10 +1044,10 @@ export const BillOfLanding = ({
       });
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ message: res.statusText }));
-        console.error('BOL Request Body:', JSON.stringify(requestBody, null, 2));
-        console.error('API Error Response:', errorData);
-        throw new Error(errorData.message || errorData.error?.message || `BOL creation failed: ${res.statusText}`);
+        // Don't log errors to console, just show user-friendly message
+        setError('You filled wrong info and all. Please check your form data and try again.');
+        setLoading(false);
+        return;
       }
 
       const data = await res.json();
@@ -1060,7 +1059,7 @@ export const BillOfLanding = ({
         window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
       }, 100);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create Bill of Lading');
+      setError('You filled wrong info and all. Please check your form data and try again.');
     } finally {
       setLoading(false);
     }

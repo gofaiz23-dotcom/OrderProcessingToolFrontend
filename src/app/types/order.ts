@@ -43,11 +43,24 @@ export type CreateMultipleOrdersResponse = {
 };
 
 /**
- * Response for getting all orders
+ * Pagination metadata returned by backend
+ */
+export type PaginationMeta = {
+  page: number;
+  limit: number;
+  totalCount: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
+};
+
+/**
+ * Response for getting all orders with pagination
  */
 export type GetAllOrdersResponse = {
-  count: number;
+  success: boolean;
   orders: Order[];
+  pagination: PaginationMeta;
 };
 
 /**

@@ -180,21 +180,35 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           // Check if orderId is in URL params
           const orderIdParam = searchParams?.get('orderId');
           
+          let orderFound = false;
+          
           if (orderIdParam) {
             // Fetch specific order by ID
             const orderId = parseInt(orderIdParam, 10);
             if (!isNaN(orderId)) {
               setCurrentOrderId(orderId);
-              const response = await getLogisticsShippedOrderById(orderId);
-              if (response.data) {
-                setOrderData({
-                  sku: response.data.sku,
-                  orderOnMarketPlace: response.data.orderOnMarketPlace,
-                  ordersJsonb: response.data.ordersJsonb as Record<string, unknown>,
-                });
+              try {
+                const response = await getLogisticsShippedOrderById(orderId);
+                if (response && response.data) {
+                  setOrderData({
+                    sku: response.data.sku,
+                    orderOnMarketPlace: response.data.orderOnMarketPlace,
+                    ordersJsonb: response.data.ordersJsonb as Record<string, unknown>,
+                  });
+                  orderFound = true;
+                } else {
+                  // Order not found - fall back to sessionStorage or most recent order
+                  console.warn(`Order with ID ${orderId} not found, falling back to sessionStorage or most recent order`);
+                }
+              } catch (error) {
+                // Handle any other errors gracefully
+                console.warn(`Error fetching order ${orderId}:`, error);
               }
             }
-          } else {
+          }
+          
+          // If orderIdParam was not provided, or order was not found, try other sources
+          if (!orderFound) {
             // Try sessionStorage first
             const storedOrder = sessionStorage.getItem('selectedOrderForLogistics');
             if (storedOrder) {
@@ -209,6 +223,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                     orderOnMarketPlace: parsed.orderOnMarketPlace,
                     ordersJsonb: parsed.jsonb,
                   });
+                  orderFound = true;
                   setLoadingOrderData(false);
                   return;
                 }
@@ -218,14 +233,21 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
             }
             
             // Fallback: Fetch the most recent order
-            const response = await getAllLogisticsShippedOrders();
-            if (response.data && response.data.length > 0) {
-              const mostRecentOrder = response.data[0]; // Orders are sorted by createdAt desc
-              setOrderData({
-                sku: mostRecentOrder.sku,
-                orderOnMarketPlace: mostRecentOrder.orderOnMarketPlace,
-                ordersJsonb: mostRecentOrder.ordersJsonb as Record<string, unknown>,
-              });
+            if (!orderFound) {
+              try {
+                const response = await getAllLogisticsShippedOrders();
+                if (response.data && response.data.length > 0) {
+                  const mostRecentOrder = response.data[0]; // Orders are sorted by createdAt desc
+                  setOrderData({
+                    sku: mostRecentOrder.sku,
+                    orderOnMarketPlace: mostRecentOrder.orderOnMarketPlace,
+                    ordersJsonb: mostRecentOrder.ordersJsonb as Record<string, unknown>,
+                  });
+                  orderFound = true;
+                }
+              } catch (error) {
+                console.warn('Failed to fetch most recent order:', error);
+              }
             }
           }
         } catch (error) {
@@ -530,6 +552,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     const currentToken = getToken(carrier) || storedToken;
     if (!currentToken) {
       // No token, show login modal
+      // IMPORTANT: Form data is preserved - all state variables remain unchanged
       setIsAuthModalOpen(true);
       return;
     }
@@ -540,6 +563,23 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
 
     try {
       const requestBody = buildRequestBody();
+      
+      // Validate required fields before sending
+      if (!requestBody.payment?.account) {
+        throw new Error('Account number is required');
+      }
+      if (!requestBody.origin?.address?.postalCode && !requestBody.origin?.address?.city) {
+        throw new Error('Origin address (city or postal code) is required');
+      }
+      if (!requestBody.destination?.address?.postalCode && !requestBody.destination?.address?.city) {
+        throw new Error('Destination address (city or postal code) is required');
+      }
+      if (!requestBody.commodity?.handlingUnits || requestBody.commodity.handlingUnits.length === 0) {
+        throw new Error('At least one handling unit is required');
+      }
+      
+      // Log request for debugging (remove in production)
+      console.log('Rate Quote Request:', JSON.stringify(requestBody, null, 2));
 
       const res = await fetch(buildApiUrl('/Logistics/create-rate-quote'), {
         method: 'POST',
@@ -554,13 +594,45 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         // Check if token is expired (401 Unauthorized)
         if (res.status === 401) {
           // Token expired, show login modal
+          // IMPORTANT: Form data is preserved - all state variables remain unchanged
           setIsAuthModalOpen(true);
           setError(new Error('Your session has expired. Please login again.'));
+          setLoading(false); // Reset loading state since we're not proceeding
           return;
         }
         
-        const errorData = await res.json().catch(() => ({ message: res.statusText }));
-        throw new Error(errorData.message || `Rate quote creation failed: ${res.statusText}`);
+        // Try to get detailed error message
+        let errorMessage = `Rate quote creation failed: ${res.statusText}`;
+        try {
+          const errorData = await res.json();
+          // Handle different error response formats
+          if (errorData.message) {
+            errorMessage = errorData.message;
+          } else if (errorData.error) {
+            errorMessage = typeof errorData.error === 'string' 
+              ? errorData.error 
+              : errorData.error.message || errorMessage;
+          } else if (errorData.data?.message) {
+            errorMessage = errorData.data.message;
+          }
+          
+          // Include validation errors if present
+          if (errorData.errors && Array.isArray(errorData.errors)) {
+            errorMessage += `\nValidation errors: ${errorData.errors.join(', ')}`;
+          } else if (errorData.errors && typeof errorData.errors === 'object') {
+            const validationErrors = Object.entries(errorData.errors)
+              .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+              .join('; ');
+            if (validationErrors) {
+              errorMessage += `\nValidation errors: ${validationErrors}`;
+            }
+          }
+        } catch (parseError) {
+          // If JSON parsing fails, use status text
+          console.error('Failed to parse error response:', parseError);
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const data = await res.json();
@@ -583,6 +655,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         err.message.includes('expired') ||
         err.message.includes('invalid token')
       )) {
+        // IMPORTANT: Form data is preserved - all state variables remain unchanged
         setIsAuthModalOpen(true);
       }
       setError(err);
@@ -1269,6 +1342,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           if (updatedToken) {
             setStoredToken(updatedToken);
             setError(null);
+            // Form data is preserved - user can now click "GET QUOTE" again
           }
         }}
         carrier={carrier}

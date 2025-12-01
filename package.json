@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "build:prod": "NODE_ENV=production next build",
+    "analyze": "ANALYZE=true next build"
   },
   "dependencies": {
     "@tiptap/extension-link": "^3.11.0",

@@ -32,9 +32,39 @@ export type CreateShippedOrderPayload = {
 
 export type UpdateShippedOrderPayload = Partial<CreateShippedOrderPayload>;
 
-// GET - Get all shipped orders
-export const getAllShippedOrders = async (): Promise<ShippedOrder[]> => {
-  const res = await fetch(buildApiUrl('/Logistics/shipped-orders'), {
+export type GetAllShippedOrdersOptions = {
+  page?: number;
+  limit?: number;
+  search?: string;
+};
+
+export type GetAllShippedOrdersResponse = {
+  orders: ShippedOrder[];
+  pagination: {
+    page: number;
+    limit: number;
+    totalCount: number;
+    totalPages: number;
+    hasNextPage: boolean;
+    hasPreviousPage: boolean;
+  };
+};
+
+// GET - Get all shipped orders with pagination and search support
+export const getAllShippedOrders = async (
+  options: GetAllShippedOrdersOptions = {}
+): Promise<GetAllShippedOrdersResponse> => {
+  const { page = 1, limit = 50, search } = options;
+  
+  const endpoint = new URL(buildApiUrl('/Logistics/shipped-orders'));
+  endpoint.searchParams.set('page', String(page));
+  endpoint.searchParams.set('limit', String(Math.min(Math.max(limit, 1), 100))); // Clamp between 1-100
+  
+  if (search && search.trim()) {
+    endpoint.searchParams.set('search', search.trim());
+  }
+
+  const res = await fetch(endpoint.toString(), {
     method: 'GET',
     headers: {
       'Content-Type': 'application/json',
@@ -47,7 +77,23 @@ export const getAllShippedOrders = async (): Promise<ShippedOrder[]> => {
   }
 
   const data = await res.json();
-  return data.orders || [];
+  
+  // Handle both old format (array) and new format (with pagination)
+  if (Array.isArray(data.orders)) {
+    return {
+      orders: data.orders,
+      pagination: data.pagination || {
+        page: 1,
+        limit: data.orders.length,
+        totalCount: data.orders.length,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPreviousPage: false,
+      },
+    };
+  }
+  
+  return data;
 };
 
 // GET - Get shipped order by ID
