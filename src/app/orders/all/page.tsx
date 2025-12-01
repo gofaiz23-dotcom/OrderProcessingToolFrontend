@@ -424,11 +424,11 @@ function AllOrdersPageContent() {
   return (
     <div className="flex h-full flex-col">
       {hasGlobalError && (
-        <div className="p-4 border-b border-red-200 bg-red-50 rounded-lg mb-4">
+        <div className="p-2 sm:p-4 border-b border-red-200 bg-red-50 rounded-none sm:rounded-lg mb-2 sm:mb-4">
           <ErrorDisplay error={error || importError} />
           <button
             onClick={() => fetchOrders()}
-            className="mt-2 text-sm text-red-700 hover:text-red-900 underline"
+            className="mt-2 text-xs sm:text-sm text-red-700 hover:text-red-900 underline"
           >
             Retry loading orders
           </button>
@@ -436,13 +436,13 @@ function AllOrdersPageContent() {
       )}
 
       {importLoading && (
-        <div className="p-4 border-b border-blue-200 bg-blue-50 rounded-lg mb-4 flex items-center gap-3">
-          <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
-          <p className="text-sm text-blue-800">Importing orders from file...</p>
+        <div className="p-2 sm:p-4 border-b border-blue-200 bg-blue-50 rounded-none sm:rounded-lg mb-2 sm:mb-4 flex items-center gap-2 sm:gap-3">
+          <Loader2 className="h-4 w-4 sm:h-5 sm:w-5 animate-spin text-blue-600" />
+          <p className="text-xs sm:text-sm text-blue-800">Importing orders from file...</p>
         </div>
       )}
 
-      <div className="flex-1 overflow-hidden min-h-0">
+      <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
         {loading && orders.length === 0 ? (
           <div className="flex h-full items-center justify-center bg-white">
             <Loader2 className="h-8 w-8 animate-spin text-slate-400" />

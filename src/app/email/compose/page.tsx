@@ -778,28 +778,28 @@ const ComposeEmailForm = () => {
   return (
     <form onSubmit={handleSubmit} className="flex h-full flex-col">
       {/* Scrollable content area */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-6 px-6 pb-4">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden space-y-4 sm:space-y-6 px-3 sm:px-6 pb-4">
         {/* Recipients Field (To, Cc, Bcc) */}
         <div className="relative">
-          <label className="mb-2 block text-sm font-medium text-slate-900">
+          <label className="mb-2 block text-xs sm:text-sm font-medium text-slate-900">
             To
           </label>
           
           <div className="w-full rounded-md border border-slate-300 bg-white overflow-hidden focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200">
             {/* To Field */}
-            <div className="px-3 py-2 text-sm text-slate-900 min-h-[42px] flex flex-wrap gap-2 items-center border-b border-slate-200">
-              <span className="text-xs font-medium text-slate-500 min-w-[40px]">To:</span>
-              <div className="flex-1 flex flex-wrap gap-2 items-center">
+            <div className="px-2 sm:px-3 py-2 text-xs sm:text-sm text-slate-900 min-h-[42px] flex flex-wrap gap-2 items-center border-b border-slate-200">
+              <span className="text-[10px] sm:text-xs font-medium text-slate-500 min-w-[35px] sm:min-w-[40px]">To:</span>
+              <div className="flex-1 flex flex-wrap gap-2 items-center min-w-0">
                 {form.to.map((email, index) => (
                   <span
                     key={index}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 text-blue-700 px-2.5 py-1 text-xs font-medium border border-blue-200"
+                    className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-blue-50 text-blue-700 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-medium border border-blue-200"
                   >
-                    <span>{email}</span>
+                    <span className="truncate max-w-[120px] sm:max-w-none">{email}</span>
                     <button
                       type="button"
                       onClick={() => removeEmail('to', index)}
-                      className="hover:bg-blue-100 rounded-full p-0.5 transition-colors"
+                      className="hover:bg-blue-100 rounded-full p-0.5 transition-colors flex-shrink-0"
                       aria-label={`Remove ${email}`}
                     >
                       <X className="h-3 w-3" />
@@ -810,7 +810,7 @@ const ComposeEmailForm = () => {
                   ref={emailInputRef}
                   type="text"
                   placeholder={form.to.length === 0 ? "recipient@example.com" : ""}
-                  className="flex-1 min-w-[200px] outline-none bg-transparent placeholder:text-slate-400"
+                  className="flex-1 min-w-[120px] sm:min-w-[200px] outline-none bg-transparent placeholder:text-slate-400 text-xs sm:text-sm"
                   value={emailInput}
                   onChange={handleEmailInputChange}
                   onKeyDown={handleEmailInputKeyDown}
@@ -823,12 +823,12 @@ const ComposeEmailForm = () => {
                   required={form.to.length === 0}
                 />
               </div>
-              <div className="flex items-center gap-3 ml-2">
+              <div className="flex items-center gap-2 sm:gap-3 ml-1 sm:ml-2 flex-shrink-0">
                 {!showCc && (
                   <button
                     type="button"
                     onClick={() => setShowCc(true)}
-                    className="text-xs font-medium text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
+                    className="text-[10px] sm:text-xs font-medium text-slate-600 hover:text-blue-600 transition-colors cursor-pointer px-1 sm:px-0"
                   >
                     Cc
                   </button>
@@ -837,7 +837,7 @@ const ComposeEmailForm = () => {
                   <button
                     type="button"
                     onClick={() => setShowBcc(true)}
-                    className="text-xs font-medium text-slate-600 hover:text-blue-600 transition-colors cursor-pointer"
+                    className="text-[10px] sm:text-xs font-medium text-slate-600 hover:text-blue-600 transition-colors cursor-pointer px-1 sm:px-0"
                   >
                     Bcc
                   </button>
@@ -936,9 +936,9 @@ const ComposeEmailForm = () => {
 
             {/* BCC Field */}
             {(showBcc || form.bcc.length > 0) && (
-              <div className="px-3 py-2 text-sm text-slate-900 min-h-[42px] flex flex-wrap gap-2 items-center bg-slate-50/50">
-                <div className="flex items-center gap-2 min-w-[40px]">
-                  <span className="text-xs font-medium text-slate-500">Bcc:</span>
+              <div className="px-2 sm:px-3 py-2 text-xs sm:text-sm text-slate-900 min-h-[42px] flex flex-wrap gap-2 items-center bg-slate-50/50">
+                <div className="flex items-center gap-2 min-w-[35px] sm:min-w-[40px]">
+                  <span className="text-[10px] sm:text-xs font-medium text-slate-500">Bcc:</span>
                   {(showBcc || form.bcc.length > 0) && (
                     <button
                       type="button"
@@ -956,17 +956,17 @@ const ComposeEmailForm = () => {
                     </button>
                   )}
                 </div>
-              <div className="flex-1 flex flex-wrap gap-2 items-center">
+              <div className="flex-1 flex flex-wrap gap-2 items-center min-w-0">
                 {form.bcc.map((email, index) => (
                   <span
                     key={index}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-700 px-2.5 py-1 text-xs font-medium border border-slate-200"
+                    className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-slate-100 text-slate-700 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-medium border border-slate-200"
                   >
-                    <span>{email}</span>
+                    <span className="truncate max-w-[120px] sm:max-w-none">{email}</span>
                     <button
                       type="button"
                       onClick={() => removeEmail('bcc', index)}
-                      className="hover:bg-slate-200 rounded-full p-0.5 transition-colors"
+                      className="hover:bg-slate-200 rounded-full p-0.5 transition-colors flex-shrink-0"
                       aria-label={`Remove ${email}`}
                     >
                       <X className="h-3 w-3" />
@@ -976,7 +976,7 @@ const ComposeEmailForm = () => {
                 <input
                   type="text"
                   placeholder={form.bcc.length === 0 ? "bcc@example.com" : ""}
-                  className="flex-1 min-w-[200px] outline-none bg-transparent placeholder:text-slate-400"
+                  className="flex-1 min-w-[120px] sm:min-w-[200px] outline-none bg-transparent placeholder:text-slate-400 text-xs sm:text-sm"
                   value={bccInput}
                   onChange={(e) => {
                     const value = e.target.value;
@@ -1070,13 +1070,13 @@ const ComposeEmailForm = () => {
 
         {/* Subject Field */}
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-900">
+          <label className="mb-2 block text-xs sm:text-sm font-medium text-slate-900">
             Subject
           </label>
           <input
             type="text"
             placeholder="Project update"
-            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="w-full rounded-md border border-slate-300 bg-white px-3 py-2.5 sm:py-2 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
             value={form.subject}
             onChange={handleInputChange('subject')}
             required
@@ -1085,13 +1085,13 @@ const ComposeEmailForm = () => {
 
         {/* Rich Text Editor */}
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-900">
+          <label className="mb-2 block text-xs sm:text-sm font-medium text-slate-900">
             Body
           </label>
           <div className="rounded-md border border-slate-300 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200 overflow-hidden">
             {/* Toolbar */}
             {editor && (
-              <div className="flex items-center gap-1 border-b border-slate-200 bg-slate-50 px-2 py-1.5">
+              <div className="flex items-center gap-1 border-b border-slate-200 bg-slate-50 px-2 py-1.5 overflow-x-auto">
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleBold().run()}
@@ -1177,11 +1177,11 @@ const ComposeEmailForm = () => {
 
         {/* Attachments */}
         <div>
-          <label className="mb-2 block text-sm font-medium text-slate-900">
+          <label className="mb-2 block text-xs sm:text-sm font-medium text-slate-900">
             Attachments
           </label>
           <div className="space-y-3">
-            <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-6 transition-colors hover:border-blue-400 hover:bg-blue-50/50">
+            <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 px-3 sm:px-4 py-4 sm:py-6 transition-colors hover:border-blue-400 hover:bg-blue-50/50">
               <input
                 type="file"
                 multiple
@@ -1199,7 +1199,7 @@ const ComposeEmailForm = () => {
             </label>
 
             {form.attachments.length > 0 && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
                 {form.attachments.map((file, index) => (
                   <AttachmentPreview
                     key={index}
@@ -1317,9 +1317,9 @@ const ComposeEmailForm = () => {
 export const ComposeEmailView = () => (
   <div className="flex h-full flex-col bg-white overflow-hidden">
     {/* Header */}
-    <header className="flex-shrink-0 border-b border-slate-200 bg-white px-6 py-4">
-      <h1 className="text-xl font-semibold text-slate-900">Compose Email</h1>
-      <p className="mt-1 text-sm text-slate-600">
+    <header className="flex-shrink-0 border-b border-slate-200 bg-white px-3 sm:px-6 py-3 sm:py-4">
+      <h1 className="text-lg sm:text-xl font-semibold text-slate-900">Compose Email</h1>
+      <p className="mt-1 text-xs sm:text-sm text-slate-600">
         Draft a new email, attach files, and send through the connected Gmail account.
       </p>
     </header>

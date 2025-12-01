@@ -62,13 +62,13 @@ export const DateFilter = memo(
       <div className="flex flex-col gap-1 relative" ref={dateDropdownRef}>
         <span className="text-xs font-medium text-slate-900">Date</span>
         {dateFilter === 'custom' ? (
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <div className="flex flex-col gap-1">
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => onStartDateChange(e.target.value)}
-                className="w-32 rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full sm:w-32 rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 placeholder="Start Date"
               />
             </div>
@@ -77,7 +77,7 @@ export const DateFilter = memo(
                 type="date"
                 value={endDate}
                 onChange={(e) => onEndDateChange(e.target.value)}
-                className="w-32 rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full sm:w-32 rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 placeholder="End Date"
               />
             </div>
@@ -90,12 +90,12 @@ export const DateFilter = memo(
             </button>
           </div>
         ) : dateFilter === 'specificDate' ? (
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="date"
               value={startDate}
               onChange={(e) => onStartDateChange(e.target.value)}
-              className="w-32 rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              className="w-full sm:w-32 rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
             />
             <button
               type="button"
@@ -109,7 +109,7 @@ export const DateFilter = memo(
           <button
             type="button"
             onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
-            className="w-36 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-left text-sm text-slate-900 hover:bg-slate-50 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            className="w-full sm:w-36 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-left text-sm text-slate-900 hover:bg-slate-50 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
           >
             {getDateFilterLabel()}
             <span className="float-right mt-0.5">▼</span>

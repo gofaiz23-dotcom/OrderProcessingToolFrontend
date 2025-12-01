@@ -14,15 +14,17 @@ function LogisticsPageContent() {
   const storedToken = getToken(selectedCarrier);
 
   return (
-    <div className="flex h-full flex-col">
-      <h1 className="text-3xl font-bold text-slate-900 mb-6">Logistics - {selectedCarrier}</h1>
+    <div className="flex h-full flex-col p-0 sm:p-4 lg:p-6">
+      <div className="px-3 pt-3 pb-2 sm:px-0 sm:pt-0 sm:pb-0 flex-shrink-0 border-b border-slate-200 sm:border-0 mb-3 sm:mb-6">
+        <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-slate-900">Logistics - {selectedCarrier}</h1>
+      </div>
       
       {/* Simple Tab Navigation */}
-      <div className="border-b border-slate-200 mb-6">
+      <div className="border-b border-slate-200 mb-3 sm:mb-6 px-3 sm:px-0">
         <nav className="flex gap-2">
           <button
             onClick={() => setActiveTab('rate-quote')}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+            className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors border-b-2 ${
               activeTab === 'rate-quote'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-600 hover:text-slate-900'
@@ -32,7 +34,7 @@ function LogisticsPageContent() {
           </button>
           <button
             onClick={() => setActiveTab('bill-of-lading')}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
+            className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition-colors border-b-2 ${
               activeTab === 'bill-of-lading'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-600 hover:text-slate-900'

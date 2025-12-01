@@ -49,10 +49,10 @@ export function AuthGuard({ children }: AuthGuardProps) {
   // Show loading state during initial mount and hydration
   if (!mounted || !isHydrated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-sm sm:text-base text-gray-600">Loading...</p>
         </div>
       </div>
     );
@@ -63,10 +63,10 @@ export function AuthGuard({ children }: AuthGuardProps) {
     const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname?.startsWith(route));
     if (!isPublicRoute) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Redirecting...</p>
+            <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-sm sm:text-base text-gray-600">Redirecting...</p>
           </div>
         </div>
       );

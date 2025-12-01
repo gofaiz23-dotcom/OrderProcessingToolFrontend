@@ -14,8 +14,19 @@ export const ResizableSplitView = memo(
   ({ left, right, defaultLeftWidth = 40, minLeftWidth = 20, maxLeftWidth = 80 }: ResizableSplitViewProps) => {
     const [leftWidth, setLeftWidth] = useState(defaultLeftWidth);
     const [isDragging, setIsDragging] = useState(false);
+    const [isMobile, setIsMobile] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const dividerRef = useRef<HTMLDivElement>(null);
+
+    // Check if mobile on mount and resize
+    useEffect(() => {
+      const checkMobile = () => {
+        setIsMobile(window.innerWidth < 1024);
+      };
+      checkMobile();
+      window.addEventListener('resize', checkMobile);
+      return () => window.removeEventListener('resize', checkMobile);
+    }, []);
 
     const handleMouseDown = useCallback(() => {
       setIsDragging(true);
@@ -56,31 +67,39 @@ export const ResizableSplitView = memo(
     }, [isDragging, handleMouseMove, handleMouseUp]);
 
     return (
-      <div ref={containerRef} className="flex h-full w-full relative">
+      <div ref={containerRef} className="flex flex-col lg:flex-row h-full w-full relative">
         {/* Left Panel */}
         <div
-          className="flex-shrink-0 overflow-auto"
-          style={{
-            width: `${leftWidth}%`,
-            minWidth: `${minLeftWidth}%`,
-            maxWidth: `${maxLeftWidth}%`,
-          }}
+          className={`flex-shrink-0 overflow-auto ${
+            isMobile ? 'w-full h-1/2' : ''
+          }`}
+          style={
+            isMobile
+              ? {}
+              : {
+                  width: `${leftWidth}%`,
+                  minWidth: `${minLeftWidth}%`,
+                  maxWidth: `${maxLeftWidth}%`,
+                }
+          }
         >
           {left}
         </div>
 
-        {/* Resizable Divider */}
-        <div
-          ref={dividerRef}
-          onMouseDown={handleMouseDown}
-          className={`flex-shrink-0 bg-slate-300 hover:bg-blue-500 cursor-col-resize transition-colors ${
-            isDragging ? 'bg-blue-500' : ''
-          }`}
-          style={{ width: '4px', minWidth: '4px', cursor: 'col-resize' }}
-        />
+        {/* Resizable Divider - Hidden on mobile */}
+        {!isMobile && (
+          <div
+            ref={dividerRef}
+            onMouseDown={handleMouseDown}
+            className={`flex-shrink-0 bg-slate-300 hover:bg-blue-500 cursor-col-resize transition-colors ${
+              isDragging ? 'bg-blue-500' : ''
+            }`}
+            style={{ width: '4px', minWidth: '4px', cursor: 'col-resize' }}
+          />
+        )}
 
         {/* Right Panel */}
-        <div className="flex-1 overflow-auto" style={{ minWidth: 0 }}>
+        <div className={`flex-1 overflow-auto ${isMobile ? 'w-full h-1/2' : ''}`} style={{ minWidth: 0 }}>
           {right}
         </div>
       </div>

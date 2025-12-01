@@ -339,15 +339,17 @@ export const OrderList = ({
   }
 
   return (
-    <div className="flex h-full flex-col bg-white overflow-hidden p-6">
+    <div className="flex h-full flex-col bg-white overflow-hidden p-0 sm:p-4 lg:p-6 min-h-0">
       {/* Page Title */}
-      <h1 className="text-3xl font-bold text-slate-900 mb-6">Orders</h1>
+      <div className="px-3 pt-3 pb-2 sm:px-0 sm:pt-0 sm:pb-0 flex-shrink-0 border-b border-slate-200 sm:border-0 mb-2 sm:mb-4 lg:mb-6">
+        <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-slate-900">Orders</h1>
+      </div>
 
       {/* Search and Action Buttons */}
-      <div className="flex items-end justify-between gap-3 mb-6 relative z-50 flex-wrap">
-        <div className="flex items-end gap-3 flex-1 flex-wrap">
-          <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-900">Search</span>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between mb-2 sm:mb-4 lg:mb-6 relative z-10 px-3 sm:px-0 flex-shrink-0">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2 sm:gap-3 flex-1 flex-wrap">
+          <label className="flex flex-col gap-1 flex-1 sm:flex-initial min-w-0">
+            <span className="text-xs font-medium text-slate-900 hidden sm:block">Search</span>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               <input
@@ -361,7 +363,7 @@ export const OrderList = ({
                     onSearch();
                   }
                 }}
-                className="w-48 pl-9 pr-3 py-1.5 border border-slate-300 bg-white text-slate-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition-colors"
+                className="w-full sm:w-48 pl-9 pr-3 py-2.5 sm:py-1.5 border border-slate-300 bg-white text-slate-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition-colors"
               />
             </div>
           </label>
@@ -376,55 +378,51 @@ export const OrderList = ({
             />
           )}
           {onSearch && (
-            <div className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-slate-900 opacity-0">Actions</span>
-              <button
-                onClick={onSearch}
-                disabled={loading}
-                className="px-4 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Searching...
-                  </>
-                ) : (
-                  'Search'
-                )}
-              </button>
-            </div>
+            <button
+              onClick={onSearch}
+              disabled={loading}
+              className="px-4 py-2.5 sm:py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center justify-center gap-2 w-full sm:w-auto"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="hidden sm:inline">Searching...</span>
+                  <span className="sm:hidden">Searching</span>
+                </>
+              ) : (
+                'Search'
+              )}
+            </button>
           )}
           {(searchQuery || (dateFilter !== 'all' && onClearSearch)) && onClearSearch && (
-            <div className="flex flex-col gap-1">
-              <span className="text-xs font-medium text-slate-900 opacity-0">Clear</span>
-              <button
-                onClick={onClearSearch}
-                className="px-4 py-1.5 text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors text-sm"
-                title="Clear filters"
-              >
-                Clear
-              </button>
-            </div>
+            <button
+              onClick={onClearSearch}
+              className="px-4 py-2.5 sm:py-1.5 text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors text-sm w-full sm:w-auto"
+              title="Clear filters"
+            >
+              Clear
+            </button>
           )}
         </div>
 
         {/* Right Side Buttons */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
           {/* Logistics Dropdown Button - Show only when exactly one order is selected */}
           {selectedOrderIds.size === 1 && (
-            <div className="relative" ref={logisticsDropdownRef}>
+            <div className="relative w-full sm:w-auto" ref={logisticsDropdownRef}>
               <button
                 onClick={() => setShowLogisticsDropdown(!showLogisticsDropdown)}
-                className="inline-flex items-center gap-2 px-4 py-2 text-orange-600  rounded-lg  transition-colors text-sm font-medium"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto text-orange-600 rounded-md border border-orange-200 bg-orange-50 hover:bg-orange-100 transition-colors text-sm font-medium"
               >
                 <Truck className="h-4 w-4" />
-                Logistics
+                <span className="hidden sm:inline">Logistics</span>
+                <span className="sm:hidden">Logistics</span>
                 <ChevronDown className={`h-4 w-4 transition-transform ${showLogisticsDropdown ? 'rotate-180' : ''}`} />
               </button>
 
               {/* Logistics Dropdown Menu */}
               {showLogisticsDropdown && (
-                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50">
+                <div className="absolute right-0 mt-2 w-full sm:w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-50">
                   {LOGISTICS_CARRIERS.map((carrier) => {
                     // Get the selected order
                     const selectedOrderId = Array.from(selectedOrderIds)[0];
@@ -463,19 +461,19 @@ export const OrderList = ({
             
 
           {/* Add New Button with Dropdown */}
-          <div className="relative" ref={dropdownRef}>
+          <div className="relative w-full sm:w-auto" ref={dropdownRef}>
             <button
               onClick={() => setShowDropdown(!showDropdown)}
-              className="inline-flex items-center gap-2 px-4 py-2 text-blue-600  rounded-lg  transition-colors text-sm font-medium"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto text-blue-600 rounded-md border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors text-sm font-medium"
             >
               <Plus className="h-4 w-4" />
-              Add New
+              <span>Add New</span>
               <ChevronDown className={`h-4 w-4 transition-transform ${showDropdown ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Dropdown Menu */}
             {showDropdown && (
-              <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 transition-colors shadow-lg rounded-lg  z-50">
+              <div className="absolute right-0 mt-2 w-full sm:w-48 bg-white border border-slate-200 transition-colors shadow-xl rounded-lg z-50">
                 <button
                   onClick={() => {
                     onCreateNew();
@@ -510,10 +508,10 @@ export const OrderList = ({
           {selectedOrderIds.size > 0 && (
             <button
               onClick={handleBulkDeleteClick}
-              className="inline-flex items-center gap-2 px-4 py-2 text-red-600   rounded-lg  transition-colors text-sm font-medium"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto text-red-600 rounded-md border border-red-200 bg-red-50 hover:bg-red-100 transition-colors text-sm font-medium"
             >
               <Trash2 className="h-4 w-4" />
-               ({selectedOrderIds.size})
+              <span>Delete ({selectedOrderIds.size})</span>
             </button>
           )}
 
@@ -521,40 +519,40 @@ export const OrderList = ({
           <button
             onClick={() => exportOrdersToCSV(displayOrders)}
             disabled={displayOrders.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2 shadow-lg bg-white  text-slate-700 rounded-lg hover:bg-slate-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-slate-700 rounded-md border border-slate-300 hover:bg-slate-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="h-4 w-4" />
-            
+            <span>Export</span>
           </button>
         </div>
       </div>
 
       {/* Orders Table */}
-      <div className="flex-1 overflow-hidden flex flex-col">
+      <div className="flex-1 overflow-hidden flex flex-col min-h-0">
         {displayOrders.length === 0 && !loading ? (
-          <div className="flex flex-col items-center justify-center h-full text-slate-500 p-8">
-            <p className="text-sm">
+          <div className="flex flex-col items-center justify-center h-full text-slate-500 p-4 sm:p-8">
+            <p className="text-sm text-center px-4">
               {searchQuery ? 'No orders match your search on this page' : 'No orders found'}
             </p>
             {!searchQuery && (
               <button
                 onClick={onCreateNew}
-                className="mt-4 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                className="mt-4 px-4 py-2 text-blue-600 hover:text-blue-700 text-sm font-medium border border-blue-200 rounded-md hover:bg-blue-50"
               >
                 Create your first order
               </button>
             )}
           </div>
         ) : (
-          <div className="flex-1 overflow-hidden relative">
-              <div className="bg-white border border-slate-200 rounded-lg shadow-sm h-full flex flex-col">
-                <div className="overflow-auto flex-1">
-                  <table className="min-w-full divide-y divide-slate-200">
-                    <thead className="bg-slate-100 border-b border-slate-200 sticky top-0 z-20">
+          <div className="flex-1 overflow-hidden relative min-h-0">
+              <div className="bg-white h-full w-full flex flex-col min-h-0">
+                <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0 w-full relative">
+                  <table className="min-w-full divide-y divide-slate-200 w-full table-auto">
+                    <thead className="bg-slate-50 border-b-2 border-slate-300 sticky top-0 z-10">
                       <tr>
                         <th
                           scope="col"
-                          className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-100"
+                          className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50"
                         >
                           <div className="flex items-center">
                             <input
@@ -570,51 +568,53 @@ export const OrderList = ({
                         </th>
                         <th
                           scope="col"
-                          className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-100"
+                          className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50"
                         >
-                          Order ID
+                          ID
                         </th>
                         <th
                           scope="col"
-                          className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-100"
+                          className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50"
                         >
-                          Marketplace
+                          <span className="hidden sm:inline">Marketplace</span>
+                          <span className="sm:hidden">Mkt</span>
                         </th>
                         <th
                           scope="col"
-                          className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-100"
+                          className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50"
                         >
                           PO#
                         </th>
                         <th
                           scope="col"
-                          className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-100"
+                          className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50"
                         >
                           SKU
                         </th>
                         <th
                           scope="col"
-                          className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-100"
+                          className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50 hidden sm:table-cell"
                         >
                           Order#
                         </th>
                         <th
                           scope="col"
-                          className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-100"
+                          className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50 hidden md:table-cell"
                         >
-                          Customer Name
+                          Customer
                         </th>
                         <th
                           scope="col"
-                          className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-100"
+                          className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50 hidden lg:table-cell"
                         >
-                          Tracking Number
+                          Tracking
                         </th>
                         <th
                           scope="col"
-                          className="px-6 py-3 text-center text-xs font-bold text-slate-700 uppercase tracking-wider sticky top-0 right-0 bg-slate-100 z-30"
+                          className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-center text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider sticky top-0 right-0 bg-slate-50 z-30"
                         >
-                          Actions
+                          <span className="hidden sm:inline">Actions</span>
+                          <span className="sm:hidden">Act</span>
                         </th>
                       </tr>
                     </thead>
@@ -634,14 +634,14 @@ export const OrderList = ({
                         <tr
                           key={order.id}
                           onClick={() => onOrderSelect(order)}
-                          className={`cursor-pointer transition-all duration-150 ${
+                          className={`cursor-pointer transition-all duration-150 border-b border-slate-200 ${
                             isChecked || isSelected
-                              ? 'bg-blue-50 border-l-2 border-l-blue-600'
-                              : 'bg-slate-50 hover:bg-slate-100'
+                              ? 'bg-blue-50 border-l-4 border-l-blue-600'
+                              : 'bg-white hover:bg-slate-50'
                           }`}
                         >
                           {/* Select Column with Checkbox */}
-                          <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center">
                               <input
                                 type="checkbox"
@@ -653,64 +653,64 @@ export const OrderList = ({
                             </div>
                           </td>
                           {/* Order ID Column */}
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className={`text-sm font-medium ${
-                              isSelected ? 'text-slate-900' : 'text-slate-900'
+                          <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
+                            <div className={`text-xs sm:text-sm font-semibold ${
+                              isSelected ? 'text-blue-600' : 'text-slate-900'
                             }`}>
                               #{order.id}
                             </div>
                           </td>
                           {/* Marketplace Column */}
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-100 text-purple-800">
+                          <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
+                            <span className="inline-flex items-center px-2 sm:px-2.5 py-1 rounded-md text-[10px] sm:text-xs font-semibold bg-purple-100 text-purple-800">
                               {order.orderOnMarketPlace}
                             </span>
                           </td>
                           {/* PO# Column */}
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-slate-900">
+                          <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
+                            <div className="text-xs sm:text-sm text-slate-900 font-medium">
                               {poNumber}
                             </div>
                           </td>
                           {/* SKU Column */}
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-slate-900">
+                          <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
+                            <div className="text-xs sm:text-sm text-slate-900 font-medium">
                               {sku}
                             </div>
                           </td>
                           {/* Order# Column */}
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-slate-900">
+                          <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap hidden sm:table-cell">
+                            <div className="text-xs sm:text-sm text-slate-900">
                               {orderNumber}
                             </div>
                           </td>
                           {/* Customer Name Column */}
-                          <td className="px-6 py-4">
-                            <div className="text-sm text-slate-900 max-w-xs truncate" title={customerName !== '-' ? customerName : ''}>
+                          <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 hidden md:table-cell">
+                            <div className="text-xs sm:text-sm text-slate-900 max-w-xs truncate" title={customerName !== '-' ? customerName : ''}>
                               {customerName}
                             </div>
                           </td>
                           {/* Tracking Number Column */}
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-slate-900">
+                          <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap hidden lg:table-cell">
+                            <div className="text-xs sm:text-sm text-slate-900">
                               {trackingNumber}
                             </div>
                           </td>
                           {/* Actions Column */}
                           <td 
-                            className={`px-6 py-4 whitespace-nowrap text-center sticky right-0 transition-all duration-150 z-10 ${
+                            className={`px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap text-center sticky right-0 transition-all duration-150 z-10 ${
                               isChecked || isSelected
                                 ? 'bg-blue-50'
-                                : 'bg-slate-50 group-hover:bg-slate-100'
+                                : 'bg-white'
                             }`}
                           >
-                            <div className="flex items-center justify-center gap-2">
+                            <div className="flex items-center justify-center gap-1.5 sm:gap-2">
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setSelectedOrderForDetails(order);
                                 }}
-                                className="inline-flex items-center justify-center p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                className="inline-flex items-center justify-center p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-100 rounded-md transition-colors"
                                 title="View order details"
                               >
                                 <Info className="h-4 w-4" />
@@ -724,7 +724,7 @@ export const OrderList = ({
                                     setSelectedOrderForEdit(order);
                                   }
                                 }}
-                                className="inline-flex items-center justify-center p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                className="inline-flex items-center justify-center p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-100 rounded-md transition-colors"
                                 title="Edit order"
                               >
                                 <Edit className="h-4 w-4" />
@@ -734,7 +734,7 @@ export const OrderList = ({
                                   e.stopPropagation();
                                   handleSingleDeleteClick(order.id);
                                 }}
-                                className="inline-flex items-center justify-center p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                className="inline-flex items-center justify-center p-2 text-red-600 hover:text-red-700 hover:bg-red-100 rounded-md transition-colors"
                                 title="Delete order"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -750,20 +750,20 @@ export const OrderList = ({
                 
                 {/* Pagination Controls */}
                 {pagination && pagination.totalPages > 1 && (
-                  <div className="border-t border-slate-200 bg-white px-6 py-4 flex items-center justify-between">
+                  <div className="border-t-2 border-slate-300 bg-slate-50 px-3 sm:px-3 lg:px-6 py-3 sm:py-4 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 flex-shrink-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-slate-700">
-                        Showing <span className="font-medium">
+                      <span className="text-xs sm:text-sm text-slate-700">
+                        <span className="font-medium">
                           {pagination.totalCount === 0 ? 0 : (currentPage - 1) * pagination.limit + 1}
-                        </span> to{' '}
+                        </span> -{' '}
                         <span className="font-medium">
                           {Math.min(currentPage * pagination.limit, pagination.totalCount)}
                         </span> of{' '}
-                        <span className="font-medium">{pagination.totalCount}</span> orders
+                        <span className="font-medium">{pagination.totalCount}</span>
                       </span>
                     </div>
                     
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap justify-center">
                       <button
                         onClick={() => handlePageChange(currentPage - 1)}
                         disabled={!pagination.hasPreviousPage}

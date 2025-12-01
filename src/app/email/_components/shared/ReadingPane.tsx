@@ -282,21 +282,21 @@ ${originalBody}
         }
       `}</style>
       {/* Email Header */}
-      <header className="border-b border-slate-200 bg-white px-6 py-4 flex-shrink-0">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <h2 className="text-xl font-semibold text-slate-900">{email.subject || '(No subject)'}</h2>
-            <div className="mt-3 flex items-center justify-between text-sm">
-              <div>
+      <header className="border-b border-slate-200 bg-white px-3 sm:px-6 py-3 sm:py-4 flex-shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base sm:text-lg lg:text-xl font-semibold text-slate-900 break-words">{email.subject || '(No subject)'}</h2>
+            <div className="mt-2 sm:mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 text-xs sm:text-sm">
+              <div className="min-w-0">
                 {isInboxEmail ? (
                   <>
-                    <p className="font-medium text-slate-900">{email.from}</p>
-                    <p className="mt-1 text-xs text-slate-500">To: {email.to}</p>
+                    <p className="font-medium text-slate-900 truncate">{email.from}</p>
+                    <p className="mt-1 text-xs text-slate-500 truncate">To: {email.to}</p>
                   </>
                 ) : (
                   <>
-                    <p className="font-medium text-slate-900">To: {email.to}</p>
-                    <p className="mt-1 text-xs text-slate-500">From: {email.from}</p>
+                    <p className="font-medium text-slate-900 truncate">To: {email.to}</p>
+                    <p className="mt-1 text-xs text-slate-500 truncate">From: {email.from}</p>
                   </>
                 )}
               </div>
@@ -307,18 +307,18 @@ ${originalBody}
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={handleReply}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2"
+              className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-md border border-slate-300 bg-white px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2 flex-1 sm:flex-initial"
               title="Reply"
             >
-              <Reply className="h-4 w-4" />
+              <Reply className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               <span>Reply</span>
             </button>
             <button
               onClick={handleForward}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2"
+              className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-md border border-slate-300 bg-white px-2.5 sm:px-3 py-2 text-xs sm:text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-200 focus:ring-offset-2 flex-1 sm:flex-initial"
               title="Forward"
             >
-              <Forward className="h-4 w-4" />
+              <Forward className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               <span>Forward</span>
             </button>
           </div>
@@ -328,7 +328,7 @@ ${originalBody}
       {/* Scrollable Content Area */}
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
         {/* Email Body - HTML or Text */}
-        <section className="px-6 py-4">
+        <section className="px-3 sm:px-6 py-3 sm:py-4">
           {email.htmlBody ? (
             <div
               className="email-content break-words"
@@ -361,11 +361,11 @@ ${originalBody}
 
         {/* Attachments Section */}
         {email.attachments.length > 0 && (
-          <section className="border-t border-slate-200 bg-slate-50 px-6 py-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-700">
+          <section className="border-t border-slate-200 bg-slate-50 px-3 sm:px-6 py-3 sm:py-4">
+          <h3 className="mb-2 sm:mb-3 text-xs sm:text-sm font-semibold text-slate-700">
             Attachments ({email.attachments.length})
           </h3>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {email.attachments.map((att, idx) => {
               const dataUrl = getAttachmentDataUrl(att);
 
