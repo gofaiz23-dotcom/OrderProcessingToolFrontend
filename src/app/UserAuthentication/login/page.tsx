@@ -85,14 +85,14 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200">
-      <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
-        <div className="flex flex-col items-center mb-8">
-          <div className="bg-blue-100 rounded-full p-4 mb-4">
-            <LogIn className="w-8 h-8 text-blue-600" />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
+      <div className="bg-white rounded-xl sm:rounded-2xl shadow-xl p-6 sm:p-8 w-full max-w-md">
+        <div className="flex flex-col items-center mb-6 sm:mb-8">
+          <div className="bg-blue-100 rounded-full p-3 sm:p-4 mb-3 sm:mb-4">
+            <LogIn className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Welcome Back</h1>
-          <p className="text-gray-700 text-sm mt-2">Please login to continue</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Welcome Back</h1>
+          <p className="text-gray-700 text-xs sm:text-sm mt-2">Please login to continue</p>
         </div>
 
         {!hasUsers && (
@@ -107,9 +107,9 @@ export default function LoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           <div>
-            <label htmlFor="username" className="block text-sm font-medium text-gray-900 mb-2">
+            <label htmlFor="username" className="block text-xs sm:text-sm font-medium text-gray-900 mb-2">
               Username
             </label>
             <input
@@ -118,14 +118,14 @@ export default function LoginPage() {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               required
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-gray-900 placeholder-gray-500"
+              className="w-full px-3 sm:px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-500"
               placeholder="Enter your username"
               disabled={loading}
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-900 mb-2">
+            <label htmlFor="password" className="block text-xs sm:text-sm font-medium text-gray-900 mb-2">
               Password
             </label>
             <div className="relative">
@@ -135,7 +135,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full px-4 py-2.5 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-gray-900 placeholder-gray-500"
+                className="w-full px-3 sm:px-4 py-2.5 pr-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-sm text-gray-900 placeholder-gray-500"
                 placeholder="Enter your password"
                 disabled={loading}
               />
@@ -163,7 +163,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading || !hasUsers}
-            className="w-full bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-blue-600 text-white py-3 sm:py-2.5 rounded-lg text-sm sm:text-base font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Logging in...' : !hasUsers ? 'Login Unavailable' : 'Login'}
           </button>

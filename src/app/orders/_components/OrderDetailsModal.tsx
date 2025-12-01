@@ -112,16 +112,16 @@ export const OrderDetailsModal = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-4 animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[90vh] flex flex-col animate-slide-up-and-scale"
+        className="bg-white rounded-lg sm:rounded-xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[95vh] sm:max-h-[90vh] flex flex-col animate-slide-up-and-scale"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-6 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900">Order Details #{order.id}</h2>
+        <div className="p-4 sm:p-6 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900">Order Details #{order.id}</h2>
           <button
             onClick={onClose}
             className="p-2 rounded-full text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
@@ -131,13 +131,13 @@ export const OrderDetailsModal = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
           {/* Order ID */}
           <div className="space-y-2">
             <label className="block text-sm font-semibold text-slate-900">
               Order ID
             </label>
-            <div className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-slate-50 text-slate-900">
+            <div className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border border-slate-300 rounded-lg bg-slate-50 text-slate-900 text-sm sm:text-base">
               #{order.id}
             </div>
           </div>
@@ -147,7 +147,7 @@ export const OrderDetailsModal = ({
             <label className="block text-sm font-semibold text-slate-900">
               Marketplace
             </label>
-            <div className="w-full px-4 py-2.5 border border-slate-300 rounded-lg bg-slate-50 text-slate-900">
+            <div className="w-full px-3 sm:px-4 py-2 sm:py-2.5 border border-slate-300 rounded-lg bg-slate-50 text-slate-900 text-sm sm:text-base">
               {order.orderOnMarketPlace}
             </div>
           </div>
@@ -165,19 +165,19 @@ export const OrderDetailsModal = ({
                 {keyValuePairs.map((pair, index) => (
                   <div
                     key={`${pair.key}-${index}`}
-                    className="flex items-center gap-2 p-3 border border-slate-200 rounded-lg bg-slate-50/50"
+                    className="flex items-center gap-2 p-2 sm:p-3 border border-slate-200 rounded-lg bg-slate-50/50"
                   >
-                    <div className="flex-1 grid grid-cols-12 gap-2">
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-12 gap-2">
                       {/* Key Display */}
-                      <div className="col-span-4">
-                        <div className="px-3 py-2 bg-white border border-slate-300 rounded-md text-sm font-medium text-slate-900">
+                      <div className="col-span-1 sm:col-span-4">
+                        <div className="px-2 sm:px-3 py-1.5 sm:py-2 bg-white border border-slate-300 rounded-md text-xs sm:text-sm font-medium text-slate-900">
                           {pair.key}
                         </div>
                       </div>
 
                       {/* Value Display */}
-                      <div className="col-span-8">
-                        <div className="px-3 py-2 bg-white border border-slate-300 rounded-md text-sm text-slate-900 break-words">
+                      <div className="col-span-1 sm:col-span-8">
+                        <div className="px-2 sm:px-3 py-1.5 sm:py-2 bg-white border border-slate-300 rounded-md text-xs sm:text-sm text-slate-900 break-words">
                           {pair.value}
                         </div>
                       </div>
@@ -214,10 +214,10 @@ export const OrderDetailsModal = ({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-slate-200 bg-slate-50 flex items-center justify-end">
+        <div className="p-4 sm:p-6 border-t border-slate-200 bg-slate-50 flex items-center justify-end">
           <button
             onClick={onClose}
-            className="px-5 py-2.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 sm:px-5 py-2 sm:py-2.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors w-full sm:w-auto"
           >
             Close
           </button>

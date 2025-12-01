@@ -158,9 +158,9 @@ export const ProcessedOrdersList = ({
   return (
     <div className="flex-1 overflow-hidden flex flex-col">
       {/* Search and Actions */}
-      <div className="flex items-end justify-between gap-3 mb-6 relative z-50 flex-wrap">
-        <div className="flex items-end gap-3 flex-1 flex-wrap">
-          <label className="flex flex-col gap-1">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-end justify-between gap-3 mb-4 sm:mb-6 relative z-50">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 flex-1 flex-wrap">
+          <label className="flex flex-col gap-1 flex-1 sm:flex-initial">
             <span className="text-xs font-medium text-slate-900">Search</span>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
@@ -175,7 +175,7 @@ export const ProcessedOrdersList = ({
                     onSearch();
                   }
                 }}
-                className="w-48 pl-9 pr-3 py-1.5 border border-slate-300 bg-white text-slate-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition-colors"
+                className="w-full sm:w-48 pl-9 pr-3 py-1.5 border border-slate-300 bg-white text-slate-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition-colors"
               />
             </div>
           </label>
@@ -222,13 +222,14 @@ export const ProcessedOrdersList = ({
           )}
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => setDateRangeDeleteModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+            className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium w-full sm:w-auto justify-center"
           >
             <Calendar className="h-4 w-4" />
-            Delete by Date Range
+            <span className="hidden sm:inline">Delete by Date Range</span>
+            <span className="sm:hidden">Delete Range</span>
           </button>
         </div>
       </div>
@@ -243,29 +244,29 @@ export const ProcessedOrdersList = ({
       ) : (
         <div className="flex-1 overflow-hidden relative">
           <div className="bg-white border border-slate-200 rounded-lg shadow-sm h-full flex flex-col">
-            <div className="overflow-auto flex-1">
+            <div className="overflow-x-auto overflow-y-auto flex-1">
               <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-100 border-b border-slate-200 sticky top-0 z-20">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
                       ID
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
                       SKU
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Marketplace
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Status
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Created At
                     </th>
-                    <th className="px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Files
                     </th>
-                    <th className="px-6 py-3 text-center text-xs font-bold text-slate-700 uppercase tracking-wider sticky top-0 right-0 bg-slate-100 z-30">
+                    <th className="px-3 sm:px-6 py-3 text-center text-xs font-bold text-slate-700 uppercase tracking-wider sticky top-0 right-0 bg-slate-100 z-30">
                       Actions
                     </th>
                   </tr>
@@ -276,22 +277,22 @@ export const ProcessedOrdersList = ({
                       key={order.id}
                       className="bg-slate-50 hover:bg-slate-100 transition-colors"
                     >
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-slate-900">
                           #{order.id}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-slate-900">
                           {order.sku}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-100 text-purple-800">
                           {order.orderOnMarketPlace}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${
                           order.status === 'completed' 
                             ? 'bg-green-100 text-green-800'
@@ -306,12 +307,12 @@ export const ProcessedOrdersList = ({
                           {order.status || 'pending'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-slate-900">
                           {formatDate(order.createdAt)}
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         {order.uploads && order.uploads.length > 0 ? (
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">
@@ -394,7 +395,7 @@ export const ProcessedOrdersList = ({
                           <span className="text-sm text-slate-400">No files</span>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-center sticky right-0 bg-slate-50 z-10">
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center sticky right-0 bg-slate-50 z-10">
                         <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => {
@@ -437,7 +438,7 @@ export const ProcessedOrdersList = ({
 
             {/* Pagination */}
             {pagination && pagination.totalPages > 1 && (
-              <div className="border-t border-slate-200 bg-white px-6 py-4 flex items-center justify-between">
+              <div className="border-t border-slate-200 bg-white px-3 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-slate-700">
                     Showing <span className="font-medium">

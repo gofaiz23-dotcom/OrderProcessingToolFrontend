@@ -134,16 +134,16 @@ export const EmailFilters = memo(
     }, [limit]);
 
     return (
-      <div className="border-b border-slate-200 bg-white px-4 py-3">
-        <div className="flex flex-wrap items-end gap-4">
-          <label className="flex flex-col gap-1">
+      <div className="border-b border-slate-200 bg-white px-3 sm:px-4 py-3">
+        <div className="flex flex-wrap items-end gap-3 sm:gap-4">
+          <label className="flex flex-col gap-1 flex-1 sm:flex-initial min-w-[200px] sm:min-w-0">
             <span className="text-xs font-medium text-slate-900">Search</span>
             <div className="relative">
               <input
                 value={search}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder="Search emails..."
-                className="w-48 rounded-md border border-slate-300 px-2 py-1.5 pr-8 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full sm:w-48 rounded-md border border-slate-300 px-2 py-1.5 pr-8 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
               />
               {loading && (
                 <div className="absolute right-2 top-1/2 -translate-y-1/2">
@@ -191,13 +191,13 @@ export const EmailFilters = memo(
           <div className="flex flex-col gap-1 relative" ref={dateDropdownRef}>
             <span className="text-xs font-medium text-slate-900">Date</span>
             {dateFilter === 'custom' ? (
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <div className="flex flex-col gap-1">
                   <input
                     type="date"
                     value={startDate}
                     onChange={(e) => onStartDateChange(e.target.value)}
-                    className="w-32 rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    className="w-full sm:w-32 rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     placeholder="Start Date"
                   />
                 </div>
@@ -206,7 +206,7 @@ export const EmailFilters = memo(
                     type="date"
                     value={endDate}
                     onChange={(e) => onEndDateChange(e.target.value)}
-                    className="w-32 rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    className="w-full sm:w-32 rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     placeholder="End Date"
                   />
                 </div>
@@ -219,12 +219,12 @@ export const EmailFilters = memo(
                 </button>
               </div>
             ) : dateFilter === 'specificDate' ? (
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="date"
                   value={startDate}
                   onChange={(e) => onStartDateChange(e.target.value)}
-                  className="w-32 rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  className="w-full sm:w-32 rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                 />
                 <button
                   type="button"
@@ -238,7 +238,7 @@ export const EmailFilters = memo(
               <button
                 type="button"
                 onClick={() => setIsDateDropdownOpen(!isDateDropdownOpen)}
-                className="w-36 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-left text-sm text-slate-900 hover:bg-slate-50 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full sm:w-36 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-left text-sm text-slate-900 hover:bg-slate-50 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
               >
                 {getDateFilterLabel()}
                 <span className="float-right mt-0.5">▼</span>

@@ -27,15 +27,34 @@ export class ApiError extends Error {
 export const handleApiError = async (response: Response): Promise<never> => {
   let errorMessage = `Request failed with status ${response.status}`;
   let errorBody: { message?: string; retryAfter?: string } = {};
+  let retryAfter: string | null = null;
+
+  // Check for Retry-After header (can be seconds or HTTP-date)
+  const retryAfterHeader = response.headers.get('Retry-After');
+  if (retryAfterHeader) {
+    // If it's a number (seconds), convert to date
+    const seconds = parseInt(retryAfterHeader, 10);
+    if (!isNaN(seconds)) {
+      const retryDate = new Date(Date.now() + seconds * 1000);
+      retryAfter = retryDate.toISOString();
+    } else {
+      // It's an HTTP-date, use as-is
+      retryAfter = retryAfterHeader;
+    }
+  }
 
   try {
     errorBody = await response.json();
     errorMessage = errorBody.message || errorMessage;
+    // Use retryAfter from body if header wasn't present
+    if (!retryAfter && errorBody.retryAfter) {
+      retryAfter = errorBody.retryAfter;
+    }
   } catch {
     // If JSON parsing fails, use default message
   }
 
-  throw new ApiError(errorMessage, response.status, errorBody.retryAfter);
+  throw new ApiError(errorMessage, response.status, retryAfter);
 };
 
 /**

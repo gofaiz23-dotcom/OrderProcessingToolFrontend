@@ -243,8 +243,10 @@ export default function ProcessedOrdersPage() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-white overflow-hidden p-6">
-      <h1 className="text-3xl font-bold text-slate-900 mb-6">Processed Orders</h1>
+    <div className="flex h-full flex-col bg-white overflow-hidden p-0 sm:p-4 lg:p-6">
+      <div className="px-3 pt-3 pb-2 sm:px-0 sm:pt-0 sm:pb-0 flex-shrink-0 border-b border-slate-200 sm:border-0 mb-2 sm:mb-4 lg:mb-6">
+        <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-slate-900">Processed Orders</h1>
+      </div>
 
       {error !== null && (
         <div className="mb-6">

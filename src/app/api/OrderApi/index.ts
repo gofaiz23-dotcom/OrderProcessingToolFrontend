@@ -1,5 +1,5 @@
 import { buildApiUrl } from '../../../../BaseUrl';
-import { handleApiError } from '@/app/utils/Errors/ApiError';
+import { handleApiError, retryWithRateLimit } from '@/app/utils/Errors/ApiError';
 import type {
   Order,
   CreateOrderPayload,
@@ -70,33 +70,40 @@ export const getAllOrders = async (
   options: GetAllOrdersQueryOptions = {}
 ): Promise<GetAllOrdersResponse> => {
   try {
-    const { page = 1, limit = 50, orderOnMarketPlace, search } = options;
-    
-    const endpoint = new URL(buildApiUrl('/orders/all'));
-    endpoint.searchParams.set('page', String(page));
-    endpoint.searchParams.set('limit', String(Math.min(Math.max(limit, 1), 100))); // Clamp between 1-100
-    
-    if (orderOnMarketPlace) {
-      endpoint.searchParams.set('orderOnMarketPlace', orderOnMarketPlace);
-    }
-    
-    if (search && search.trim()) {
-      endpoint.searchParams.set('search', search.trim());
-    }
-    
-    const response = await fetch(endpoint.toString(), {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
+    return await retryWithRateLimit(async () => {
+      const { page = 1, limit = 50, orderOnMarketPlace, search } = options;
+      
+      const endpoint = new URL(buildApiUrl('/orders/all'));
+      endpoint.searchParams.set('page', String(page));
+      endpoint.searchParams.set('limit', String(Math.min(Math.max(limit, 1), 100))); // Clamp between 1-100
+      
+      if (orderOnMarketPlace) {
+        endpoint.searchParams.set('orderOnMarketPlace', orderOnMarketPlace);
+      }
+      
+      if (search && search.trim()) {
+        endpoint.searchParams.set('search', search.trim());
+      }
+      
+      const response = await fetch(endpoint.toString(), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        cache: 'no-store',
+      });
+
+      if (!response.ok) {
+        await handleApiError(response);
+      }
+
+      return response.json();
+    }, {
+      maxRetries: 3,
+      onRetry: (error, attempt, retryAfter) => {
+        console.log(`Rate limit hit. Retrying (${attempt}/3)...`, retryAfter ? `Retry after: ${retryAfter}` : '');
       },
-      cache: 'no-store',
     });
-
-    if (!response.ok) {
-      await handleApiError(response);
-    }
-
-    return response.json();
   } catch (error) {
     // Handle network errors (CORS, connection refused, etc.)
     if (error instanceof TypeError && error.message === 'Failed to fetch') {

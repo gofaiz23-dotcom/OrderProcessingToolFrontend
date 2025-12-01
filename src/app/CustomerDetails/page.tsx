@@ -225,16 +225,16 @@ export default function CustomerDetailsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-slate-900 mb-2">Customer Details</h1>
-        <p className="text-sm text-slate-600">View and edit customer order information</p>
+    <div className="flex flex-col h-full p-0 sm:p-4 lg:p-6">
+      <div className="mb-3 sm:mb-6 px-3 sm:px-0 pb-2 sm:pb-0 border-b border-slate-200 sm:border-0">
+        <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-slate-900 mb-1 sm:mb-2">Customer Details</h1>
+        <p className="text-xs sm:text-sm text-slate-600">View and edit customer order information</p>
       </div>
 
       {/* Search Bar and Date Filter */}
-      <div className="mb-6 flex items-end gap-4 flex-wrap relative z-50">
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-slate-900">Search</span>
+      <div className="mb-3 sm:mb-6 flex flex-col sm:flex-row items-stretch sm:items-end gap-2 sm:gap-4 flex-wrap relative z-10 px-3 sm:px-0">
+        <label className="flex flex-col gap-1 flex-1 sm:flex-initial min-w-0">
+          <span className="text-xs font-medium text-slate-900 hidden sm:block">Search</span>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
             <input
@@ -251,7 +251,7 @@ export default function CustomerDetailsPage() {
                   handleSearch();
                 }
               }}
-              className="w-48 pl-9 pr-3 py-1.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 bg-white text-slate-900 placeholder:text-slate-400"
+              className="w-full sm:w-48 pl-9 pr-3 py-2.5 sm:py-1.5 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 bg-white text-slate-900 placeholder:text-slate-400"
             />
           </div>
         </label>
@@ -265,51 +265,46 @@ export default function CustomerDetailsPage() {
           onEndDateChange={setEndDate}
         />
         
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-slate-900 opacity-0">Actions</span>
-          <button
-            onClick={handleSearch}
-            disabled={loading}
-            className="px-4 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Searching...
-              </>
-            ) : (
-              'Search'
-            )}
-          </button>
-        </div>
+        <button
+          onClick={handleSearch}
+          disabled={loading}
+          className="px-4 py-2.5 sm:py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center justify-center gap-2 w-full sm:w-auto"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="hidden sm:inline">Searching...</span>
+              <span className="sm:hidden">Searching</span>
+            </>
+          ) : (
+            'Search'
+          )}
+        </button>
         {(searchQuery || dateFilter !== 'all') && (
-          <div className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-slate-900 opacity-0">Clear</span>
-            <button
-              onClick={() => {
-                handleClearSearch();
-                setDateFilter('all');
-                setStartDate('');
-                setEndDate('');
-              }}
-              className="px-4 py-1.5 text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors text-sm"
-              title="Clear filters"
-            >
-              Clear
-            </button>
-          </div>
+          <button
+            onClick={() => {
+              handleClearSearch();
+              setDateFilter('all');
+              setStartDate('');
+              setEndDate('');
+            }}
+            className="px-4 py-2.5 sm:py-1.5 text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors text-sm w-full sm:w-auto"
+            title="Clear filters"
+          >
+            Clear
+          </button>
         )}
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-auto border border-slate-200 rounded-lg bg-white shadow-sm">
-        <table className="w-full border-collapse">
+      <div className="flex-1 overflow-x-auto overflow-y-auto border-0 sm:border border-slate-200 rounded-none sm:rounded-lg bg-white shadow-none sm:shadow-sm px-3 sm:px-0">
+        <table className="min-w-full border-collapse">
           <thead className="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0 z-10 border-b-2 border-slate-300">
             <tr>
               {COLUMNS.map((column) => (
                 <th
                   key={column.key}
-                  className="px-4 py-4 text-left text-xs font-bold text-slate-700 uppercase tracking-wider"
+                  className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap"
                   style={{ width: column.width }}
                 >
                   {column.label}
@@ -337,8 +332,8 @@ export default function CustomerDetailsPage() {
                       : getFieldValue(order.ordersJsonb, column);
 
                     return (
-                      <td key={column.key} className="px-4 py-4 text-sm text-slate-900 border-r border-slate-100 last:border-r-0">
-                        <span className="block truncate" title={value !== '-' ? value : undefined}>
+                      <td key={column.key} className="px-2 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm text-slate-900 border-r border-slate-100 last:border-r-0">
+                        <span className="block truncate max-w-[120px] sm:max-w-none" title={value !== '-' ? value : undefined}>
                           {value}
                         </span>
                       </td>
@@ -353,16 +348,16 @@ export default function CustomerDetailsPage() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="mt-6 border-t border-slate-200 bg-white px-6 py-4 flex items-center justify-between">
+        <div className="mt-3 sm:mt-6 border-t-2 border-slate-300 bg-slate-50 px-3 sm:px-6 py-3 sm:py-4 flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-700">
-              Showing <span className="font-medium">
+            <span className="text-xs sm:text-sm text-slate-700">
+              <span className="font-medium">
                 {totalCount === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1}
-              </span> to{' '}
+              </span> -{' '}
               <span className="font-medium">
                 {Math.min(currentPage * itemsPerPage, totalCount)}
               </span> of{' '}
-              <span className="font-medium">{totalCount}</span> results
+              <span className="font-medium">{totalCount}</span>
             </span>
           </div>
           
