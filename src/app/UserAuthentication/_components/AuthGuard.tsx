@@ -31,6 +31,13 @@ export function AuthGuard({ children }: AuthGuardProps) {
     return () => clearTimeout(timer);
   }, []);
 
+  // Scroll to top on pathname change
+  useEffect(() => {
+    if (pathname) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+  }, [pathname]);
+
   // Handle redirect for unauthenticated users (only after hydration)
   useEffect(() => {
     if (!mounted || !isHydrated || !pathname) return;
@@ -41,6 +48,10 @@ export function AuthGuard({ children }: AuthGuardProps) {
     if (!isAuthenticated && !isPublicRoute && !isRedirecting) {
       setIsRedirecting(true);
       router.replace('/UserAuthentication/dashboard');
+      // Scroll to top after redirect
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      }, 100);
     } else if (isAuthenticated || isPublicRoute) {
       setIsRedirecting(false);
     }

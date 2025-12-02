@@ -145,18 +145,18 @@ export const CreateOrderModal: FC<CreateOrderModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-2 sm:p-4"
       onClick={onClose}
       style={{ animation: 'fadeIn 0.2s ease-out' } as CSSProperties}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[90vh] flex flex-col"
+        className="bg-white rounded-lg sm:rounded-xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[95vh] sm:max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
         style={{ animation: 'slideUp 0.2s ease-out' } as CSSProperties}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 bg-white flex items-center justify-between rounded-t-xl">
-          <h2 className="text-xl font-semibold text-slate-900">Create New Order</h2>
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-200 bg-white flex items-center justify-between rounded-t-lg sm:rounded-t-xl">
+          <h2 className="text-lg sm:text-xl font-semibold text-slate-900">Create New Order</h2>
           <button
             onClick={onClose}
             disabled={loading}
@@ -175,10 +175,10 @@ export const CreateOrderModal: FC<CreateOrderModalProps> = ({
         )}
 
         {/* Form content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
           {/* Order on Marketplace */}
           <div className="space-y-2">
-            <label className="block text-sm font-semibold text-slate-900">
+            <label className="block text-xs sm:text-sm font-semibold text-slate-900">
               Order on Marketplace <span className="text-red-500">*</span>
             </label>
             <input
@@ -187,60 +187,60 @@ export const CreateOrderModal: FC<CreateOrderModalProps> = ({
               onChange={(e) => setOrderOnMarketPlace(e.target.value)}
               disabled={loading}
               placeholder="e.g., Amazon, eBay, Shopify"
-              className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-all"
+              className="w-full px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-all"
             />
           </div>
 
           {/* JSONB Field - Key-Value Pairs */}
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="block text-sm font-semibold text-slate-900">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <label className="block text-xs sm:text-sm font-semibold text-slate-900">
                 JSONB Data <span className="text-red-500">*</span>
               </label>
               <button
                 type="button"
                 onClick={addKeyValuePair}
                 disabled={loading}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Add Pair
               </button>
             </div>
 
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+            <div className="space-y-3 max-h-[300px] sm:max-h-[400px] overflow-y-auto pr-2">
               {keyValuePairs.map((pair) => (
                 <div
                   key={pair.id}
-                  className="flex items-start gap-2 p-4 border border-slate-200 rounded-lg bg-slate-50/50 hover:bg-slate-50 transition-colors"
+                  className="flex items-start gap-2 p-3 sm:p-4 border border-slate-200 rounded-lg bg-slate-50/50 hover:bg-slate-50 transition-colors"
                 >
-                  <div className="flex-1 grid grid-cols-12 gap-2">
+                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-12 gap-2">
                     {/* Key Input */}
-                    <div className="col-span-4">
+                    <div className="col-span-1 sm:col-span-4">
                       <input
                         type="text"
                         value={pair.key}
                         onChange={(e) => updateKeyValuePair(pair.id, 'key', e.target.value)}
                         disabled={loading}
                         placeholder="Key"
-                        className="w-full px-3 py-2 border border-slate-300 bg-white text-slate-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-all"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-all"
                       />
                     </div>
 
                     {/* Value Input - Auto-detects type */}
-                    <div className="col-span-7">
+                    <div className="col-span-1 sm:col-span-7">
                       <input
                         type="text"
                         value={pair.value}
                         onChange={(e) => updateKeyValuePair(pair.id, 'value', e.target.value)}
                         disabled={loading}
-                        placeholder="Value (auto-detects: string, number, boolean, null)"
-                        className="w-full px-3 py-2 border border-slate-300 bg-white text-slate-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-all"
+                        placeholder="Value (auto-detects type)"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed transition-all"
                       />
                     </div>
 
                     {/* Remove Button */}
-                    <div className="col-span-1 flex items-center">
+                    <div className="col-span-1 flex items-center justify-start sm:justify-center">
                       {keyValuePairs.length > 1 && (
                         <button
                           type="button"
@@ -288,18 +288,18 @@ export const CreateOrderModal: FC<CreateOrderModalProps> = ({
         </div>
 
         {/* Footer with buttons */}
-        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50/80 flex items-center justify-end gap-3 rounded-b-xl">
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-200 bg-slate-50/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 rounded-b-lg sm:rounded-b-xl">
           <button
             onClick={onClose}
             disabled={loading}
-            className="px-5 py-2.5 text-sm font-medium border border-slate-300 text-slate-700 bg-white rounded-lg hover:bg-slate-50 hover:border-slate-400 active:bg-slate-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 sm:px-5 py-2 sm:py-2.5 text-sm font-medium border border-slate-300 text-slate-700 bg-white rounded-lg hover:bg-slate-50 hover:border-slate-400 active:bg-slate-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed w-full sm:w-auto"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={loading || !!jsonbError || !orderOnMarketPlace.trim() || !keyValuePairs.some((p) => p.key.trim() !== '')}
-            className="px-5 py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-all disabled:bg-blue-300 disabled:text-white disabled:cursor-not-allowed flex items-center gap-2 shadow-sm hover:shadow-md"
+            className="px-4 sm:px-5 py-2 sm:py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800 transition-all disabled:bg-blue-300 disabled:text-white disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-sm hover:shadow-md w-full sm:w-auto"
           >
             {loading ? (
               <>

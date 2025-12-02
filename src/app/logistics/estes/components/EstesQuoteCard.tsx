@@ -44,52 +44,52 @@ export const EstesQuoteCard = ({ quote, index }: EstesQuoteCardProps) => {
 
   return (
     <div
-      className={`border-2 rounded-lg p-5 transition-all ${
+      className={`border-2 rounded-lg p-3 sm:p-4 lg:p-5 transition-all ${
         index === 0
           ? 'border-yellow-400 bg-yellow-50'
           : 'border-slate-300 bg-white hover:border-slate-400'
       }`}
     >
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-0 mb-3 sm:mb-4">
         <div className="flex-1">
-          <h4 className="text-lg font-bold text-slate-900 mb-2">
+          <h4 className="text-base sm:text-lg font-bold text-slate-900 mb-2">
             {quote.serviceLevelText || 'Service Level'}
           </h4>
           {quote.rateFound && (
-            <div className="flex items-center gap-2 text-green-600 text-sm mb-2">
-              <CheckCircle2 size={16} />
+            <div className="flex items-center gap-2 text-green-600 text-xs sm:text-sm mb-2">
+              <CheckCircle2 size={14} className="sm:w-4 sm:h-4" />
               <span>Rate Found</span>
             </div>
           )}
         </div>
-        <div className="text-right relative">
-          <div className="text-2xl font-bold text-slate-900">
+        <div className="text-left sm:text-right relative">
+          <div className="text-xl sm:text-2xl font-bold text-slate-900">
             ${quote.quoteRate?.totalCharges || '0.00'}
           </div>
           {quote.chargeItems && quote.chargeItems.length > 0 ? (
             <div
               ref={chargesTextRef}
               onClick={() => setShowChargesPopup(!showChargesPopup)}
-              className="text-sm text-blue-600 hover:text-blue-700 cursor-pointer underline font-semibold transition-colors"
+              className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 cursor-pointer underline font-semibold transition-colors"
             >
               Quote Details
             </div>
           ) : (
-            <div className="text-sm text-slate-600">Total Charges</div>
+            <div className="text-xs sm:text-sm text-slate-600">Total Charges</div>
           )}
         </div>
       </div>
 
       {quote.dates && (
-        <div className="space-y-2 mb-4">
-          <div className="flex items-center gap-2 text-sm text-slate-700">
-            <Clock size={14} />
-            <span>
+        <div className="space-y-2 mb-3 sm:mb-4">
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-slate-700">
+            <Clock size={12} className="sm:w-3.5 sm:h-3.5" />
+            <span className="break-words">
               Delivery: {quote.dates.transitDeliveryDate} by {quote.dates.transitDeliveryTime}
             </span>
           </div>
           {quote.transitDetails?.transitDays && (
-            <div className="text-sm text-slate-600">
+            <div className="text-xs sm:text-sm text-slate-600">
               Transit Days: {quote.transitDetails.transitDays}
             </div>
           )}
@@ -97,15 +97,15 @@ export const EstesQuoteCard = ({ quote, index }: EstesQuoteCardProps) => {
       )}
 
       {quote.quoteId && (
-        <div className="text-xs text-slate-500 mb-4">Quote ID: {quote.quoteId}</div>
+        <div className="text-[10px] sm:text-xs text-slate-500 mb-3 sm:mb-4">Quote ID: {quote.quoteId}</div>
       )}
 
       {quote.quoteRate?.ratedAccessorials && quote.quoteRate.ratedAccessorials.length > 0 && (
-        <div className="mb-4">
-          <div className="text-xs font-semibold text-slate-700 mb-2">Accessorials:</div>
+        <div className="mb-3 sm:mb-4">
+          <div className="text-[10px] sm:text-xs font-semibold text-slate-700 mb-1 sm:mb-2">Accessorials:</div>
           <div className="space-y-1">
             {quote.quoteRate.ratedAccessorials.map((acc: any, accIndex: number) => (
-              <div key={accIndex} className="text-xs text-slate-600">
+              <div key={accIndex} className="text-[10px] sm:text-xs text-slate-600 break-words">
                 {acc.description}: ${acc.charge}
               </div>
             ))}
@@ -113,14 +113,14 @@ export const EstesQuoteCard = ({ quote, index }: EstesQuoteCardProps) => {
         </div>
       )}
 
-      <div className="flex items-center gap-2 pt-4 border-t border-slate-200">
+      <div className="flex items-center gap-2 pt-3 sm:pt-4 border-t border-slate-200">
         <input
           type="radio"
           name="selectedQuote"
           defaultChecked={index === 0}
-          className="w-4 h-4 text-blue-600"
+          className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600"
         />
-        <span className="text-sm text-slate-700">Select this quote</span>
+        <span className="text-xs sm:text-sm text-slate-700">Select this quote</span>
       </div>
 
       {/* Charges Popup */}
@@ -129,7 +129,7 @@ export const EstesQuoteCard = ({ quote, index }: EstesQuoteCardProps) => {
           {/* Small Popup - positioned near the charges text */}
           <div
             ref={popupRef}
-            className="fixed z-50 bg-white rounded-xl shadow-2xl border border-slate-200 w-72 max-h-[400px] overflow-hidden"
+            className="fixed z-50 bg-white rounded-lg sm:rounded-xl shadow-2xl border border-slate-200 w-[calc(100vw-2rem)] sm:w-72 max-w-sm max-h-[400px] overflow-hidden"
             style={{
               top: chargesTextRef.current
                 ? `${chargesTextRef.current.getBoundingClientRect().bottom + window.scrollY + 8}px`
@@ -137,12 +137,13 @@ export const EstesQuoteCard = ({ quote, index }: EstesQuoteCardProps) => {
               right: chargesTextRef.current
                 ? `${window.innerWidth - chargesTextRef.current.getBoundingClientRect().right}px`
                 : 'auto',
+              left: chargesTextRef.current ? 'auto' : '50%',
               transform: chargesTextRef.current ? 'none' : 'translate(-50%, -50%)',
             }}
           >
             {/* Popup Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
-              <h3 className="text-sm font-bold text-slate-900">All Charges</h3>
+            <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
+              <h3 className="text-xs sm:text-sm font-bold text-slate-900">All Charges</h3>
               <button
                 type="button"
                 onClick={() => setShowChargesPopup(false)}
@@ -153,27 +154,27 @@ export const EstesQuoteCard = ({ quote, index }: EstesQuoteCardProps) => {
             </div>
 
             {/* Popup Body */}
-            <div className="overflow-y-auto max-h-[320px] p-4">
-              <div className="space-y-2.5">
+            <div className="overflow-y-auto max-h-[320px] p-3 sm:p-4">
+              <div className="space-y-2 sm:space-y-2.5">
                 {quote.chargeItems.map((charge: any, chargeIndex: number) => (
                   <div
                     key={chargeIndex}
-                    className="flex items-center justify-between py-2.5 px-3 bg-slate-50 rounded-lg border border-slate-100 hover:border-slate-200 transition-colors"
+                    className="flex items-center justify-between py-2 sm:py-2.5 px-2 sm:px-3 bg-slate-50 rounded-lg border border-slate-100 hover:border-slate-200 transition-colors"
                   >
-                    <p className="text-xs font-medium text-slate-700 flex-1 pr-2">
+                    <p className="text-[10px] sm:text-xs font-medium text-slate-700 flex-1 pr-2 break-words">
                       {charge.description}
                     </p>
-                    <p className="text-sm font-bold text-slate-900 whitespace-nowrap">
+                    <p className="text-xs sm:text-sm font-bold text-slate-900 whitespace-nowrap flex-shrink-0">
                       ${parseFloat(charge.charge).toFixed(2)}
                     </p>
                   </div>
                 ))}
                 
                 {/* Total */}
-                <div className="mt-4 pt-3 border-t-2 border-slate-200">
-                  <div className="flex items-center justify-between py-2.5 px-3 bg-yellow-50 rounded-lg border-2 border-yellow-200">
-                    <p className="text-sm font-bold text-slate-900">Total Charges</p>
-                    <p className="text-base font-bold text-slate-900">
+                <div className="mt-3 sm:mt-4 pt-2 sm:pt-3 border-t-2 border-slate-200">
+                  <div className="flex items-center justify-between py-2 sm:py-2.5 px-2 sm:px-3 bg-yellow-50 rounded-lg border-2 border-yellow-200">
+                    <p className="text-xs sm:text-sm font-bold text-slate-900">Total Charges</p>
+                    <p className="text-sm sm:text-base font-bold text-slate-900">
                       ${quote.quoteRate?.totalCharges || '0.00'}
                     </p>
                   </div>

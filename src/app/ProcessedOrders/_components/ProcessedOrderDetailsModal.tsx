@@ -70,10 +70,10 @@ export const ProcessedOrderDetailsModal = ({
   if (!isOpen || !order) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="p-6 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-slate-900">Processed Order Details</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-2 sm:p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-4 sm:p-6 border-b border-slate-200 flex items-center justify-between">
+          <h2 className="text-lg sm:text-xl font-bold text-slate-900">Processed Order Details</h2>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 transition-colors"
@@ -82,12 +82,12 @@ export const ProcessedOrderDetailsModal = ({
           </button>
         </div>
 
-        <div className="p-6 overflow-y-auto flex-1">
-          <div className="space-y-6">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1">
+          <div className="space-y-4 sm:space-y-6">
             {/* Basic Information */}
             <div>
-              <h3 className="text-sm font-semibold text-black mb-3">Basic Information</h3>
-              <div className="grid grid-cols-2 gap-4">
+              <h3 className="text-xs sm:text-sm font-semibold text-black mb-2 sm:mb-3">Basic Information</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="text-xs text-slate-500">ID</label>
                   <p className="text-sm font-medium text-slate-900">#{order.id}</p>

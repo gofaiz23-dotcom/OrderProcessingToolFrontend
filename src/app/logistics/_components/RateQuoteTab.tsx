@@ -85,10 +85,10 @@ export const RateQuoteTab = ({ carrier, token }: RateQuoteTabProps) => {
     <>
       <div className="relative w-full h-full bg-white">
         {/* Background: Rate Quote Response */}
-        <div className="absolute inset-0 p-6 overflow-auto opacity-50">
+        <div className="absolute inset-0 p-3 sm:p-4 lg:p-6 overflow-auto opacity-50">
           <div className="max-w-4xl mx-auto">
-            <h3 className="text-lg font-semibold text-slate-900 mb-4">Rate Quote Response</h3>
-            <pre className="p-4 bg-slate-50 border border-slate-300 rounded-lg overflow-auto text-sm font-mono">
+            <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-3 sm:mb-4">Rate Quote Response</h3>
+            <pre className="p-3 sm:p-4 bg-slate-50 border border-slate-300 rounded-lg overflow-auto text-xs sm:text-sm font-mono">
               {JSON.stringify(rateQuoteData, null, 2)}
             </pre>
           </div>

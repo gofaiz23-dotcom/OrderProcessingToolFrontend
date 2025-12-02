@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ArrowLeft, Calendar, Clock, CheckCircle2, Plus, X, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { buildApiUrl } from '../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
@@ -117,6 +117,7 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
     timeCritical: true,
     notifications: true,
   });
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Prefill data from BOL form and response
   useEffect(() => {
@@ -200,6 +201,62 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
       setDockExtension(requesterExtension);
     }
   }, [useRequesterInfo, requesterContactName, requesterEmail, requesterPhone, requesterExtension]);
+
+  // Scroll to top when component mounts or becomes visible
+  useEffect(() => {
+    // Prevent any scroll restoration
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+    
+    const scrollToTop = () => {
+      // Try all possible scroll methods
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      window.scrollTo(0, 0);
+      if (document.documentElement) {
+        document.documentElement.scrollTop = 0;
+        document.documentElement.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
+      if (document.body) {
+        document.body.scrollTop = 0;
+      }
+      // Also scroll the container if it exists
+      if (containerRef.current) {
+        containerRef.current.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
+    };
+    
+    // Immediate scroll
+    scrollToTop();
+    
+    // Use requestAnimationFrame to ensure DOM is ready
+    const rafId = requestAnimationFrame(() => {
+      scrollToTop();
+      // Multiple attempts with delays to ensure it works
+      setTimeout(scrollToTop, 0);
+      setTimeout(scrollToTop, 10);
+      setTimeout(scrollToTop, 50);
+      setTimeout(scrollToTop, 100);
+      setTimeout(scrollToTop, 200);
+      setTimeout(scrollToTop, 300);
+      setTimeout(scrollToTop, 500);
+    });
+    
+    // Also use a MutationObserver to catch any DOM changes that might cause scrolling
+    const observer = new MutationObserver(() => {
+      scrollToTop();
+    });
+    
+    if (containerRef.current) {
+      observer.observe(containerRef.current, { childList: true, subtree: true });
+    }
+    
+    // Cleanup
+    return () => {
+      cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
+  }, []);
 
   const toggleSection = (section: string) => {
     setShowSections({ ...showSections, [section]: !showSections[section] });
@@ -633,35 +690,35 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
   const totalWeight = shipments.reduce((sum, s) => sum + parseInt(s.weight || '0'), 0);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-8">
-      <div className="bg-white rounded-lg border border-slate-200 p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-green-100 rounded-lg">
-            <Calendar className="text-green-600" size={24} />
+    <div ref={containerRef} className="max-w-6xl mx-auto space-y-4 sm:space-y-6 pb-4 sm:pb-8 px-3 sm:px-0">
+      <div className="bg-white rounded-lg border border-slate-200 p-3 sm:p-4 lg:p-6">
+        <div className="flex items-center gap-3 mb-4 sm:mb-6">
+          <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
+            <Calendar className="text-green-600 sm:w-6 sm:h-6" size={20} />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-slate-900">Pickup Request</h2>
-            <p className="text-sm text-slate-600">Schedule your shipment pickup</p>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Pickup Request</h2>
+            <p className="text-xs sm:text-sm text-slate-600">Schedule your shipment pickup</p>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-xs sm:text-sm">
               {error}
             </div>
           )}
 
           {/* Account Information */}
           <div className="border border-slate-200 rounded-lg overflow-hidden">
-            <div className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
+            <div className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
               <div className="flex items-center gap-2 flex-1">
                 <button
                   type="button"
                   onClick={() => toggleSection('accountInfo')}
                   className="text-left"
                 >
-                  <h3 className="text-lg font-bold text-slate-900">Account Information</h3>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900">Account Information</h3>
                 </button>
                 <span className="text-blue-600 text-sm hover:underline cursor-pointer">
                   Need Help?
@@ -676,7 +733,7 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
               </button>
             </div>
             {showSections.accountInfo && (
-              <div className="p-6 space-y-4">
+              <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-slate-900">
                     My Accounts <span className="text-red-500">*</span>
@@ -743,17 +800,17 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
           </div>
 
           {/* Requester Details and Pickup Location */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Requester Details */}
             <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <div className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
+              <div className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
                 <div className="flex items-center gap-2 flex-1">
                   <button
                     type="button"
                     onClick={() => toggleSection('requesterInfo')}
                     className="text-left"
                   >
-                    <h3 className="text-lg font-bold text-slate-900">Requester Details</h3>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900">Requester Details</h3>
                   </button>
                 </div>
                 <button
@@ -765,7 +822,7 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
                 </button>
               </div>
               {showSections.requesterInfo && (
-                <div className="p-6 space-y-4">
+                <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-slate-900">
                       Address Book (Optional)
@@ -832,14 +889,14 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
 
             {/* Pickup Location */}
             <div className="border border-slate-200 rounded-lg overflow-hidden">
-              <div className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
+              <div className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
                 <div className="flex items-center gap-2 flex-1">
                   <button
                     type="button"
                     onClick={() => toggleSection('pickupLocation')}
                     className="text-left"
                   >
-                    <h3 className="text-lg font-bold text-slate-900">Pickup Location</h3>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-900">Pickup Location</h3>
                   </button>
                 </div>
                 <button
@@ -851,7 +908,7 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
                 </button>
               </div>
               {showSections.pickupLocation && (
-                <div className="p-6 space-y-4">
+                <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-slate-900">
                       Address Book (Optional)

@@ -1054,9 +1054,12 @@ export const BillOfLanding = ({
       // Show response preview instead of redirecting
       setResponseData(data);
       setShowResponsePreview(true);
-      // Scroll to bottom to show the response preview
+      // Scroll to response preview section (but not all the way to bottom)
       setTimeout(() => {
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        const responseSection = document.querySelector('[data-response-preview]');
+        if (responseSection) {
+          responseSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       }, 100);
     } catch (err) {
       setError('You filled wrong info and all. Please check your form data and try again.');
@@ -1171,52 +1174,52 @@ export const BillOfLanding = ({
   const totals = calculateTotals();
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-8">
-      <div className="bg-white rounded-lg border border-slate-200 p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <FileText className="text-blue-600" size={24} />
+    <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 pb-4 sm:pb-8 px-3 sm:px-0">
+      <div className="bg-white rounded-lg border border-slate-200 p-3 sm:p-4 lg:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-3 mb-4 sm:mb-6">
+          <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
+            <FileText className="text-blue-600" size={20} className="sm:w-6 sm:h-6" />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-slate-900">Bill of Lading</h2>
-            <p className="text-sm text-slate-600">Create your bill of lading</p>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Bill of Lading</h2>
+            <p className="text-xs sm:text-sm text-slate-600">Create your bill of lading</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
               onClick={handleAutofill}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 font-semibold"
+              className="px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-1.5 sm:gap-2 font-semibold text-xs sm:text-sm"
             >
-              <Sparkles size={18} />
-              Autofill
+              <Sparkles size={14} className="sm:w-[18px] sm:h-[18px]" />
+              <span className="hidden sm:inline">Autofill</span>
             </button>
             <button
               type="button"
-              className="px-4 py-2 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors flex items-center gap-2 font-semibold"
+              className="px-3 sm:px-4 py-1.5 sm:py-2 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors flex items-center gap-1.5 sm:gap-2 font-semibold text-xs sm:text-sm"
             >
-              <HelpCircle size={18} />
-              Walk Me Through
+              <HelpCircle size={14} className="sm:w-[18px] sm:h-[18px]" />
+              <span className="hidden sm:inline">Walk Me Through</span>
             </button>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            <div className="bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-xs sm:text-sm">
               {error}
             </div>
           )}
 
           {/* Account Information */}
           <div className="border border-slate-200 rounded-lg overflow-hidden">
-            <div className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
+            <div className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
               <div className="flex items-center gap-2 flex-1">
                 <button
                   type="button"
                   onClick={() => toggleSection('accountInfo')}
                   className="text-left"
                 >
-                  <h3 className="text-lg font-bold text-slate-900">Account Information</h3>
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900">Account Information</h3>
                 </button>
                 <span
                   className="text-blue-600 text-sm hover:underline cursor-pointer"
@@ -1241,8 +1244,8 @@ export const BillOfLanding = ({
               </button>
             </div>
             {showSections.accountInfo && (
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-slate-900">
                       My Accounts <span className="text-red-500">*</span>
@@ -1300,9 +1303,9 @@ export const BillOfLanding = ({
             <button
               type="button"
               onClick={() => toggleSection('billingInfo')}
-              className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+              className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
             >
-              <h3 className="text-lg font-bold text-slate-900">Billing Information</h3>
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">Billing Information</h3>
               {showSections.billingInfo ? (
                 <ChevronUp className="text-slate-600" size={20} />
               ) : (
@@ -1310,8 +1313,8 @@ export const BillOfLanding = ({
               )}
             </button>
             {showSections.billingInfo && (
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-slate-900">Payer:</label>
                     <div className="flex gap-4">
@@ -1382,9 +1385,9 @@ export const BillOfLanding = ({
             <button
               type="button"
               onClick={() => toggleSection('shipmentInfo')}
-              className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+              className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
             >
-              <h3 className="text-lg font-bold text-slate-900">Shipment Information</h3>
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">Shipment Information</h3>
               {showSections.shipmentInfo ? (
                 <ChevronUp className="text-slate-600" size={20} />
               ) : (
@@ -1392,11 +1395,11 @@ export const BillOfLanding = ({
               )}
             </button>
             {showSections.shipmentInfo && (
-              <div className="p-6 space-y-4">
-                <p className="text-sm text-slate-600">
+              <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
+                <p className="text-xs sm:text-sm text-slate-600">
                   Optional: Enter your company's unique reference number or alphanumeric value.
                 </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-slate-900">
                       Master BOL Number (Optional)
@@ -1472,9 +1475,9 @@ export const BillOfLanding = ({
             <button
               type="button"
               onClick={() => toggleSection('routingInfo')}
-              className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+              className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
             >
-              <h3 className="text-lg font-bold text-slate-900">Routing Information</h3>
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">Routing Information</h3>
               {showSections.routingInfo ? (
                 <ChevronUp className="text-slate-600" size={20} />
               ) : (
@@ -1482,8 +1485,8 @@ export const BillOfLanding = ({
               )}
             </button>
             {showSections.routingInfo && (
-              <div className="p-6 space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="p-3 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                   {/* Shipper Information */}
                   <div className="space-y-4">
                     <h4 className="text-md font-semibold text-slate-900">Shipper Information</h4>
@@ -2559,39 +2562,40 @@ export const BillOfLanding = ({
           </div>
           
           {/* Navigation Buttons */}
-          <div className="flex items-center justify-between pt-6 border-t border-slate-200">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-0 pt-4 sm:pt-6 border-t border-slate-200">
             <button
               type="button"
               onClick={onPrevious}
-              className="px-6 py-2.5 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors font-semibold flex items-center gap-2"
+              className="px-4 sm:px-6 py-2 sm:py-2.5 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors font-semibold flex items-center justify-center gap-2 text-sm sm:text-base"
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft size={16} className="sm:w-[18px] sm:h-[18px]" />
               Previous
             </button>
             {responseData ? (
               <button
                 type="button"
                 onClick={onNext}
-                className="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold flex items-center gap-2"
+                className="px-4 sm:px-6 py-2 sm:py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold flex items-center justify-center gap-2 text-sm sm:text-base"
               >
-                Generate Pickup Request
-                <ArrowRight size={18} />
+                <span className="hidden sm:inline">Generate Pickup Request</span>
+                <span className="sm:hidden">Next</span>
+                <ArrowRight size={16} className="sm:w-[18px] sm:h-[18px]" />
               </button>
             ) : (
               <button
                 type="submit"
                 disabled={loading}
-                className="px-6 py-2.5 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors font-semibold flex items-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                className="px-4 sm:px-6 py-2 sm:py-2.5 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors font-semibold flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed text-sm sm:text-base"
               >
                 {loading ? 'Submitting...' : 'SUBMIT BOL'}
-                <ArrowRight size={18} />
+                <ArrowRight size={16} className="sm:w-[18px] sm:h-[18px]" />
               </button>
             )}
           </div>
 
           {/* Response Preview */}
           {showResponsePreview && responseData && (
-            <div className="mt-6 space-y-4">
+            <div className="mt-6 space-y-4" data-response-preview>
               {/* PDF Preview Section */}
               {responseData?.data?.images?.bol && pdfUrl && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-6 space-y-4">
