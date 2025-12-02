@@ -52,6 +52,13 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         router.refresh();
     };
 
+    // Scroll to top on pathname change
+    useEffect(() => {
+        if (pathname) {
+            window.scrollTo({ top: 0, behavior: 'instant' });
+        }
+    }, [pathname]);
+
     // Auto-expand Email section if on inbox, sent, or compose page
     useEffect(() => {
         if (pathname?.startsWith('/email/inbox') || pathname?.startsWith('/email/sent') || pathname?.startsWith('/email/compose')) {

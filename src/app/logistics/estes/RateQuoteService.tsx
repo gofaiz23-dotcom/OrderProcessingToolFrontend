@@ -164,7 +164,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
             setCurrentOrderId(parsed.id);
           }
         } catch (e) {
-          console.error('Failed to parse stored order:', e);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to parse stored order:', e);
+          }
         }
       }
     }
@@ -198,11 +200,15 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                   orderFound = true;
                 } else {
                   // Order not found - fall back to sessionStorage or most recent order
-                  console.warn(`Order with ID ${orderId} not found, falling back to sessionStorage or most recent order`);
+                  if (process.env.NODE_ENV === 'development') {
+                    console.warn(`Order with ID ${orderId} not found, falling back to sessionStorage or most recent order`);
+                  }
                 }
               } catch (error) {
                 // Handle any other errors gracefully
-                console.warn(`Error fetching order ${orderId}:`, error);
+                if (process.env.NODE_ENV === 'development') {
+                  console.warn(`Error fetching order ${orderId}:`, error);
+                }
               }
             }
           }
@@ -228,7 +234,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                   return;
                 }
               } catch (e) {
-                console.error('Failed to parse stored order:', e);
+                if (process.env.NODE_ENV === 'development') {
+                  console.error('Failed to parse stored order:', e);
+                }
               }
             }
             
@@ -246,12 +254,16 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                   orderFound = true;
                 }
               } catch (error) {
-                console.warn('Failed to fetch most recent order:', error);
+                if (process.env.NODE_ENV === 'development') {
+                  console.warn('Failed to fetch most recent order:', error);
+                }
               }
             }
           }
         } catch (error) {
-          console.error('Failed to fetch order data:', error);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to fetch order data:', error);
+          }
           // Don't set error state here, just log it - order data is optional
         } finally {
           setLoadingOrderData(false);
@@ -266,16 +278,22 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   const handleSubmitSuccess = async (orderId: number, sku: string) => {
     try {
       // Step 1: Database save is already complete at this point
-      console.log(`Database save confirmed for Order ID: ${orderId}, SKU: ${sku}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Database save confirmed for Order ID: ${orderId}, SKU: ${sku}`);
+      }
       
       // Step 2: Now delete the order (after DB save is confirmed)
       if (orderId) {
         try {
           await deleteOrder(orderId);
-          console.log(`Order (ID: ${orderId}) deleted successfully after database save`);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`Order (ID: ${orderId}) deleted successfully after database save`);
+          }
         } catch (deleteError) {
           // Order might not exist or already deleted - that's okay
-          console.warn(`Order (ID: ${orderId}) could not be deleted:`, deleteError);
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(`Order (ID: ${orderId}) could not be deleted:`, deleteError);
+          }
           // Continue with cache clearing even if order deletion fails
         }
       }
@@ -291,9 +309,13 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       }
 
       // Show info message
-      console.log(`Order data saved successfully. Order deleted. Cache cleared.`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Order data saved successfully. Order deleted. Cache cleared.`);
+      }
     } catch (error) {
-      console.error('Error during cleanup:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error during cleanup:', error);
+      }
       const toastId = `toast-${Date.now()}`;
       setToasts(prev => [...prev, {
         id: toastId,
@@ -578,8 +600,10 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         throw new Error('At least one handling unit is required');
       }
       
-      // Log request for debugging (remove in production)
-      console.log('Rate Quote Request:', JSON.stringify(requestBody, null, 2));
+      // Log request only in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Rate Quote Request:', JSON.stringify(requestBody, null, 2));
+      }
 
       const res = await fetch(buildApiUrl('/Logistics/create-rate-quote'), {
         method: 'POST',
@@ -629,7 +653,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           }
         } catch (parseError) {
           // If JSON parsing fails, use status text
-          console.error('Failed to parse error response:', parseError);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to parse error response:', parseError);
+          }
         }
         
         throw new Error(errorMessage);
@@ -668,12 +694,16 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   const handleNextStep = () => {
     if (currentStep < steps.length) {
       setCurrentStep(currentStep + 1);
+      // Scroll to top when navigating to next step
+      window.scrollTo({ top: 0, behavior: 'instant' });
     }
   };
 
   const handlePreviousStep = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
+      // Scroll to top when navigating to previous step
+      window.scrollTo({ top: 0, behavior: 'instant' });
     }
   };
 
@@ -713,12 +743,39 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       });
       handleStepComplete(1);
       setCurrentStep(2);
+      // Scroll to top when navigating to next step
+      window.scrollTo({ top: 0, behavior: 'instant' });
     }
   };
 
   const handleBillOfLandingNext = () => {
     handleStepComplete(2);
+    // Scroll to top BEFORE changing step to prevent any scroll position preservation
+    const scrollToTop = () => {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      window.scrollTo(0, 0);
+      if (document.documentElement) {
+        document.documentElement.scrollTop = 0;
+        document.documentElement.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
+      if (document.body) {
+        document.body.scrollTop = 0;
+      }
+    };
+    scrollToTop();
     setCurrentStep(3);
+    // Use requestAnimationFrame and multiple timeouts to ensure scroll happens after render
+    // Note: These timeouts are fire-and-forget for navigation, cleanup handled by useEffect
+    requestAnimationFrame(() => {
+      scrollToTop();
+      setTimeout(scrollToTop, 0);
+      setTimeout(scrollToTop, 10);
+      setTimeout(scrollToTop, 50);
+      setTimeout(scrollToTop, 100);
+      setTimeout(scrollToTop, 200);
+      setTimeout(scrollToTop, 300);
+      setTimeout(scrollToTop, 500);
+    });
   };
 
   const handlePickupRequestComplete = (pickupResponse?: any) => {
@@ -729,10 +786,52 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     // Move to step 4 (Response Summary)
     setCurrentStep(4);
     handleStepComplete(4);
+    // Scroll to top when navigating to next step
+    window.scrollTo({ top: 0, behavior: 'instant' });
   };
   
+  // Scroll to top when step changes
+  useEffect(() => {
+    const scrollToTop = () => {
+      // Try all possible scroll methods
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      window.scrollTo(0, 0);
+      if (document.documentElement) {
+        document.documentElement.scrollTop = 0;
+        document.documentElement.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
+      if (document.body) {
+        document.body.scrollTop = 0;
+      }
+    };
+    
+    // Use requestAnimationFrame to ensure DOM is ready
+    const timeoutIds: NodeJS.Timeout[] = [];
+    const rafId = requestAnimationFrame(() => {
+      scrollToTop();
+      // Multiple attempts with delays to ensure it works, especially for step 3 (PickupRequest)
+      timeoutIds.push(
+        setTimeout(scrollToTop, 0),
+        setTimeout(scrollToTop, 10),
+        setTimeout(scrollToTop, 50),
+        setTimeout(scrollToTop, 100),
+        setTimeout(scrollToTop, 200),
+        setTimeout(scrollToTop, 300),
+        setTimeout(scrollToTop, 500)
+      );
+    });
+    
+    // Cleanup function
+    return () => {
+      cancelAnimationFrame(rafId);
+      timeoutIds.forEach(id => clearTimeout(id));
+    };
+  }, [currentStep]);
+
   // Extract BOL PDF URL and create File when BOL response is available
   useEffect(() => {
+    let currentUrl: string | null = null;
+    
     if (bolResponseData?.data?.images?.bol) {
       try {
         const base64String = bolResponseData.data.images.bol;
@@ -743,6 +842,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         }
         const blob = new Blob([bytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
+        currentUrl = url;
         setBolPdfUrl(url);
         
         // Create File object from blob and add to bolFiles
@@ -751,7 +851,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
         setBolFiles([pdfFile]);
       } catch (err) {
-        console.error('Failed to create PDF URL:', err);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to create PDF URL:', err);
+        }
         setBolPdfUrl(null);
         setBolFiles([]);
       }
@@ -760,12 +862,19 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       setBolFiles([]);
       setBolPdfUrl(null);
     }
+    
+    // Cleanup: revoke URL when component unmounts or bolResponseData changes
+    return () => {
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+      }
+    };
   }, [bolResponseData]);
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-8">
+    <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8 pb-4 sm:pb-6 lg:pb-8 px-3 sm:px-4 lg:px-6">
       {/* Step Indicator */}
-      <div className="bg-white rounded-lg border border-slate-200 p-6">
+      <div className="bg-white rounded-lg border border-slate-200 p-3 sm:p-4 lg:p-6">
         <StepIndicator 
           steps={steps} 
           currentStep={currentStep} 
@@ -777,36 +886,38 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       {/* Step 1: Rate Quote */}
       {currentStep === 1 && (
         <>
-          <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-bold text-slate-900">Estes Rate Quote Service</h1>
-            <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900">Estes Rate Quote Service</h1>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
               <button
                 type="button"
                 onClick={handleAutofill}
-                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 font-semibold"
+                className="px-3 sm:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 text-sm sm:text-base font-semibold w-full sm:w-auto"
               >
-                <Sparkles size={18} />
-                Autofill
+                <Sparkles size={16} className="sm:w-[18px] sm:h-[18px]" />
+                <span className="hidden sm:inline">Autofill</span>
+                <span className="sm:hidden">Autofill</span>
               </button>
               <button
                 type="button"
-                className="px-4 py-2 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors flex items-center gap-2 font-semibold"
+                className="px-3 sm:px-4 py-2 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors flex items-center justify-center gap-2 text-sm sm:text-base font-semibold w-full sm:w-auto"
               >
-                <HelpCircle size={18} />
-                Walk Me Through
+                <HelpCircle size={16} className="sm:w-[18px] sm:h-[18px]" />
+                <span className="hidden sm:inline">Walk Me Through</span>
+                <span className="sm:hidden">Help</span>
               </button>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-8">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 lg:space-y-8">
         {/* Account Information - Main Accordion */}
         <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
           <button
             type="button"
             onClick={() => setShowAccountInfo(!showAccountInfo)}
-            className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+            className="w-full px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
           >
-            <h2 className="text-xl font-bold text-slate-900">Account Information</h2>
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900">Account Information</h2>
             {showAccountInfo ? (
               <ChevronUp className="text-slate-600" size={20} />
             ) : (
@@ -814,10 +925,10 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
             )}
           </button>
           {showAccountInfo && (
-          <div className="p-6 space-y-8">
+          <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 lg:space-y-8">
             {/* Account Information Section */}
             <section>
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">Account Information</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-3 sm:mb-4">Account Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-slate-900">
@@ -907,7 +1018,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
 
             {/* Requestor Information */}
             <section>
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">Requestor Information</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-3 sm:mb-4">Requestor Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-slate-900">Name</label>
@@ -944,11 +1055,11 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
 
             {/* Routing Information */}
             <section>
-              <h3 className="text-lg font-semibold text-slate-900 mb-4">Routing Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-3 sm:mb-4">Routing Information</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
             {/* Origin */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-slate-900">Origin</h3>
+            <div className="space-y-3 sm:space-y-4">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900">Origin</h3>
               <div className="space-y-2">
                 <input
                   type="text"
@@ -978,8 +1089,8 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
             </div>
 
             {/* Destination */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-slate-900">Destination</h3>
+            <div className="space-y-3 sm:space-y-4">
+              <h3 className="text-base sm:text-lg font-semibold text-slate-900">Destination</h3>
               <div className="space-y-2">
                 <input
                   type="text"
@@ -1012,8 +1123,8 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
 
             {/* Freight Accessorials */}
             <section>
-              <div className="flex items-center gap-2 mb-4">
-                <h3 className="text-lg font-semibold text-slate-900">Freight Accessorials</h3>
+              <div className="flex items-center gap-2 mb-3 sm:mb-4">
+                <h3 className="text-base sm:text-lg font-semibold text-slate-900">Freight Accessorials</h3>
                 <Info className="text-blue-500" size={20} />
               </div>
               <div className="space-y-4">
@@ -1060,8 +1171,8 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
 
             {/* Commodities */}
             <section>
-              <div className="flex items-center gap-2 mb-4">
-                <h3 className="text-lg font-semibold text-slate-900">Commodities</h3>
+              <div className="flex items-center gap-2 mb-3 sm:mb-4">
+                <h3 className="text-base sm:text-lg font-semibold text-slate-900">Commodities</h3>
                 <Info className="text-blue-500" size={20} />
               </div>
           {handlingUnits.map((unit, index) => (
@@ -1285,7 +1396,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           <button
             type="submit"
             disabled={!isMounted || loading}
-            className="px-8 py-3 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors font-semibold text-lg disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-4 sm:px-6 lg:px-8 py-2 sm:py-2.5 lg:py-3 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors font-semibold text-sm sm:text-base lg:text-lg disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center justify-center gap-2 w-full sm:w-auto"
           >
             {loading ? (
               <>

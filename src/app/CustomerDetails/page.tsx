@@ -297,21 +297,22 @@ export default function CustomerDetailsPage() {
       </div>
 
       {/* Table */}
-      <div className="flex-1 overflow-x-auto overflow-y-auto border-0 sm:border border-slate-200 rounded-none sm:rounded-lg bg-white shadow-none sm:shadow-sm px-3 sm:px-0">
-        <table className="min-w-full border-collapse">
-          <thead className="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0 z-10 border-b-2 border-slate-300">
-            <tr>
-              {COLUMNS.map((column) => (
-                <th
-                  key={column.key}
-                  className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap"
-                  style={{ width: column.width }}
-                >
-                  {column.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
+      <div className="flex-1 overflow-x-auto overflow-y-auto border-0 sm:border border-slate-200 rounded-none sm:rounded-lg bg-white shadow-none sm:shadow-sm">
+        <div className="min-w-full inline-block">
+          <table className="min-w-full border-collapse">
+            <thead className="bg-gradient-to-r from-slate-50 to-slate-100 sticky top-0 z-10 border-b-2 border-slate-300">
+              <tr>
+                {COLUMNS.map((column) => (
+                  <th
+                    key={column.key}
+                    className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap"
+                    style={{ width: column.width }}
+                  >
+                    {column.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
           <tbody className="bg-white divide-y divide-slate-200">
             {filteredOrders.length === 0 ? (
               <tr>
@@ -342,8 +343,9 @@ export default function CustomerDetailsPage() {
                 </tr>
               ))
             )}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Pagination */}

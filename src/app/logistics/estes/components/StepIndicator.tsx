@@ -17,15 +17,15 @@ type StepIndicatorProps = {
 
 export const StepIndicator = ({ steps, currentStep, completedSteps, onStepClick }: StepIndicatorProps) => {
   return (
-    <div className="w-full mb-8">
+    <div className="w-full mb-4 sm:mb-6 lg:mb-8">
       <div className="relative">
         {/* Connector Line - single line behind all steps */}
-        <div className="absolute top-5 left-0 right-0 h-0.5 bg-slate-300 z-0" style={{ left: '5%', right: '5%' }} />
+        <div className="absolute top-4 sm:top-5 left-0 right-0 h-0.5 bg-slate-300 z-0" style={{ left: '5%', right: '5%' }} />
         
         {/* Progress Line - shows completed steps */}
         {currentStep > 1 && (
           <div 
-            className="absolute top-5 h-0.5 bg-green-500 z-0 transition-all"
+            className="absolute top-4 sm:top-5 h-0.5 bg-green-500 z-0 transition-all"
             style={{
               left: '5%',
               width: `${((currentStep - 1) / (steps.length - 1)) * 90}%`,
@@ -60,7 +60,7 @@ export const StepIndicator = ({ steps, currentStep, completedSteps, onStepClick 
                   type="button"
                   onClick={handleStepClick}
                   disabled={!onStepClick}
-                  className={`relative flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all ${
+                  className={`relative flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-full border-2 transition-all ${
                     onStepClick ? 'cursor-pointer hover:scale-110 hover:shadow-lg' : 'cursor-default'
                   } ${
                     isCompleted
@@ -71,19 +71,19 @@ export const StepIndicator = ({ steps, currentStep, completedSteps, onStepClick 
                   }`}
                 >
                   {isCompleted ? (
-                    <CheckCircle2 size={20} className="text-white" />
+                    <CheckCircle2 size={16} className="sm:w-5 sm:h-5 text-white" />
                   ) : (
-                    <span className="text-sm font-bold">{step.id}</span>
+                    <span className="text-xs sm:text-sm font-bold">{step.id}</span>
                   )}
                 </button>
                 
                 {/* Step Name */}
-                <div className="mt-2 text-center">
+                <div className="mt-1.5 sm:mt-2 text-center">
                   <button
                     type="button"
                     onClick={handleStepClick}
                     disabled={!onStepClick}
-                    className={`text-sm font-semibold transition-colors whitespace-nowrap ${
+                    className={`text-[10px] sm:text-xs lg:text-sm font-semibold transition-colors break-words ${
                       onStepClick ? 'cursor-pointer hover:underline' : 'cursor-default'
                     } ${
                       isCompleted

@@ -170,7 +170,9 @@ export const ResponseSummary = ({
 
       // Step 1: Save to database first
       const response = await createLogisticsShippedOrder(payload);
-      console.log('Order saved to database successfully:', response);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Order saved to database successfully:', response);
+      }
 
       // Step 2: Wait a moment to ensure DB save is complete, then delete order
       // Call success callback which will handle deletion
@@ -192,7 +194,9 @@ export const ResponseSummary = ({
       
       setSubmitSuccess(processingMessage);
     } catch (error) {
-      console.error('Error submitting order:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error submitting order:', error);
+      }
       setSubmitError(error instanceof Error ? error.message : 'Failed to submit order');
     } finally {
       setIsSubmitting(false);
@@ -200,15 +204,15 @@ export const ResponseSummary = ({
   };
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6 pb-8">
-      <div className="bg-white rounded-lg border border-slate-200 p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 bg-green-100 rounded-lg">
-            <CheckCircle2 className="text-green-600" size={24} />
+    <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 pb-4 sm:pb-8 px-3 sm:px-0">
+      <div className="bg-white rounded-lg border border-slate-200 p-3 sm:p-4 lg:p-6">
+        <div className="flex items-center gap-3 mb-4 sm:mb-6">
+          <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
+            <CheckCircle2 className="text-green-600 sm:w-6 sm:h-6" size={20} />
           </div>
           <div className="flex-1">
-            <h2 className="text-2xl font-bold text-slate-900">Response Summary</h2>
-            <p className="text-sm text-slate-600">Complete shipment information</p>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Response Summary</h2>
+            <p className="text-xs sm:text-sm text-slate-600">Complete shipment information</p>
           </div>
         </div>
 
@@ -236,15 +240,15 @@ export const ResponseSummary = ({
         )}
 
         {/* Order Information */}
-        <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
-          <div className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
+        <div className="border border-slate-200 rounded-lg overflow-hidden mb-3 sm:mb-4">
+          <div className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
             <div className="flex items-center gap-2 flex-1">
               <button
                 type="button"
                 onClick={() => toggleSection('orderInfo')}
                 className="text-left"
               >
-                <h3 className="text-lg font-bold text-slate-900">Order Information</h3>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">Order Information</h3>
               </button>
             </div>
             <button
@@ -256,8 +260,8 @@ export const ResponseSummary = ({
             </button>
           </div>
           {showSections.orderInfo && (
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                 {orderData?.sku && (
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-slate-900">SKU</label>
@@ -324,15 +328,15 @@ export const ResponseSummary = ({
         </div>
 
         {/* Rate Quote Response */}
-        <div className="border border-slate-200 rounded-lg overflow-hidden mb-4">
-          <div className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
+        <div className="border border-slate-200 rounded-lg overflow-hidden mb-3 sm:mb-4">
+          <div className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
             <div className="flex items-center gap-2 flex-1">
               <button
                 type="button"
                 onClick={() => toggleSection('rateQuote')}
                 className="text-left"
               >
-                <h3 className="text-lg font-bold text-slate-900">Rate Quote Response</h3>
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">Rate Quote Response</h3>
               </button>
             </div>
             <button
@@ -344,7 +348,7 @@ export const ResponseSummary = ({
             </button>
           </div>
           {showSections.rateQuote && (
-            <div className="p-6 space-y-4">
+            <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
               {rateQuotesResponseJsonb ? (
                 <div className="relative">
                   <pre className="px-4 py-3 border border-slate-300 bg-slate-50 text-slate-900 rounded-lg overflow-auto max-h-64 text-sm font-mono">
@@ -668,7 +672,9 @@ export const ResponseSummary = ({
                   className="w-full h-full border-0"
                   title={`PDF Preview - ${selectedPdfName}`}
                   onError={() => {
-                    console.error('Failed to load PDF in iframe');
+                    if (process.env.NODE_ENV === 'development') {
+                      console.error('Failed to load PDF in iframe');
+                    }
                   }}
                 />
               ) : (
