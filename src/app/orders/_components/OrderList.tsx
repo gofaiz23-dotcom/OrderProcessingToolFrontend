@@ -346,7 +346,7 @@ export const OrderList = ({
       </div>
 
       {/* Search and Action Buttons */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between mb-2 sm:mb-4 lg:mb-6 relative z-10 px-3 sm:px-0 flex-shrink-0">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between mb-2 sm:mb-4 lg:mb-6 relative z-40 px-3 sm:px-0 flex-shrink-0">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2 sm:gap-3 flex-1 flex-wrap">
           <label className="flex flex-col gap-1 flex-1 sm:flex-initial min-w-0">
             <span className="text-xs font-medium text-slate-900 hidden sm:block">Search</span>
@@ -422,7 +422,7 @@ export const OrderList = ({
 
               {/* Logistics Dropdown Menu */}
               {showLogisticsDropdown && (
-                <div className="absolute right-0 mt-2 w-full sm:w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-50">
+                <div className="absolute right-0 mt-2 w-full sm:w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-[60]">
                   {LOGISTICS_CARRIERS.map((carrier) => {
                     // Get the selected order
                     const selectedOrderId = Array.from(selectedOrderIds)[0];
@@ -475,7 +475,7 @@ export const OrderList = ({
 
             {/* Dropdown Menu */}
             {showDropdown && (
-              <div className="absolute right-0 mt-2 w-full sm:w-48 bg-white border border-slate-200 transition-colors shadow-xl rounded-lg z-50">
+              <div className="absolute right-0 mt-2 w-full sm:w-48 bg-white border border-slate-200 transition-colors shadow-xl rounded-lg z-[60]">
                 <button
                   onClick={() => {
                     onCreateNew();
