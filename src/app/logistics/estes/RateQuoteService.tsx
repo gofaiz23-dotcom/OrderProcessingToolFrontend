@@ -31,6 +31,7 @@ type HandlingUnit = {
   nmfc: string;
   sub: string;
   hazardous: boolean;
+  description: string;
   items: CommodityItem[];
 };
 
@@ -75,7 +76,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   // Account Information
   const [myAccount, setMyAccount] = useState(ESTES_ACCOUNTS[0]?.accountNumber || '');
   const [role, setRole] = useState<string>(ESTES_RATE_QUOTE_DEFAULTS.role);
-  const [term, setTerm] = useState('');
+  const [term, setTerm] = useState('Prepaid'); // Default to 'Prepaid' to match autofill behavior
   const [shipDate, setShipDate] = useState('');
   const [shipTime, setShipTime] = useState('14:30');
   
@@ -650,6 +651,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       nmfc: '',
       sub: '',
       hazardous: false,
+      description: '',
       items: [],
     };
     setHandlingUnits([...handlingUnits, newUnit]);
@@ -786,6 +788,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           nmfc: unit.lineItems?.[0]?.nmfc || '',
           sub: unit.lineItems?.[0]?.nmfcSub || '',
           hazardous: unit.lineItems?.[0]?.isHazardous || false,
+          description: unit.lineItems?.[0]?.description || '', // Set description from first lineItem
           items,
         };
       });
@@ -1608,6 +1611,18 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                   />
                   <span className="text-sm text-slate-700">Hazardous</span>
                 </label>
+              </div>
+
+              {/* Description Field */}
+              <div className="mt-4 space-y-2">
+                <label className="block text-sm font-semibold text-slate-900">Description</label>
+                <input
+                  type="text"
+                  value={unit.description || ''}
+                  onChange={(e) => updateHandlingUnit(unit.id, 'description', e.target.value)}
+                  placeholder="Enter description for this handling unit"
+                  className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </div>
 
               <div className="flex gap-2 mt-4">

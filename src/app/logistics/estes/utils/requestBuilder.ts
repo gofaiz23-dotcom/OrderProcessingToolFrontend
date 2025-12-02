@@ -85,7 +85,7 @@ export const buildEstesRequestBody = (params: BuildRequestBodyParams) => {
     payment: {
       account: accountNumber,
       payor: payorMap[role] || role || undefined,
-      terms: term || undefined,
+      terms: term || 'Prepaid', // Default to 'Prepaid' if not specified to match autofill behavior
     },
     requestor: {
       name: requestorName || undefined,
@@ -109,26 +109,43 @@ export const buildEstesRequestBody = (params: BuildRequestBodyParams) => {
       },
     },
     commodity: {
-      handlingUnits: handlingUnits.map((unit) => ({
-        count: unit.quantity || undefined,
-        type: typeMap[unit.handlingUnitType] || unit.handlingUnitType || undefined,
-        weight: unit.weight || undefined,
-        weightUnit: 'Pounds',
-        length: unit.length || undefined,
-        width: unit.width || undefined,
-        height: unit.height || undefined,
-        dimensionsUnit: 'Inches',
-        isStackable: !unit.doNotStack,
-        isTurnable: true,
-        lineItems: unit.items.map((item: { description?: string }) => ({
-          description: item.description || undefined,
+      handlingUnits: handlingUnits.map((unit) => {
+        // Map items to lineItems
+        let lineItems = unit.items.map((item: { description?: string }) => ({
+          description: item.description || unit.description || '', // Use item description, fallback to unit description
           weight: unit.weight || undefined,
           pieces: unit.quantity || undefined,
           packagingType: typeMap[unit.handlingUnitType] || unit.handlingUnitType || undefined,
           classification: unit.class || undefined,
           isHazardous: unit.hazardous || false,
-        })),
-      })),
+        }));
+        
+        // If no items, create a default lineItem from unit data
+        if (lineItems.length === 0) {
+          lineItems = [{
+            description: unit.description || '', // Use unit description if available
+            weight: unit.weight || undefined,
+            pieces: unit.quantity || undefined,
+            packagingType: typeMap[unit.handlingUnitType] || unit.handlingUnitType || undefined,
+            classification: unit.class || undefined,
+            isHazardous: unit.hazardous || false,
+          }];
+        }
+        
+        return {
+          count: unit.quantity || undefined,
+          type: typeMap[unit.handlingUnitType] || unit.handlingUnitType || undefined,
+          weight: unit.weight || undefined,
+          weightUnit: 'Pounds',
+          length: unit.length || undefined,
+          width: unit.width || undefined,
+          height: unit.height || undefined,
+          dimensionsUnit: 'Inches',
+          isStackable: !unit.doNotStack,
+          isTurnable: true,
+          lineItems,
+        };
+      }),
     },
     accessorials: {
       codes: accessorialCodes.length > 0 ? accessorialCodes : undefined,
