@@ -170,7 +170,9 @@ export const ResponseSummary = ({
 
       // Step 1: Save to database first
       const response = await createLogisticsShippedOrder(payload);
-      console.log('Order saved to database successfully:', response);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Order saved to database successfully:', response);
+      }
 
       // Step 2: Wait a moment to ensure DB save is complete, then delete order
       // Call success callback which will handle deletion
@@ -192,7 +194,9 @@ export const ResponseSummary = ({
       
       setSubmitSuccess(processingMessage);
     } catch (error) {
-      console.error('Error submitting order:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error submitting order:', error);
+      }
       setSubmitError(error instanceof Error ? error.message : 'Failed to submit order');
     } finally {
       setIsSubmitting(false);
@@ -668,7 +672,9 @@ export const ResponseSummary = ({
                   className="w-full h-full border-0"
                   title={`PDF Preview - ${selectedPdfName}`}
                   onError={() => {
-                    console.error('Failed to load PDF in iframe');
+                    if (process.env.NODE_ENV === 'development') {
+                      console.error('Failed to load PDF in iframe');
+                    }
                   }}
                 />
               ) : (

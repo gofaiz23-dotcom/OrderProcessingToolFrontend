@@ -532,7 +532,9 @@ export const BillOfLanding = ({
           URL.revokeObjectURL(url);
         };
       } catch (err) {
-        console.error('Failed to create PDF URL:', err);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to create PDF URL:', err);
+        }
         setPdfUrl(null);
       }
     } else {
@@ -1178,7 +1180,7 @@ export const BillOfLanding = ({
       <div className="bg-white rounded-lg border border-slate-200 p-3 sm:p-4 lg:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-3 mb-4 sm:mb-6">
           <div className="p-2 bg-blue-100 rounded-lg flex-shrink-0">
-            <FileText className="text-blue-600" size={20} className="sm:w-6 sm:h-6" />
+            <FileText className="text-blue-600 sm:w-6 sm:h-6" size={20} />
           </div>
           <div className="flex-1">
             <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Bill of Lading</h2>

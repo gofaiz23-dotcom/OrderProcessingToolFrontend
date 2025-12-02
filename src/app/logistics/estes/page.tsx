@@ -38,7 +38,9 @@ function EstesRateQuotePageContent() {
           // Clear sessionStorage after reading
           sessionStorage.removeItem('selectedOrderForLogistics');
         } catch (error) {
-          console.error('Failed to parse stored order data:', error);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to parse stored order data:', error);
+          }
         }
       } else if (orderId) {
         // If orderId is in URL, fetch from API
@@ -56,7 +58,9 @@ function EstesRateQuotePageContent() {
             });
           }
         } catch (error) {
-          console.error('Failed to fetch order data:', error);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to fetch order data:', error);
+          }
         }
       }
     };

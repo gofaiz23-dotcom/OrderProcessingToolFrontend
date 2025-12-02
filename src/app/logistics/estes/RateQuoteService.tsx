@@ -164,7 +164,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
             setCurrentOrderId(parsed.id);
           }
         } catch (e) {
-          console.error('Failed to parse stored order:', e);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to parse stored order:', e);
+          }
         }
       }
     }
@@ -198,11 +200,15 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                   orderFound = true;
                 } else {
                   // Order not found - fall back to sessionStorage or most recent order
-                  console.warn(`Order with ID ${orderId} not found, falling back to sessionStorage or most recent order`);
+                  if (process.env.NODE_ENV === 'development') {
+                    console.warn(`Order with ID ${orderId} not found, falling back to sessionStorage or most recent order`);
+                  }
                 }
               } catch (error) {
                 // Handle any other errors gracefully
-                console.warn(`Error fetching order ${orderId}:`, error);
+                if (process.env.NODE_ENV === 'development') {
+                  console.warn(`Error fetching order ${orderId}:`, error);
+                }
               }
             }
           }
@@ -228,7 +234,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                   return;
                 }
               } catch (e) {
-                console.error('Failed to parse stored order:', e);
+                if (process.env.NODE_ENV === 'development') {
+                  console.error('Failed to parse stored order:', e);
+                }
               }
             }
             
@@ -246,12 +254,16 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                   orderFound = true;
                 }
               } catch (error) {
-                console.warn('Failed to fetch most recent order:', error);
+                if (process.env.NODE_ENV === 'development') {
+                  console.warn('Failed to fetch most recent order:', error);
+                }
               }
             }
           }
         } catch (error) {
-          console.error('Failed to fetch order data:', error);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to fetch order data:', error);
+          }
           // Don't set error state here, just log it - order data is optional
         } finally {
           setLoadingOrderData(false);
@@ -266,16 +278,22 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   const handleSubmitSuccess = async (orderId: number, sku: string) => {
     try {
       // Step 1: Database save is already complete at this point
-      console.log(`Database save confirmed for Order ID: ${orderId}, SKU: ${sku}`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Database save confirmed for Order ID: ${orderId}, SKU: ${sku}`);
+      }
       
       // Step 2: Now delete the order (after DB save is confirmed)
       if (orderId) {
         try {
           await deleteOrder(orderId);
-          console.log(`Order (ID: ${orderId}) deleted successfully after database save`);
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`Order (ID: ${orderId}) deleted successfully after database save`);
+          }
         } catch (deleteError) {
           // Order might not exist or already deleted - that's okay
-          console.warn(`Order (ID: ${orderId}) could not be deleted:`, deleteError);
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(`Order (ID: ${orderId}) could not be deleted:`, deleteError);
+          }
           // Continue with cache clearing even if order deletion fails
         }
       }
@@ -291,9 +309,13 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       }
 
       // Show info message
-      console.log(`Order data saved successfully. Order deleted. Cache cleared.`);
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`Order data saved successfully. Order deleted. Cache cleared.`);
+      }
     } catch (error) {
-      console.error('Error during cleanup:', error);
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error during cleanup:', error);
+      }
       const toastId = `toast-${Date.now()}`;
       setToasts(prev => [...prev, {
         id: toastId,
@@ -578,8 +600,10 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         throw new Error('At least one handling unit is required');
       }
       
-      // Log request for debugging (remove in production)
-      console.log('Rate Quote Request:', JSON.stringify(requestBody, null, 2));
+      // Log request only in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Rate Quote Request:', JSON.stringify(requestBody, null, 2));
+      }
 
       const res = await fetch(buildApiUrl('/Logistics/create-rate-quote'), {
         method: 'POST',
@@ -629,7 +653,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           }
         } catch (parseError) {
           // If JSON parsing fails, use status text
-          console.error('Failed to parse error response:', parseError);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Failed to parse error response:', parseError);
+          }
         }
         
         throw new Error(errorMessage);
@@ -739,6 +765,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     scrollToTop();
     setCurrentStep(3);
     // Use requestAnimationFrame and multiple timeouts to ensure scroll happens after render
+    // Note: These timeouts are fire-and-forget for navigation, cleanup handled by useEffect
     requestAnimationFrame(() => {
       scrollToTop();
       setTimeout(scrollToTop, 0);
@@ -779,26 +806,32 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     };
     
     // Use requestAnimationFrame to ensure DOM is ready
+    const timeoutIds: NodeJS.Timeout[] = [];
     const rafId = requestAnimationFrame(() => {
       scrollToTop();
       // Multiple attempts with delays to ensure it works, especially for step 3 (PickupRequest)
-      setTimeout(scrollToTop, 0);
-      setTimeout(scrollToTop, 10);
-      setTimeout(scrollToTop, 50);
-      setTimeout(scrollToTop, 100);
-      setTimeout(scrollToTop, 200);
-      setTimeout(scrollToTop, 300);
-      setTimeout(scrollToTop, 500);
+      timeoutIds.push(
+        setTimeout(scrollToTop, 0),
+        setTimeout(scrollToTop, 10),
+        setTimeout(scrollToTop, 50),
+        setTimeout(scrollToTop, 100),
+        setTimeout(scrollToTop, 200),
+        setTimeout(scrollToTop, 300),
+        setTimeout(scrollToTop, 500)
+      );
     });
     
     // Cleanup function
     return () => {
       cancelAnimationFrame(rafId);
+      timeoutIds.forEach(id => clearTimeout(id));
     };
   }, [currentStep]);
 
   // Extract BOL PDF URL and create File when BOL response is available
   useEffect(() => {
+    let currentUrl: string | null = null;
+    
     if (bolResponseData?.data?.images?.bol) {
       try {
         const base64String = bolResponseData.data.images.bol;
@@ -809,6 +842,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         }
         const blob = new Blob([bytes], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
+        currentUrl = url;
         setBolPdfUrl(url);
         
         // Create File object from blob and add to bolFiles
@@ -817,7 +851,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
         setBolFiles([pdfFile]);
       } catch (err) {
-        console.error('Failed to create PDF URL:', err);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to create PDF URL:', err);
+        }
         setBolPdfUrl(null);
         setBolFiles([]);
       }
@@ -826,6 +862,13 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       setBolFiles([]);
       setBolPdfUrl(null);
     }
+    
+    // Cleanup: revoke URL when component unmounts or bolResponseData changes
+    return () => {
+      if (currentUrl) {
+        URL.revokeObjectURL(currentUrl);
+      }
+    };
   }, [bolResponseData]);
 
   return (
