@@ -336,17 +336,11 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           setShipDate(formattedDate);
         }
       } catch (e) {
-        // If parsing fails, use today's date
-        if (!shipDate) {
-          const today = new Date().toISOString().split('T')[0];
-          setShipDate(today);
-        }
+        // If parsing fails, leave date empty
+        // Date will remain empty if not found or cannot be parsed
       }
-    } else if (!shipDate) {
-      // Default to today's date
-      const today = new Date().toISOString().split('T')[0];
-      setShipDate(today);
     }
+    // If no order date found, leave shipDate empty (no default)
   };
 
   // Update order data when prop changes and auto-populate form

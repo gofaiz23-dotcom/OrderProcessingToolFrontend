@@ -68,7 +68,20 @@ export const LogisticsAuthModal = ({ isOpen, onClose, carrier }: LogisticsAuthMo
         onClose();
         // Navigate to estes page on success
         if (carrier) {
-          const estesUrl = `/logistics/estes?carrier=${encodeURIComponent(carrier)}`;
+          // Check if there's order information in sessionStorage (from order selection)
+          let estesUrl = `/logistics/estes?carrier=${encodeURIComponent(carrier)}`;
+          try {
+            const orderDataStr = sessionStorage.getItem('selectedOrderForLogistics');
+            if (orderDataStr) {
+              const orderData = JSON.parse(orderDataStr);
+              if (orderData.id) {
+                estesUrl += `&orderId=${orderData.id}`;
+              }
+            }
+          } catch (err) {
+            // Ignore errors parsing sessionStorage
+            console.warn('Could not parse order data from sessionStorage:', err);
+          }
           window.location.href = estesUrl;
         }
       } else {

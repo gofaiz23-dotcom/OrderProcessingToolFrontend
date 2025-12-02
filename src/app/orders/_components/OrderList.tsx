@@ -9,8 +9,8 @@ import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { exportOrdersToCSV } from '@/app/utils/Orders/exportOrders';
 import { LOGISTICS_CARRIERS } from '@/Shared/constant';
 import { DateFilter } from '@/app/components/shared/DateFilter';
-import { useAuthStore } from '@/app/UserAuthentication/store/authStore';
-import { UserAuthModal } from '@/app/components/shared/UserAuthModal';
+import { useLogisticsStore } from '@/store/logisticsStore';
+import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
 
 type DateFilterOption = 'all' | 'today' | 'thisWeek' | 'specificDate' | 'custom';
 
@@ -66,7 +66,7 @@ export const OrderList = ({
   onBulkDelete,
 }: OrderListProps) => {
   const router = useRouter();
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const { getToken } = useLogisticsStore();
   // Use prop searchQuery if provided, otherwise use local state
   const searchQuery = searchQueryProp !== undefined ? searchQueryProp : '';
   const setSearchQuery = onSearchChange || (() => {});
@@ -75,7 +75,8 @@ export const OrderList = ({
   const [showLogisticsDropdown, setShowLogisticsDropdown] = useState(false);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<Order | null>(null);
   const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<Order | null>(null);
-  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showLogisticsAuthModal, setShowLogisticsAuthModal] = useState(false);
+  const [selectedCarrier, setSelectedCarrier] = useState<string | null>(null);
   const [pendingLogisticsAction, setPendingLogisticsAction] = useState<{
     carrier: string;
     order: Order;
@@ -160,13 +161,6 @@ export const OrderList = ({
     setShowLogisticsDropdown(false);
   };
 
-  // Handle successful authentication
-  const handleAuthSuccess = () => {
-    if (pendingLogisticsAction) {
-      handleLogisticsRedirect(pendingLogisticsAction.carrier, pendingLogisticsAction.order);
-      setPendingLogisticsAction(null);
-    }
-  };
 
   // Helper function to extract value from JSONB with flexible key matching
   const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
@@ -433,18 +427,27 @@ export const OrderList = ({
                         key={carrier}
                         onClick={() => {
                           if (selectedOrder) {
-                            // Check if user is authenticated (same pattern as GET QUOTE button)
-                            // If not authenticated, show login popup and preserve the action
-                            if (!isAuthenticated) {
-                              // Store the pending logistics action to execute after login
+                            // Store order data in sessionStorage before checking token
+                            // This ensures the order info is available after login
+                            sessionStorage.setItem('selectedOrderForLogistics', JSON.stringify({
+                              id: selectedOrder.id,
+                              orderOnMarketPlace: selectedOrder.orderOnMarketPlace,
+                              jsonb: selectedOrder.jsonb,
+                            }));
+                            
+                            // Check if logistics token exists for this carrier
+                            const logisticsToken = getToken(carrier);
+                            
+                            if (!logisticsToken) {
+                              // Token doesn't exist, show logistics login popup and preserve the action
                               setPendingLogisticsAction({ carrier, order: selectedOrder });
-                              // Show login modal - form data/action is preserved
-                              setShowAuthModal(true);
+                              setSelectedCarrier(carrier);
+                              setShowLogisticsAuthModal(true);
                               setShowLogisticsDropdown(false);
-                              return; // Don't proceed until user is authenticated
+                              return; // Don't proceed until user is logged in to logistics
                             }
                             
-                            // User is authenticated, proceed with redirect to rate quote page
+                            // User is logged in to logistics, proceed with redirect to rate quote page
                             handleLogisticsRedirect(carrier, selectedOrder);
                           }
                         }}
@@ -859,15 +862,18 @@ export const OrderList = ({
           loading={deleteModalState.loading}
         />
 
-        {/* User Authentication Modal */}
-        <UserAuthModal
-          isOpen={showAuthModal}
-          onClose={() => {
-            setShowAuthModal(false);
-            setPendingLogisticsAction(null);
-          }}
-          onSuccess={handleAuthSuccess}
-        />
+        {/* Logistics Authentication Modal */}
+        {selectedCarrier && (
+          <LogisticsAuthModal
+            isOpen={showLogisticsAuthModal}
+            onClose={() => {
+              setShowLogisticsAuthModal(false);
+              setSelectedCarrier(null);
+              setPendingLogisticsAction(null);
+            }}
+            carrier={selectedCarrier}
+          />
+        )}
       </div>
     );
   };
