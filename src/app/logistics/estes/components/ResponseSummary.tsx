@@ -208,7 +208,7 @@ export const ResponseSummary = ({
       <div className="bg-white rounded-lg border border-slate-200 p-3 sm:p-4 lg:p-6">
         <div className="flex items-center gap-3 mb-4 sm:mb-6">
           <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
-            <CheckCircle2 className="text-green-600" size={20} className="sm:w-6 sm:h-6" />
+            <CheckCircle2 className="text-green-600 sm:w-6 sm:h-6" size={20} />
           </div>
           <div className="flex-1">
             <h2 className="text-xl sm:text-2xl font-bold text-slate-900">Response Summary</h2>
