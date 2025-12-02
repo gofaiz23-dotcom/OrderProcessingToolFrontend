@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, ArrowRight, FileText, Info, HelpCircle, Plus, X, Calendar, ChevronDown, ChevronUp, Sparkles, Copy, Check, Download, Printer } from 'lucide-react';
 import { buildApiUrl } from '../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
-import { ESTES_BOL_AUTOFILL_DATA } from '@/Shared/constant';
+import { ESTES_BOL_AUTOFILL_DATA, ESTES_RATE_QUOTE_DEFAULTS, ESTES_BILL_TO_DEFAULTS } from '@/Shared/constant';
 
 type BillOfLandingProps = {
   onNext: () => void;
@@ -97,16 +97,16 @@ export const BillOfLanding = ({
   
   // Bill To Information
   const [billToAccount, setBillToAccount] = useState('0216496');
-  const [billToName, setBillToName] = useState('');
-  const [billToAddress1, setBillToAddress1] = useState('');
-  const [billToAddress2, setBillToAddress2] = useState('');
+  const [billToName, setBillToName] = useState(ESTES_BILL_TO_DEFAULTS.companyName);
+  const [billToAddress1, setBillToAddress1] = useState(ESTES_BILL_TO_DEFAULTS.address1);
+  const [billToAddress2, setBillToAddress2] = useState(ESTES_BILL_TO_DEFAULTS.address2);
   const [billToCity, setBillToCity] = useState('');
   const [billToState, setBillToState] = useState('');
-  const [billToZipCode, setBillToZipCode] = useState('');
-  const [billToCountry, setBillToCountry] = useState('USA');
-  const [billToContactName, setBillToContactName] = useState('');
-  const [billToPhone, setBillToPhone] = useState('');
-  const [billToEmail, setBillToEmail] = useState('');
+  const [billToZipCode, setBillToZipCode] = useState(ESTES_BILL_TO_DEFAULTS.zipCode);
+  const [billToCountry, setBillToCountry] = useState(ESTES_BILL_TO_DEFAULTS.country);
+  const [billToContactName, setBillToContactName] = useState(ESTES_BILL_TO_DEFAULTS.contactName);
+  const [billToPhone, setBillToPhone] = useState(ESTES_BILL_TO_DEFAULTS.phone);
+  const [billToEmail, setBillToEmail] = useState(ESTES_BILL_TO_DEFAULTS.email);
   
   // Freight Accessorials
   const [selectedAccessorials, setSelectedAccessorials] = useState<string[]>([]);
@@ -114,8 +114,13 @@ export const BillOfLanding = ({
   const [liftGateService, setLiftGateService] = useState(false);
   const [residentialDelivery, setResidentialDelivery] = useState(false);
   
-  // Special Handling Requests
-  const [specialHandlingRequests, setSpecialHandlingRequests] = useState<string[]>([]);
+  // Special Handling Requests - Initialize with all 4 options selected
+  const [specialHandlingRequests, setSpecialHandlingRequests] = useState<string[]>([
+    'Added Accessorials Require Pre Approval',
+    'Do Not Break Down the Pallet',
+    'Do Not Remove Shrink Wrap from Skid',
+    'Fragile-Handle with Care'
+  ]);
   
   // Commodities
   const [handlingUnits, setHandlingUnits] = useState<HandlingUnit[]>([]);
@@ -137,8 +142,8 @@ export const BillOfLanding = ({
   const [shippingLabelFormat, setShippingLabelFormat] = useState('Zebra 4 X 6');
   const [shippingLabelQuantity, setShippingLabelQuantity] = useState(1);
   const [shippingLabelPosition, setShippingLabelPosition] = useState(1);
-  const [billOfLadingEmails, setBillOfLadingEmails] = useState<string[]>(['']);
-  const [trackingUpdatesEmails, setTrackingUpdatesEmails] = useState<string[]>(['']);
+  const [billOfLadingEmails, setBillOfLadingEmails] = useState<string[]>([ESTES_RATE_QUOTE_DEFAULTS.requestorEmail]);
+  const [trackingUpdatesEmails, setTrackingUpdatesEmails] = useState<string[]>([ESTES_RATE_QUOTE_DEFAULTS.requestorEmail]);
   const [notificationSendTo, setNotificationSendTo] = useState({
     billOfLading: { shipper: true, consignee: false, thirdParty: false },
     shippingLabels: { shipper: true, consignee: false, thirdParty: false },
@@ -1174,6 +1179,11 @@ export const BillOfLanding = ({
   };
 
   const totals = calculateTotals();
+  
+  // Validate Total Density: must be between 2 and 4 (greater than 2 and less than 4)
+  const totalDensityValue = parseFloat(totals.totalDensity);
+  const isDensityValid = totalDensityValue > 2 && totalDensityValue < 4;
+  const densityError = !isNaN(totalDensityValue) && totalDensityValue > 0 && !isDensityValid;
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 pb-4 sm:pb-8 px-3 sm:px-0">
@@ -2164,7 +2174,9 @@ export const BillOfLanding = ({
                         </div>
                         <div>
                           <p className="text-slate-600">Total Density:</p>
-                          <p className="font-semibold text-blue-600">{totals.totalDensity} lb/ft³</p>
+                          <p className={`font-semibold ${densityError ? 'text-red-600' : 'text-blue-600'}`}>
+                            {totals.totalDensity} lb/ft³
+                          </p>
                         </div>
                         <div>
                           <p className="text-slate-600">Total Handling Units:</p>
@@ -2179,6 +2191,16 @@ export const BillOfLanding = ({
                           <p className="font-semibold text-slate-900">{totals.totalWeight} lbs</p>
                         </div>
                       </div>
+                      {densityError && (
+                        <div className="mt-4">
+                          <div className="bg-red-50 border-2 border-red-300 rounded-lg p-3">
+                            <p className="text-red-700 text-sm font-bold flex items-center gap-2">
+                              <span className="text-red-600 text-lg">⚠️</span>
+                              Total Density must be greater than 2 and less than 4 (Current: {totals.totalDensity} lb/ft³)
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}

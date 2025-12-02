@@ -433,17 +433,19 @@ export const OrderList = ({
                         key={carrier}
                         onClick={() => {
                           if (selectedOrder) {
-                            // Check if user is authenticated
+                            // Check if user is authenticated (same pattern as GET QUOTE button)
+                            // If not authenticated, show login popup and preserve the action
                             if (!isAuthenticated) {
-                              // Store the pending logistics action
+                              // Store the pending logistics action to execute after login
                               setPendingLogisticsAction({ carrier, order: selectedOrder });
-                              // Show login modal
+                              // Show login modal - form data/action is preserved
                               setShowAuthModal(true);
                               setShowLogisticsDropdown(false);
-                            } else {
-                              // User is authenticated, proceed with logistics
-                              handleLogisticsRedirect(carrier, selectedOrder);
+                              return; // Don't proceed until user is authenticated
                             }
+                            
+                            // User is authenticated, proceed with redirect to rate quote page
+                            handleLogisticsRedirect(carrier, selectedOrder);
                           }
                         }}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"

@@ -16,14 +16,35 @@ export const MARKETPLACES = [
 export type Marketplace = typeof MARKETPLACES[number];
 
 export const LOGISTICS_CARRIERS = [
-  'FedEx',
+  // 'FedEx',
   'XPO',
   'Estes',
-  'UPS',
-  'Arcbest',
+ 
 ] as const;
 
 export type LogisticsCarrier = typeof LOGISTICS_CARRIERS[number];
+
+// Default values for Rate Quote form
+export const ESTES_RATE_QUOTE_DEFAULTS = {
+  requestorEmail: "gofaiz23@gmail.com",
+  role: "Third-Party"
+};
+
+// Default values for Bill To Information in Bill of Lading
+export const ESTES_BILL_TO_DEFAULTS = {
+  companyName: "DECORA2Z",
+  email: "SHAMYASLI@YAHOO.COM",
+  contactName: "TARIF HAWASLY",
+  address1: "19150 SUMMIT RIDGE",
+  address2: "",
+  zipCode: "91789",
+  country: "USA",
+  phone: "(626) 715-0682"
+};
+
+
+
+
 
 export const ESTES_AUTOFILL_DATA = {
   "quoteRequest": {
@@ -329,4 +350,20 @@ try {
 }
 
 export { ALLOWED_USERS };
+
+export type EstesAccount = {
+  accountNumber: string;
+  type: string;
+  companyName: string;
+  address: string;
+};
+
+export const ESTES_ACCOUNTS: EstesAccount[] = [
+  {
+    accountNumber: '0216496',
+    type: 'Regular',
+    companyName: 'Decora2z',
+    address: '19150 Summit Ridge, Walnut, CA 91789',
+  },
+] as const;
 
