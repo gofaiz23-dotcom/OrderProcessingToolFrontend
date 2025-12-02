@@ -9,7 +9,7 @@ import { useLogisticsStore } from '@/store/logisticsStore';
 import { buildEstesRequestBody } from './utils/requestBuilder';
 import { EstesQuoteCard } from './components/EstesQuoteCard';
 import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
-import { ESTES_AUTOFILL_DATA } from '@/Shared/constant';
+import { ESTES_AUTOFILL_DATA, ESTES_ACCOUNTS, ESTES_RATE_QUOTE_DEFAULTS } from '@/Shared/constant';
 import { StepIndicator } from './components/StepIndicator';
 import { BillOfLanding } from './BillOfLanding';
 import { PickupRequest } from './PickupRequest';
@@ -73,8 +73,8 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   }, [carrier, getToken]);
 
   // Account Information
-  const [myAccount, setMyAccount] = useState('');
-  const [role, setRole] = useState('');
+  const [myAccount, setMyAccount] = useState(ESTES_ACCOUNTS[0]?.accountNumber || '');
+  const [role, setRole] = useState<string>(ESTES_RATE_QUOTE_DEFAULTS.role);
   const [term, setTerm] = useState('');
   const [shipDate, setShipDate] = useState('');
   const [shipTime, setShipTime] = useState('14:30');
@@ -82,7 +82,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   // Requestor Information
   const [requestorName, setRequestorName] = useState('');
   const [requestorPhone, setRequestorPhone] = useState('');
-  const [requestorEmail, setRequestorEmail] = useState('');
+  const [requestorEmail, setRequestorEmail] = useState<string>(ESTES_RATE_QUOTE_DEFAULTS.requestorEmail);
 
   // Routing Information - Origin
   const [originAddress1, setOriginAddress1] = useState('');
@@ -90,6 +90,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   const [originZipCode, setOriginZipCode] = useState('');
   const [originCity, setOriginCity] = useState('');
   const [originCountry, setOriginCountry] = useState('');
+  const [customOriginCountries, setCustomOriginCountries] = useState<string[]>([]);
 
   // Routing Information - Destination
   const [destinationAddress1, setDestinationAddress1] = useState('');
@@ -97,6 +98,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   const [destinationZipCode, setDestinationZipCode] = useState('');
   const [destinationCity, setDestinationCity] = useState('');
   const [destinationCountry, setDestinationCountry] = useState('');
+  const [customDestinationCountries, setCustomDestinationCountries] = useState<string[]>([]);
 
   // Freight Accessorials
   const [selectedAccessorials, setSelectedAccessorials] = useState<string[]>([]);
@@ -139,14 +141,226 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     ordersJsonb?: Record<string, unknown>;
   } | null>(initialOrderData || null);
   
-  // Update order data when prop changes
-  useEffect(() => {
-    if (initialOrderData) {
-      setOrderData(initialOrderData);
+  // Flag to track if form has been auto-populated from order data
+  const [hasAutoPopulated, setHasAutoPopulated] = useState(false);
+  
+  // Helper function to extract value from JSONB with flexible key matching
+  const getJsonbValue = (jsonb: Record<string, unknown> | null | undefined, key: string): string => {
+    if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '';
+    const obj = jsonb as Record<string, unknown>;
+    
+    // Normalize the key for matching
+    const normalizedKey = key.trim();
+    const keyWithoutHash = normalizedKey.replace(/#/g, '');
+    const keyLower = normalizedKey.toLowerCase();
+    const keyWithoutHashLower = keyWithoutHash.toLowerCase();
+    
+    // Generate all possible key variations
+    const keysToTry = [
+      normalizedKey,                    // Exact match: "Customer Name"
+      keyWithoutHash,                   // Without #: "Customer Name"
+      `#${keyWithoutHash}`,             // With # prefix: "#Customer Name"
+      keyLower,                         // Lowercase: "customer name"
+      keyWithoutHashLower,              // Lowercase without #: "customer name"
+      `#${keyWithoutHashLower}`,        // Lowercase with #: "#customer name"
+      normalizedKey.replace(/#/g, '').trim(), // Remove all #
+    ];
+    
+    // Try exact matches first
+    for (const k of keysToTry) {
+      if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') {
+        return String(obj[k]);
+      }
     }
-  }, [initialOrderData]);
+    
+    // Try case-insensitive partial matching
+    const allKeys = Object.keys(obj);
+    for (const objKey of allKeys) {
+      const objKeyLower = objKey.toLowerCase();
+      if (
+        objKeyLower === keyLower ||
+        objKeyLower === keyWithoutHashLower ||
+        objKeyLower.includes(keyWithoutHashLower) ||
+        keyWithoutHashLower.includes(objKeyLower)
+      ) {
+        const value = obj[objKey];
+        if (value !== undefined && value !== null && value !== '') {
+          return String(value);
+        }
+      }
+    }
+    
+    return '';
+  };
 
-  // Get orderId from URL params or sessionStorage
+  // Function to extract and parse address components
+  const parseAddress = (address: string): { address1: string; address2: string; city: string; zipCode: string; country: string } => {
+    if (!address) return { address1: '', address2: '', city: '', zipCode: '', country: '' };
+    
+    // Try to parse address - common formats:
+    // "123 Main St, City, ST 12345"
+    // "123 Main St\nCity, ST 12345"
+    const parts = address.split(/[,\n]/).map(p => p.trim()).filter(p => p);
+    
+    let address1 = parts[0] || '';
+    let address2 = '';
+    let city = '';
+    let zipCode = '';
+    let country = 'USA'; // Default
+    
+    if (parts.length > 1) {
+      city = parts[1] || '';
+    }
+    
+    // Try to extract zip code from last part
+    if (parts.length > 2) {
+      const lastPart = parts[parts.length - 1];
+      const zipMatch = lastPart.match(/\b\d{5}(-\d{4})?\b/);
+      if (zipMatch) {
+        zipCode = zipMatch[0];
+      }
+    }
+    
+    // Check if there's a second address line
+    if (parts.length > 2 && !zipCode) {
+      address2 = parts[1] || '';
+      city = parts[2] || '';
+    }
+    
+    return { address1, address2, city, zipCode, country };
+  };
+
+  // Function to auto-populate form from order data
+  const populateFormFromOrder = (orderJsonb: Record<string, unknown> | null | undefined) => {
+    if (!orderJsonb || typeof orderJsonb !== 'object' || Array.isArray(orderJsonb)) return;
+    
+    // Mark as auto-populated to prevent overwriting user input
+    setHasAutoPopulated(true);
+    
+    // Requestor Information
+    const customerName = getJsonbValue(orderJsonb, 'Customer Name');
+    if (customerName && !requestorName) {
+      setRequestorName(customerName);
+    }
+    
+    const customerPhone = getJsonbValue(orderJsonb, 'Customer Phone Number') || 
+                         getJsonbValue(orderJsonb, 'Phone') ||
+                         getJsonbValue(orderJsonb, 'Phone Number');
+    if (customerPhone && !requestorPhone) {
+      setRequestorPhone(customerPhone);
+    }
+    
+    const customerEmail = getJsonbValue(orderJsonb, 'Customer Email') || 
+                          getJsonbValue(orderJsonb, 'Email') ||
+                          getJsonbValue(orderJsonb, 'Customer Email Address');
+    if (customerEmail && !requestorEmail) {
+      setRequestorEmail(customerEmail);
+    }
+    
+    // Destination Information (Ship To)
+    const shipToAddress = getJsonbValue(orderJsonb, 'Ship to Address 1') ||
+                         getJsonbValue(orderJsonb, 'Shipping Address') ||
+                         getJsonbValue(orderJsonb, 'Customer Shipping Address') ||
+                         getJsonbValue(orderJsonb, 'Ship To Address');
+    
+    if (shipToAddress) {
+      const parsed = parseAddress(shipToAddress);
+      if (parsed.address1 && !destinationAddress1) {
+        setDestinationAddress1(parsed.address1);
+      }
+      if (parsed.address2 && !destinationAddress2) {
+        setDestinationAddress2(parsed.address2);
+      }
+    }
+    
+    const shipToAddress2 = getJsonbValue(orderJsonb, 'Ship to Address 2');
+    if (shipToAddress2 && !destinationAddress2) {
+      setDestinationAddress2(shipToAddress2);
+    }
+    
+    const shipToCity = getJsonbValue(orderJsonb, 'Ship to City') ||
+                      getJsonbValue(orderJsonb, 'Shipping City');
+    if (shipToCity && !destinationCity) {
+      setDestinationCity(shipToCity);
+    }
+    
+    const shipToZip = getJsonbValue(orderJsonb, 'Ship to Zip Code') ||
+                     getJsonbValue(orderJsonb, 'Ship to Postal Code') ||
+                     getJsonbValue(orderJsonb, 'Shipping Zip Code') ||
+                     getJsonbValue(orderJsonb, 'Shipping Postal Code');
+    if (shipToZip && !destinationZipCode) {
+      setDestinationZipCode(shipToZip);
+    }
+    
+    const shipToCountry = getJsonbValue(orderJsonb, 'Ship to Country') ||
+                         getJsonbValue(orderJsonb, 'Shipping Country');
+    if (shipToCountry && !destinationCountry) {
+      // Map common country codes/names to standard format
+      const country = shipToCountry.toUpperCase();
+      let mappedCountry = shipToCountry; // Default to original value
+      
+      if (country === 'US' || country === 'USA' || country === 'UNITED STATES') {
+        mappedCountry = 'USA';
+      } else if (country === 'CA' || country === 'CAN' || country === 'CANADA') {
+        mappedCountry = 'Canada';
+      } else if (country === 'MX' || country === 'MEX' || country === 'MEXICO') {
+        mappedCountry = 'Mexico';
+      } else {
+        // For other countries, use the original value and add to custom countries list
+        mappedCountry = shipToCountry;
+        setCustomDestinationCountries(prev => {
+          if (!prev.includes(mappedCountry)) {
+            return [...prev, mappedCountry];
+          }
+          return prev;
+        });
+      }
+      setDestinationCountry(mappedCountry);
+    } else if (!destinationCountry) {
+      setDestinationCountry('USA'); // Default
+    }
+    
+    // Note: Origin Information is NOT auto-populated from customer data
+    // Origin should be entered manually or come from warehouse/shipper data
+    
+    // Ship Date - if available in order
+    const orderDate = getJsonbValue(orderJsonb, 'Order Date') ||
+                     getJsonbValue(orderJsonb, 'Date') ||
+                     getJsonbValue(orderJsonb, 'Ship Date');
+    if (orderDate && !shipDate) {
+      // Try to parse date and format as YYYY-MM-DD
+      try {
+        const date = new Date(orderDate);
+        if (!isNaN(date.getTime())) {
+          const formattedDate = date.toISOString().split('T')[0];
+          setShipDate(formattedDate);
+        }
+      } catch (e) {
+        // If parsing fails, use today's date
+        if (!shipDate) {
+          const today = new Date().toISOString().split('T')[0];
+          setShipDate(today);
+        }
+      }
+    } else if (!shipDate) {
+      // Default to today's date
+      const today = new Date().toISOString().split('T')[0];
+      setShipDate(today);
+    }
+  };
+
+  // Update order data when prop changes and auto-populate form
+  useEffect(() => {
+    if (initialOrderData && !hasAutoPopulated) {
+      setOrderData(initialOrderData);
+      // Auto-populate form when order data is available
+      if (initialOrderData.ordersJsonb) {
+        populateFormFromOrder(initialOrderData.ordersJsonb);
+      }
+    }
+  }, [initialOrderData, hasAutoPopulated]);
+
+  // Get orderId from URL params or sessionStorage and auto-populate form
   useEffect(() => {
     const orderIdParam = searchParams?.get('orderId');
     if (orderIdParam) {
@@ -162,6 +376,10 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           const parsed = JSON.parse(storedOrder);
           if (parsed.id) {
             setCurrentOrderId(parsed.id);
+          }
+          // Auto-populate form from stored order data (only if not already populated)
+          if (parsed.jsonb && typeof parsed.jsonb === 'object' && !Array.isArray(parsed.jsonb) && !hasAutoPopulated) {
+            populateFormFromOrder(parsed.jsonb as Record<string, unknown>);
           }
         } catch (e) {
           if (process.env.NODE_ENV === 'development') {
@@ -197,6 +415,10 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                     orderOnMarketPlace: response.data.orderOnMarketPlace,
                     ordersJsonb: response.data.ordersJsonb as Record<string, unknown>,
                   });
+                  // Auto-populate form from order data (only if not already populated)
+                  if (response.data.ordersJsonb && typeof response.data.ordersJsonb === 'object' && !Array.isArray(response.data.ordersJsonb) && !hasAutoPopulated) {
+                    populateFormFromOrder(response.data.ordersJsonb as Record<string, unknown>);
+                  }
                   orderFound = true;
                 } else {
                   // Order not found - fall back to sessionStorage or most recent order
@@ -229,6 +451,10 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                     orderOnMarketPlace: parsed.orderOnMarketPlace,
                     ordersJsonb: parsed.jsonb,
                   });
+                  // Auto-populate form from order data (only if not already populated)
+                  if (typeof parsed.jsonb === 'object' && !Array.isArray(parsed.jsonb) && !hasAutoPopulated) {
+                    populateFormFromOrder(parsed.jsonb as Record<string, unknown>);
+                  }
                   orderFound = true;
                   setLoadingOrderData(false);
                   return;
@@ -251,6 +477,10 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                     orderOnMarketPlace: mostRecentOrder.orderOnMarketPlace,
                     ordersJsonb: mostRecentOrder.ordersJsonb as Record<string, unknown>,
                   });
+                  // Auto-populate form from order data (only if not already populated)
+                  if (mostRecentOrder.ordersJsonb && typeof mostRecentOrder.ordersJsonb === 'object' && !Array.isArray(mostRecentOrder.ordersJsonb) && !hasAutoPopulated) {
+                    populateFormFromOrder(mostRecentOrder.ordersJsonb as Record<string, unknown>);
+                  }
                   orderFound = true;
                 }
               } catch (error) {
@@ -368,6 +598,11 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   };
 
   const totals = calculateTotals();
+  
+  // Validate Total Density: must be between 2 and 4 (greater than 2 and less than 4)
+  const totalDensityValue = parseFloat(totals.totalDensity);
+  const isDensityValid = totalDensityValue > 2 && totalDensityValue < 4;
+  const densityError = !isNaN(totalDensityValue) && totalDensityValue > 0 && !isDensityValid;
 
   // Build request body using Estes-specific logic
   const buildRequestBody = () => {
@@ -932,13 +1167,19 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <label className="block text-sm font-semibold text-slate-900">
-                My Accounts
+                My Accounts <span className="text-red-500">*</span>
               </label>
               <select
                 value={myAccount}
                 onChange={(e) => setMyAccount(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border border-blue-500 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
+                <option value="">Select an account</option>
+                {ESTES_ACCOUNTS.map((account) => (
+                  <option key={account.accountNumber} value={account.accountNumber}>
+                    {account.accountNumber} - {account.type} - {account.companyName} - {account.address}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -1077,13 +1318,36 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                 />
                 <select
                   value={originCountry}
-                  onChange={(e) => setOriginCountry(e.target.value)}
+                  onChange={(e) => {
+                    setOriginCountry(e.target.value);
+                    // Add custom country to list if it's not in predefined options
+                    if (e.target.value && 
+                        e.target.value !== 'USA' && 
+                        e.target.value !== 'Canada' && 
+                        e.target.value !== 'Mexico' &&
+                        !customOriginCountries.includes(e.target.value)) {
+                      setCustomOriginCountries(prev => [...prev, e.target.value]);
+                    }
+                  }}
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">Select Country</option>
                   <option value="USA">USA</option>
                   <option value="Canada">Canada</option>
                   <option value="Mexico">Mexico</option>
+                  {customOriginCountries.map((country) => (
+                    <option key={country} value={country}>
+                      {country}
+                    </option>
+                  ))}
+                  {/* Show current value if it's not in any of the options */}
+                  {originCountry && 
+                   originCountry !== 'USA' && 
+                   originCountry !== 'Canada' && 
+                   originCountry !== 'Mexico' &&
+                   !customOriginCountries.includes(originCountry) && (
+                    <option value={originCountry}>{originCountry}</option>
+                  )}
                 </select>
               </div>
             </div>
@@ -1108,13 +1372,36 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                 />
                 <select
                   value={destinationCountry}
-                  onChange={(e) => setDestinationCountry(e.target.value)}
+                  onChange={(e) => {
+                    setDestinationCountry(e.target.value);
+                    // Add custom country to list if it's not in predefined options
+                    if (e.target.value && 
+                        e.target.value !== 'USA' && 
+                        e.target.value !== 'Canada' && 
+                        e.target.value !== 'Mexico' &&
+                        !customDestinationCountries.includes(e.target.value)) {
+                      setCustomDestinationCountries(prev => [...prev, e.target.value]);
+                    }
+                  }}
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="">Select Country</option>
                   <option value="USA">USA</option>
                   <option value="Canada">Canada</option>
                   <option value="Mexico">Mexico</option>
+                  {customDestinationCountries.map((country) => (
+                    <option key={country} value={country}>
+                      {country}
+                    </option>
+                  ))}
+                  {/* Show current value if it's not in any of the options */}
+                  {destinationCountry && 
+                   destinationCountry !== 'USA' && 
+                   destinationCountry !== 'Canada' && 
+                   destinationCountry !== 'Mexico' &&
+                   !customDestinationCountries.includes(destinationCountry) && (
+                    <option value={destinationCountry}>{destinationCountry}</option>
+                  )}
                 </select>
               </div>
             </div>
@@ -1360,7 +1647,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
               </div>
               <div>
                 <p className="text-slate-600">Total Density:</p>
-                <p className="font-semibold text-blue-600">{totals.totalDensity} lb/ft³</p>
+                <p className={`font-semibold ${densityError ? 'text-red-600' : 'text-blue-600'}`}>
+                  {totals.totalDensity} lb/ft³
+                </p>
               </div>
               <div>
                 <p className="text-slate-600">Total Handling Units:</p>
@@ -1375,6 +1664,16 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                 <p className="font-semibold text-slate-900">{totals.totalWeight} lbs</p>
               </div>
             </div>
+            {densityError && (
+              <div className="mt-4">
+                <div className="bg-red-50 border-2 border-red-300 rounded-lg p-3">
+                  <p className="text-red-700 text-sm font-bold flex items-center gap-2">
+                    <span className="text-red-600 text-lg">⚠️</span>
+                    Total Density must be greater than 2 and less than 4 (Current: {totals.totalDensity} lb/ft³)
+                  </p>
+                </div>
+              </div>
+            )}
               </div>
             </section>
 
