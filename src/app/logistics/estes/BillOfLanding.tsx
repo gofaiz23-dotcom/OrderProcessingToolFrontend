@@ -289,10 +289,11 @@ export const BillOfLanding = ({
           const state = place['state abbreviation'];
           const country = 'USA';
 
-          // Always update city, state, and country when ZIP code changes
-          setDestinationCity(city);
-          setDestinationState(state);
-          setDestinationCountry(country);
+          // Only auto-fill if fields are empty - this allows users to freely edit all Consignee fields
+          // Users can manually edit any field, and their edits will be preserved
+          setDestinationCity((currentCity) => currentCity || city);
+          setDestinationState((currentState) => currentState || state);
+          setDestinationCountry((currentCountry) => currentCountry || country);
         }
       }
     } catch (error) {
@@ -312,11 +313,6 @@ export const BillOfLanding = ({
         lookupDestinationZipCode(destinationZipCode);
       }, 800);
       return () => clearTimeout(timeoutId);
-    } else if (!destinationZipCode || destinationZipCode.length === 0) {
-      // Clear city, state, and country when ZIP code is removed
-      setDestinationCity('');
-      setDestinationState('');
-      setDestinationCountry('USA'); // Reset to default
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destinationZipCode]);
@@ -693,97 +689,6 @@ export const BillOfLanding = ({
     }
   }, [orderData, destinationName, destinationAddress1, destinationAddress2, destinationCity, destinationState, destinationZipCode, destinationCountry, destinationPhone, destinationContactName, destinationEmail, consigneeFieldsEdited, hasAutoFilledConsignee]);
 
-  // Auto-fill Consignee Information from order data and rate quote
-  useEffect(() => {
-    if (orderData?.ordersJsonb && typeof orderData.ordersJsonb === 'object' && !Array.isArray(orderData.ordersJsonb)) {
-      const orderJsonb = orderData.ordersJsonb as Record<string, unknown>;
-      
-      // Customer Name -> Destination Name (Consignee Name)
-      const customerName = getJsonbValue(orderJsonb, 'Customer Name');
-      if (customerName && !destinationName) {
-        setDestinationName(customerName);
-      }
-      
-      // Customer Phone -> Destination Phone
-      const customerPhone = getJsonbValue(orderJsonb, 'Customer Phone Number') || 
-                           getJsonbValue(orderJsonb, 'Phone') ||
-                           getJsonbValue(orderJsonb, 'Phone Number');
-      if (customerPhone && !destinationPhone) {
-        setDestinationPhone(customerPhone);
-      }
-      
-      // Destination Email - always use requestorEmail from constants
-      // Customer email from order is not used - we use the default requestorEmail
-      setDestinationEmail(ESTES_RATE_QUOTE_DEFAULTS.requestorEmail);
-      
-      // Ship To Address -> Destination Address
-      const shipToAddress = getJsonbValue(orderJsonb, 'Ship to Address 1') ||
-                           getJsonbValue(orderJsonb, 'Shipping Address') ||
-                           getJsonbValue(orderJsonb, 'Customer Shipping Address') ||
-                           getJsonbValue(orderJsonb, 'Ship To Address');
-      
-      if (shipToAddress && !destinationAddress1) {
-        const parsed = parseAddress(shipToAddress);
-        if (parsed.address1) setDestinationAddress1(parsed.address1);
-        if (parsed.address2) setDestinationAddress2(parsed.address2);
-      }
-      
-      // Ship To Address 2
-      const shipToAddress2 = getJsonbValue(orderJsonb, 'Ship to Address 2');
-      if (shipToAddress2 && !destinationAddress2) {
-        setDestinationAddress2(shipToAddress2);
-      }
-      
-      // Ship To City -> Destination City (if not already set from rate quote)
-      const shipToCity = getJsonbValue(orderJsonb, 'Ship to City') ||
-                        getJsonbValue(orderJsonb, 'Shipping City');
-      if (shipToCity && !destinationCity) {
-        setDestinationCity(shipToCity);
-      }
-      
-      // Ship To State -> Destination State (if not already set from rate quote)
-      const shipToState = getJsonbValue(orderJsonb, 'Ship to State') ||
-                         getJsonbValue(orderJsonb, 'Ship to State/Province') ||
-                         getJsonbValue(orderJsonb, 'Shipping State') ||
-                         getJsonbValue(orderJsonb, 'Shipping State/Province');
-      if (shipToState && !destinationState) {
-        setDestinationState(shipToState);
-      }
-      
-      // Ship To Zip -> Destination Zip (if not already set from rate quote)
-      const shipToZip = getJsonbValue(orderJsonb, 'Ship to Zip Code') ||
-                       getJsonbValue(orderJsonb, 'Ship to Postal Code') ||
-                       getJsonbValue(orderJsonb, 'Shipping Zip Code') ||
-                       getJsonbValue(orderJsonb, 'Shipping Postal Code');
-      if (shipToZip && !destinationZipCode) {
-        setDestinationZipCode(shipToZip);
-      }
-      
-      // Ship To Country -> Destination Country (if not already set from rate quote)
-      const shipToCountry = getJsonbValue(orderJsonb, 'Ship to Country') ||
-                           getJsonbValue(orderJsonb, 'Shipping Country');
-      if (shipToCountry && !destinationCountry) {
-        const country = shipToCountry.toUpperCase();
-        let mappedCountry = shipToCountry;
-        
-        if (country === 'US' || country === 'USA' || country === 'UNITED STATES') {
-          mappedCountry = 'USA';
-        } else if (country === 'CA' || country === 'CAN' || country === 'CANADA') {
-          mappedCountry = 'Canada';
-        } else if (country === 'MX' || country === 'MEX' || country === 'MEXICO') {
-          mappedCountry = 'Mexico';
-        }
-        setDestinationCountry(mappedCountry);
-      }
-      
-      // Contact Name -> Destination Contact Name (if available)
-      const contactName = getJsonbValue(orderJsonb, 'Contact Name') ||
-                         getJsonbValue(orderJsonb, 'Customer Contact Name');
-      if (contactName && !destinationContactName) {
-        setDestinationContactName(contactName);
-      }
-    }
-  }, [orderData, destinationName, destinationAddress1, destinationAddress2, destinationCity, destinationState, destinationZipCode, destinationCountry, destinationPhone, destinationContactName]);
 
   // Function to collect all form data
   const collectFormData = () => {
