@@ -145,13 +145,13 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           const country = 'USA';
 
           if (type === 'origin') {
-            if (!originCity) setOriginCity(city);
-            if (!originState) setOriginState(state);
-            if (!originCountry) setOriginCountry(country);
+            setOriginCity(city);
+            setOriginState(state);
+            setOriginCountry(country);
           } else {
-            if (!destinationCity) setDestinationCity(city);
-            if (!destinationState) setDestinationState(state);
-            if (!destinationCountry) setDestinationCountry(country);
+            setDestinationCity(city);
+            setDestinationState(state);
+            setDestinationCountry(country);
           }
         }
       }
@@ -199,7 +199,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
 
   // Handle ZIP code change with auto-lookup - using useEffect for debouncing
   useEffect(() => {
-    if (originZipCode && originZipCode.length >= 5 && (!originCity || !originState || !originCountry)) {
+    if (originZipCode && originZipCode.length >= 5) {
       const timeoutId = setTimeout(() => {
         lookupZipCode(originZipCode, 'origin');
       }, 800);
@@ -209,7 +209,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   }, [originZipCode]);
 
   useEffect(() => {
-    if (destinationZipCode && destinationZipCode.length >= 5 && (!destinationCity || !destinationState || !destinationCountry)) {
+    if (destinationZipCode && destinationZipCode.length >= 5) {
       const timeoutId = setTimeout(() => {
         lookupZipCode(destinationZipCode, 'destination');
       }, 800);
