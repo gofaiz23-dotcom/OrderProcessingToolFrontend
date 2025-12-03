@@ -13,9 +13,11 @@ type BuildRequestBodyParams = {
   requestorPhone: string;
   requestorEmail: string;
   originCity: string;
+  originState: string;
   originZipCode: string;
   originCountry: string;
   destinationCity: string;
+  destinationState: string;
   destinationZipCode: string;
   destinationCountry: string;
   handlingUnits: any[];
@@ -35,9 +37,11 @@ export const buildEstesRequestBody = (params: BuildRequestBodyParams) => {
     requestorPhone,
     requestorEmail,
     originCity,
+    originState,
     originZipCode,
     originCountry,
     destinationCity,
+    destinationState,
     destinationZipCode,
     destinationCountry,
     handlingUnits,
@@ -70,10 +74,17 @@ export const buildEstesRequestBody = (params: BuildRequestBodyParams) => {
     'Third-Party': 'Third Party',
   };
 
-  // Extract state from city (format: "City, ST" or just use city)
-  const getStateFromCity = (city: string) => {
+  // Helper function to get state - use state field directly, or try to extract from city as fallback
+  const getState = (state: string, city: string) => {
+    if (state && state.trim()) {
+      return state.trim();
+    }
+    // Fallback: Try to extract state from city (format: "City, ST")
     const parts = city.split(', ');
-    return parts.length > 1 ? parts[1] : '';
+    if (parts.length > 1) {
+      return parts[1].trim();
+    }
+    return undefined;
   };
 
   return {
@@ -95,7 +106,7 @@ export const buildEstesRequestBody = (params: BuildRequestBodyParams) => {
     origin: {
       address: {
         city: originCity || undefined,
-        stateProvince: getStateFromCity(originCity) || undefined,
+        stateProvince: getState(originState, originCity) || undefined,
         postalCode: originZipCode || undefined,
         country: originCountry === 'USA' ? 'US' : originCountry || undefined,
       },
@@ -103,7 +114,7 @@ export const buildEstesRequestBody = (params: BuildRequestBodyParams) => {
     destination: {
       address: {
         city: destinationCity || undefined,
-        stateProvince: getStateFromCity(destinationCity) || undefined,
+        stateProvince: getState(destinationState, destinationCity) || undefined,
         postalCode: destinationZipCode || undefined,
         country: destinationCountry === 'USA' ? 'US' : destinationCountry || undefined,
       },

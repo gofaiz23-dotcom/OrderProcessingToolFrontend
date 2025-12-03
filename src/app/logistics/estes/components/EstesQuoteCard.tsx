@@ -55,27 +55,40 @@ export const EstesQuoteCard = ({ quote, index }: EstesQuoteCardProps) => {
           <h4 className="text-base sm:text-lg font-bold text-slate-900 mb-2">
             {quote.serviceLevelText || 'Service Level'}
           </h4>
-          {quote.rateFound && (
+          {quote.rateFound ? (
             <div className="flex items-center gap-2 text-green-600 text-xs sm:text-sm mb-2">
               <CheckCircle2 size={14} className="sm:w-4 sm:h-4" />
               <span>Rate Found</span>
             </div>
+          ) : (
+            <div className="flex items-center gap-2 text-amber-600 text-xs sm:text-sm mb-2">
+              <Clock size={14} className="sm:w-4 sm:h-4" />
+              <span>Rate Not Available</span>
+            </div>
           )}
         </div>
         <div className="text-left sm:text-right relative">
-          <div className="text-xl sm:text-2xl font-bold text-slate-900">
-            ${quote.quoteRate?.totalCharges || '0.00'}
-          </div>
-          {quote.chargeItems && quote.chargeItems.length > 0 ? (
-            <div
-              ref={chargesTextRef}
-              onClick={() => setShowChargesPopup(!showChargesPopup)}
-              className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 cursor-pointer underline font-semibold transition-colors"
-            >
-              Quote Details
-            </div>
+          {quote.quoteRate?.totalCharges && parseFloat(quote.quoteRate.totalCharges) > 0 ? (
+            <>
+              <div className="text-xl sm:text-2xl font-bold text-slate-900">
+                ${quote.quoteRate.totalCharges}
+              </div>
+              {quote.chargeItems && quote.chargeItems.length > 0 ? (
+                <div
+                  ref={chargesTextRef}
+                  onClick={() => setShowChargesPopup(!showChargesPopup)}
+                  className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 cursor-pointer underline font-semibold transition-colors"
+                >
+                  Quote Details
+                </div>
+              ) : (
+                <div className="text-xs sm:text-sm text-slate-600">Total Charges</div>
+              )}
+            </>
           ) : (
-            <div className="text-xs sm:text-sm text-slate-600">Total Charges</div>
+            <div className="text-sm sm:text-base font-semibold text-slate-500">
+              Rate Not Available
+            </div>
           )}
         </div>
       </div>
@@ -117,10 +130,13 @@ export const EstesQuoteCard = ({ quote, index }: EstesQuoteCardProps) => {
         <input
           type="radio"
           name="selectedQuote"
-          defaultChecked={index === 0}
-          className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600"
+          defaultChecked={index === 0 && quote.rateFound && quote.quoteRate?.totalCharges && parseFloat(quote.quoteRate.totalCharges) > 0}
+          disabled={!quote.rateFound || !quote.quoteRate?.totalCharges || parseFloat(quote.quoteRate.totalCharges) === 0}
+          className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
         />
-        <span className="text-xs sm:text-sm text-slate-700">Select this quote</span>
+        <span className={`text-xs sm:text-sm ${!quote.rateFound || !quote.quoteRate?.totalCharges || parseFloat(quote.quoteRate.totalCharges) === 0 ? 'text-slate-400' : 'text-slate-700'}`}>
+          {quote.rateFound && quote.quoteRate?.totalCharges && parseFloat(quote.quoteRate.totalCharges) > 0 ? 'Select this quote' : 'Rate not available'}
+        </span>
       </div>
 
       {/* Charges Popup */}

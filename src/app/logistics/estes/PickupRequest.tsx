@@ -118,6 +118,7 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
     notifications: true,
   });
   const containerRef = useRef<HTMLDivElement>(null);
+  const preserveScrollRef = useRef<number | null>(null);
 
   // Prefill data from BOL form and response
   useEffect(() => {
@@ -192,6 +193,18 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
     }
   }, [bolFormData, bolResponseData]);
 
+  // Preserve scroll position after state updates (for add/remove operations)
+  useEffect(() => {
+    if (preserveScrollRef.current !== null) {
+      // Restore scroll position after DOM updates
+      const scrollY = preserveScrollRef.current;
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: scrollY, behavior: 'instant' });
+        preserveScrollRef.current = null;
+      });
+    }
+  }, [shipments, additionalContacts]);
+
   // Update dock contact when "Use Requester Information" is checked
   useEffect(() => {
     if (useRequesterInfo) {
@@ -202,63 +215,30 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
     }
   }, [useRequesterInfo, requesterContactName, requesterEmail, requesterPhone, requesterExtension]);
 
-  // Scroll to top when component mounts or becomes visible
+  // Scroll to top when component mounts (only once, minimal)
   useEffect(() => {
     // Prevent any scroll restoration
     if ('scrollRestoration' in window.history) {
       window.history.scrollRestoration = 'manual';
     }
     
+    // Only scroll once on mount, with a single delayed attempt
     const scrollToTop = () => {
-      // Try all possible scroll methods
       window.scrollTo({ top: 0, behavior: 'instant' });
-      window.scrollTo(0, 0);
       if (document.documentElement) {
         document.documentElement.scrollTop = 0;
-        document.documentElement.scrollIntoView({ behavior: 'instant', block: 'start' });
       }
       if (document.body) {
         document.body.scrollTop = 0;
       }
-      // Also scroll the container if it exists
-      if (containerRef.current) {
-        containerRef.current.scrollIntoView({ behavior: 'instant', block: 'start' });
-      }
     };
     
-    // Immediate scroll
-    scrollToTop();
-    
-    // Use requestAnimationFrame to ensure DOM is ready
-    const timeoutIds: NodeJS.Timeout[] = [];
-    const rafId = requestAnimationFrame(() => {
-      scrollToTop();
-      // Multiple attempts with delays to ensure it works
-      timeoutIds.push(
-        setTimeout(scrollToTop, 0),
-        setTimeout(scrollToTop, 10),
-        setTimeout(scrollToTop, 50),
-        setTimeout(scrollToTop, 100),
-        setTimeout(scrollToTop, 200),
-        setTimeout(scrollToTop, 300),
-        setTimeout(scrollToTop, 500)
-      );
-    });
-    
-    // Also use a MutationObserver to catch any DOM changes that might cause scrolling
-    const observer = new MutationObserver(() => {
-      scrollToTop();
-    });
-    
-    if (containerRef.current) {
-      observer.observe(containerRef.current, { childList: true, subtree: true });
-    }
+    // Single scroll attempt after a short delay to ensure DOM is ready
+    const timeoutId = setTimeout(scrollToTop, 100);
     
     // Cleanup
     return () => {
-      cancelAnimationFrame(rafId);
-      observer.disconnect();
-      timeoutIds.forEach(id => clearTimeout(id));
+      clearTimeout(timeoutId);
     };
   }, []);
 
@@ -266,7 +246,11 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
     setShowSections({ ...showSections, [section]: !showSections[section] });
   };
 
-  const addShipment = () => {
+  const addShipment = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    // Save current scroll position
+    preserveScrollRef.current = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
     setShipments([
       ...shipments,
       {
@@ -280,7 +264,11 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
     ]);
   };
 
-  const removeShipment = (id: string) => {
+  const removeShipment = (id: string, e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    // Save current scroll position
+    preserveScrollRef.current = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
     if (shipments.length > 1) {
       setShipments(shipments.filter((s) => s.id !== id));
     }
@@ -300,7 +288,9 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
     }
   };
 
-  const removeReferenceNumber = (shipmentId: string, index: number) => {
+  const removeReferenceNumber = (shipmentId: string, index: number, e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     const shipment = shipments.find((s) => s.id === shipmentId);
     if (shipment) {
       const updated = shipment.referenceNumbers.filter((_, i) => i !== index);
@@ -308,7 +298,11 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
     }
   };
 
-  const addAdditionalContact = () => {
+  const addAdditionalContact = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    // Save current scroll position
+    preserveScrollRef.current = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
     setAdditionalContacts([
       ...additionalContacts,
       {
@@ -319,7 +313,11 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
     ]);
   };
 
-  const removeAdditionalContact = (id: string) => {
+  const removeAdditionalContact = (id: string, e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    // Save current scroll position
+    preserveScrollRef.current = window.scrollY || window.pageYOffset || document.documentElement.scrollTop;
     setAdditionalContacts(additionalContacts.filter((c) => c.id !== id));
   };
 
@@ -1212,7 +1210,11 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
                       {shipments.length > 1 && (
                         <button
                           type="button"
-                          onClick={() => removeShipment(shipment.id)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            removeShipment(shipment.id, e);
+                          }}
                           className="text-red-600 hover:text-red-700"
                         >
                           <X size={18} />
@@ -1287,7 +1289,11 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
                               {refNum}
                               <button
                                 type="button"
-                                onClick={() => removeReferenceNumber(shipment.id, refIndex)}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  removeReferenceNumber(shipment.id, refIndex, e);
+                                }}
                                 className="text-blue-600 hover:text-blue-800"
                               >
                                 <X size={14} />
@@ -1304,7 +1310,11 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
                 ))}
                 <button
                   type="button"
-                  onClick={addShipment}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    addShipment(e);
+                  }}
                   className="px-4 py-2 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors font-semibold flex items-center gap-2"
                 >
                   <Plus size={18} />
@@ -1536,7 +1546,11 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
                       <div className="flex items-end">
                         <button
                           type="button"
-                          onClick={() => removeAdditionalContact(contact.id)}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            removeAdditionalContact(contact.id, e);
+                          }}
                           className="px-4 py-2 text-red-600 hover:text-red-700"
                         >
                           <X size={18} />
@@ -1546,7 +1560,11 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
                   ))}
                   <button
                     type="button"
-                    onClick={addAdditionalContact}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      addAdditionalContact(e);
+                    }}
                     className="px-4 py-2 bg-yellow-400 text-slate-900 rounded-lg hover:bg-yellow-500 transition-colors font-semibold flex items-center gap-2"
                   >
                     <Plus size={18} />
