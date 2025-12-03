@@ -238,17 +238,11 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
     const scrollToTop = () => {
       // Try all scroll methods to ensure it works
       window.scrollTo({ top: 0, behavior: 'instant' });
-      window.scrollTo(0, 0);
       if (document.documentElement) {
         document.documentElement.scrollTop = 0;
-        document.documentElement.scrollIntoView({ behavior: 'instant', block: 'start' });
       }
       if (document.body) {
         document.body.scrollTop = 0;
-      }
-      // Also scroll the container if it exists
-      if (containerRef.current) {
-        containerRef.current.scrollIntoView({ behavior: 'instant', block: 'start' });
       }
     };
     
