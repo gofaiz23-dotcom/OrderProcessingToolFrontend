@@ -9,7 +9,7 @@ import { useLogisticsStore } from '@/store/logisticsStore';
 import { buildEstesRequestBody } from './utils/requestBuilder';
 import { EstesQuoteCard } from './components/EstesQuoteCard';
 import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
-import { ESTES_AUTOFILL_DATA, ESTES_ACCOUNTS, ESTES_RATE_QUOTE_DEFAULTS } from '@/Shared/constant';
+import { ESTES_AUTOFILL_DATA, ESTES_ACCOUNTS, ESTES_RATE_QUOTE_DEFAULTS, ESTES_ADDRESS_BOOK, ESTES_RATE_QUOTE_FORM_DEFAULTS } from '@/Shared/constant';
 import { StepIndicator } from './components/StepIndicator';
 import { BillOfLanding } from './BillOfLanding';
 import { PickupRequest } from './PickupRequest';
@@ -73,42 +73,177 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     setStoredToken(tokenFromStore);
   }, [carrier, getToken]);
 
+  // Get today's date in YYYY-MM-DD format
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Account Information
   const [myAccount, setMyAccount] = useState(ESTES_ACCOUNTS[0]?.accountNumber || '');
   const [role, setRole] = useState<string>(ESTES_RATE_QUOTE_DEFAULTS.role);
-  const [term, setTerm] = useState('Prepaid'); // Default to 'Prepaid' to match autofill behavior
-  const [shipDate, setShipDate] = useState('');
-  const [shipTime, setShipTime] = useState('14:30');
+  const [term, setTerm] = useState('Prepaid'); // Default to 'Prepaid'
+  const [shipDate, setShipDate] = useState(getTodayDate()); // Today's date
+  const [shipTime, setShipTime] = useState<string>(ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultShipTime); // 11AM
   
   // Requestor Information
   const [requestorName, setRequestorName] = useState('');
   const [requestorPhone, setRequestorPhone] = useState('');
   const [requestorEmail, setRequestorEmail] = useState<string>(ESTES_RATE_QUOTE_DEFAULTS.requestorEmail);
 
-  // Routing Information - Origin
+  // Address book data from constants
+  const addressBookOptions = ESTES_ADDRESS_BOOK;
+
+  // Routing Information - Origin (empty by default, user selects or enters)
+  const [originAddressBook, setOriginAddressBook] = useState<string>('');
   const [originAddress1, setOriginAddress1] = useState('');
   const [originAddress2, setOriginAddress2] = useState('');
   const [originZipCode, setOriginZipCode] = useState('');
   const [originCity, setOriginCity] = useState('');
+  const [originState, setOriginState] = useState('');
   const [originCountry, setOriginCountry] = useState('');
   const [customOriginCountries, setCustomOriginCountries] = useState<string[]>([]);
+  const [originLoadingZip, setOriginLoadingZip] = useState(false);
 
-  // Routing Information - Destination
+  // Routing Information - Destination (empty by default, user selects or enters)
+  const [destinationAddressBook, setDestinationAddressBook] = useState<string>('');
   const [destinationAddress1, setDestinationAddress1] = useState('');
   const [destinationAddress2, setDestinationAddress2] = useState('');
   const [destinationZipCode, setDestinationZipCode] = useState('');
   const [destinationCity, setDestinationCity] = useState('');
+  const [destinationState, setDestinationState] = useState('');
   const [destinationCountry, setDestinationCountry] = useState('');
   const [customDestinationCountries, setCustomDestinationCountries] = useState<string[]>([]);
+  const [destinationLoadingZip, setDestinationLoadingZip] = useState(false);
 
-  // Freight Accessorials
-  const [selectedAccessorials, setSelectedAccessorials] = useState<string[]>([]);
-  const [appointmentRequest, setAppointmentRequest] = useState(false);
-  const [liftGateService, setLiftGateService] = useState(false);
-  const [residentialDelivery, setResidentialDelivery] = useState(false);
+  // ZIP code lookup function using a free API
+  const lookupZipCode = async (zipCode: string, type: 'origin' | 'destination') => {
+    if (!zipCode || zipCode.length < 5) return;
 
-  // Commodities
-  const [handlingUnits, setHandlingUnits] = useState<HandlingUnit[]>([]);
+    const cleanedZip = zipCode.replace(/\D/g, '').substring(0, 5);
+    if (cleanedZip.length !== 5) return;
+
+    if (type === 'origin') {
+      setOriginLoadingZip(true);
+    } else {
+      setDestinationLoadingZip(true);
+    }
+
+    try {
+      // Using Zippopotam.us - free ZIP code API
+      const response = await fetch(`https://api.zippopotam.us/us/${cleanedZip}`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.places && data.places.length > 0) {
+          const place = data.places[0];
+          const city = place['place name'];
+          const state = place['state abbreviation'];
+          const country = 'USA';
+
+          if (type === 'origin') {
+            if (!originCity) setOriginCity(city);
+            if (!originState) setOriginState(state);
+            if (!originCountry) setOriginCountry(country);
+          } else {
+            if (!destinationCity) setDestinationCity(city);
+            if (!destinationState) setDestinationState(state);
+            if (!destinationCountry) setDestinationCountry(country);
+          }
+        }
+      }
+    } catch (error) {
+      // Silently fail - user can still enter manually
+      if (process.env.NODE_ENV === 'development') {
+        console.log('ZIP code lookup failed:', error);
+      }
+    } finally {
+      if (type === 'origin') {
+        setOriginLoadingZip(false);
+      } else {
+        setDestinationLoadingZip(false);
+      }
+    }
+  };
+
+  // Handle address book selection for origin
+  const handleOriginAddressBookChange = (value: string) => {
+    setOriginAddressBook(value);
+    if (value) {
+      const address = addressBookOptions.find(opt => opt.value === value);
+      if (address) {
+        setOriginCity(address.city);
+        setOriginState(address.state);
+        setOriginZipCode(address.zip);
+        setOriginCountry(address.country);
+      }
+    }
+  };
+
+  // Handle address book selection for destination
+  const handleDestinationAddressBookChange = (value: string) => {
+    setDestinationAddressBook(value);
+    if (value) {
+      const address = addressBookOptions.find(opt => opt.value === value);
+      if (address) {
+        setDestinationCity(address.city);
+        setDestinationState(address.state);
+        setDestinationZipCode(address.zip);
+        setDestinationCountry(address.country);
+      }
+    }
+  };
+
+  // Handle ZIP code change with auto-lookup - using useEffect for debouncing
+  useEffect(() => {
+    if (originZipCode && originZipCode.length >= 5 && (!originCity || !originState || !originCountry)) {
+      const timeoutId = setTimeout(() => {
+        lookupZipCode(originZipCode, 'origin');
+      }, 800);
+      return () => clearTimeout(timeoutId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [originZipCode]);
+
+  useEffect(() => {
+    if (destinationZipCode && destinationZipCode.length >= 5 && (!destinationCity || !destinationState || !destinationCountry)) {
+      const timeoutId = setTimeout(() => {
+        lookupZipCode(destinationZipCode, 'destination');
+      }, 800);
+      return () => clearTimeout(timeoutId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [destinationZipCode]);
+
+  // Freight Accessorials (with defaults)
+  const [liftGateService, setLiftGateService] = useState<boolean>(ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultLiftGateService);
+  const [residentialDelivery, setResidentialDelivery] = useState<boolean>(ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultResidentialDelivery);
+  const [appointmentRequest, setAppointmentRequest] = useState<boolean>(ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultAppointmentRequest);
+  const [selectedAccessorials, setSelectedAccessorials] = useState<string[]>(
+    ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultLiftGateService ? ['Lift-Gate Service (Delivery)'] : []
+  );
+
+  // Commodities (with default handling unit)
+  const defaultHandlingUnit: HandlingUnit = {
+    id: 'default-unit',
+    doNotStack: false,
+    handlingUnitType: 'PALLET',
+    quantity: 1,
+    length: 0,
+    width: 0,
+    height: 0,
+    weight: 0,
+    class: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultClass,
+    nmfc: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultNMFC,
+    sub: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultSub,
+    hazardous: false,
+    description: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription,
+    items: [],
+  };
+  const [handlingUnits, setHandlingUnits] = useState<HandlingUnit[]>([defaultHandlingUnit]);
   const [linearFeet, setLinearFeet] = useState('');
 
   // Freight Information
@@ -283,6 +418,14 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                       getJsonbValue(orderJsonb, 'Shipping City');
     if (shipToCity && !destinationCity) {
       setDestinationCity(shipToCity);
+    }
+    
+    const shipToState = getJsonbValue(orderJsonb, 'Ship to State') ||
+                       getJsonbValue(orderJsonb, 'Ship to State/Province') ||
+                       getJsonbValue(orderJsonb, 'Shipping State') ||
+                       getJsonbValue(orderJsonb, 'Shipping State/Province');
+    if (shipToState && !destinationState) {
+      setDestinationState(shipToState);
     }
     
     const shipToZip = getJsonbValue(orderJsonb, 'Ship to Zip Code') ||
@@ -611,9 +754,11 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       requestorPhone,
       requestorEmail,
       originCity,
+      originState,
       originZipCode,
       originCountry,
       destinationCity,
+      destinationState,
       destinationZipCode,
       destinationCountry,
       handlingUnits,
@@ -647,11 +792,11 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       width: 0,
       height: 0,
       weight: 0,
-      class: '',
-      nmfc: '',
-      sub: '',
+      class: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultClass,
+      nmfc: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultNMFC,
+      sub: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultSub,
       hazardous: false,
-      description: '',
+      description: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription,
       items: [],
     };
     setHandlingUnits([...handlingUnits, newUnit]);
@@ -723,6 +868,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     if (data.origin?.address?.city) {
       setOriginCity(data.origin.address.city);
     }
+    if (data.origin?.address?.stateProvince) {
+      setOriginState(data.origin.address.stateProvince);
+    }
     if (data.origin?.address?.postalCode) {
       setOriginZipCode(data.origin.address.postalCode);
     }
@@ -734,6 +882,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     // Destination Information
     if (data.destination?.address?.city) {
       setDestinationCity(data.destination.address.city);
+    }
+    if (data.destination?.address?.stateProvince) {
+      setDestinationState(data.destination.address.stateProvince);
     }
     if (data.destination?.address?.postalCode) {
       setDestinationZipCode(data.destination.address.postalCode);
@@ -822,11 +973,29 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       if (!requestBody.payment?.account) {
         throw new Error('Account number is required');
       }
-      if (!requestBody.origin?.address?.postalCode && !requestBody.origin?.address?.city) {
-        throw new Error('Origin address (city or postal code) is required');
+      if (!requestBody.origin?.address?.city) {
+        throw new Error('Origin city is required');
       }
-      if (!requestBody.destination?.address?.postalCode && !requestBody.destination?.address?.city) {
-        throw new Error('Destination address (city or postal code) is required');
+      if (!requestBody.origin?.address?.postalCode) {
+        throw new Error('Origin ZIP/postal code is required');
+      }
+      if (!requestBody.origin?.address?.stateProvince) {
+        throw new Error('Origin state/province is required for accurate rate quotes');
+      }
+      if (!requestBody.origin?.address?.country) {
+        throw new Error('Origin country is required');
+      }
+      if (!requestBody.destination?.address?.city) {
+        throw new Error('Destination city is required');
+      }
+      if (!requestBody.destination?.address?.postalCode) {
+        throw new Error('Destination ZIP/postal code is required');
+      }
+      if (!requestBody.destination?.address?.stateProvince) {
+        throw new Error('Destination state/province is required for accurate rate quotes');
+      }
+      if (!requestBody.destination?.address?.country) {
+        throw new Error('Destination country is required');
       }
       if (!requestBody.commodity?.handlingUnits || requestBody.commodity.handlingUnits.length === 0) {
         throw new Error('At least one handling unit is required');
@@ -962,9 +1131,11 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           requestorPhone,
           requestorEmail,
           originCity,
+          originState,
           originZipCode,
           originCountry,
           destinationCity,
+          destinationState,
           destinationZipCode,
           destinationCountry,
           handlingUnits,
@@ -1124,7 +1295,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
               <button
                 type="button"
                 onClick={handleAutofill}
-                className="px-3 sm:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 text-sm sm:text-base font-semibold w-full sm:w-auto"
+                className="hidden px-3 sm:px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 text-sm sm:text-base font-semibold w-full sm:w-auto"
               >
                 <Sparkles size={16} className="sm:w-[18px] sm:h-[18px]" />
                 <span className="hidden sm:inline">Autofill</span>
@@ -1298,108 +1469,242 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
             {/* Origin */}
             <div className="space-y-3 sm:space-y-4">
               <h3 className="text-base sm:text-lg font-semibold text-slate-900">Origin</h3>
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  value={originZipCode}
-                  onChange={(e) => setOriginZipCode(e.target.value)}
-                  placeholder="ZIP Code"
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <input
-                  type="text"
-                  value={originCity}
-                  onChange={(e) => setOriginCity(e.target.value)}
-                  placeholder="City"
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <select
-                  value={originCountry}
-                  onChange={(e) => {
-                    setOriginCountry(e.target.value);
-                    // Add custom country to list if it's not in predefined options
-                    if (e.target.value && 
-                        e.target.value !== 'USA' && 
-                        e.target.value !== 'Canada' && 
-                        e.target.value !== 'Mexico' &&
-                        !customOriginCountries.includes(e.target.value)) {
-                      setCustomOriginCountries(prev => [...prev, e.target.value]);
-                    }
-                  }}
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select Country</option>
-                  <option value="USA">USA</option>
-                  <option value="Canada">Canada</option>
-                  <option value="Mexico">Mexico</option>
-                  {customOriginCountries.map((country) => (
-                    <option key={country} value={country}>
-                      {country}
-                    </option>
-                  ))}
-                  {/* Show current value if it's not in any of the options */}
-                  {originCountry && 
-                   originCountry !== 'USA' && 
-                   originCountry !== 'Canada' && 
-                   originCountry !== 'Mexico' &&
-                   !customOriginCountries.includes(originCountry) && (
-                    <option value={originCountry}>{originCountry}</option>
-                  )}
-                </select>
+              <div className="space-y-3">
+                {/* Address Book Dropdown */}
+                <div className="space-y-1">
+                  <label className="block text-sm font-semibold text-slate-900">Address Book (Optional)</label>
+                  <select
+                    value={originAddressBook}
+                    onChange={(e) => handleOriginAddressBookChange(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">Select Address</option>
+                    {addressBookOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Separator with "or" */}
+                <div className="relative py-2">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-300"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="bg-white px-2 text-slate-500">or</span>
+                  </div>
+                </div>
+
+                {/* Manual Entry Fields */}
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <label className="block text-sm font-semibold text-slate-900">
+                      ZIP Code <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={originZipCode}
+                        onChange={(e) => setOriginZipCode(e.target.value)}
+                        placeholder="Enter ZIP code"
+                        maxLength={10}
+                        className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      {originLoadingZip && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* City/State Display - shows auto-filled values, editable below */}
+                  <div className="space-y-1">
+                    {(originCity || originState) ? (
+                      <div className="px-2 py-1 text-sm text-slate-700">
+                        {originCity && originState ? `${originCity}, ${originState}` : originCity || originState}
+                      </div>
+                    ) : null}
+                    {/* Editable inputs for city and state */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={originCity}
+                        onChange={(e) => setOriginCity(e.target.value)}
+                        placeholder="City"
+                        className="px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="text"
+                        value={originState}
+                        onChange={(e) => setOriginState(e.target.value.toUpperCase())}
+                        placeholder="State"
+                        maxLength={2}
+                        className="px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-sm font-semibold text-slate-900">
+                      Country <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={originCountry}
+                      onChange={(e) => {
+                        setOriginCountry(e.target.value);
+                        if (e.target.value && 
+                            e.target.value !== 'USA' && 
+                            e.target.value !== 'Canada' && 
+                            e.target.value !== 'Mexico' &&
+                            !customOriginCountries.includes(e.target.value)) {
+                          setCustomOriginCountries(prev => [...prev, e.target.value]);
+                        }
+                      }}
+                      className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Select Country</option>
+                      <option value="USA">USA</option>
+                      <option value="Canada">Canada</option>
+                      <option value="Mexico">Mexico</option>
+                      {customOriginCountries.map((country) => (
+                        <option key={country} value={country}>
+                          {country}
+                        </option>
+                      ))}
+                      {originCountry && 
+                       originCountry !== 'USA' && 
+                       originCountry !== 'Canada' && 
+                       originCountry !== 'Mexico' &&
+                       !customOriginCountries.includes(originCountry) && (
+                        <option value={originCountry}>{originCountry}</option>
+                      )}
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* Destination */}
             <div className="space-y-3 sm:space-y-4">
               <h3 className="text-base sm:text-lg font-semibold text-slate-900">Destination</h3>
-              <div className="space-y-2">
-                <input
-                  type="text"
-                  value={destinationZipCode}
-                  onChange={(e) => setDestinationZipCode(e.target.value)}
-                  placeholder="ZIP Code"
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <input
-                  type="text"
-                  value={destinationCity}
-                  onChange={(e) => setDestinationCity(e.target.value)}
-                  placeholder="City"
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                <select
-                  value={destinationCountry}
-                  onChange={(e) => {
-                    setDestinationCountry(e.target.value);
-                    // Add custom country to list if it's not in predefined options
-                    if (e.target.value && 
-                        e.target.value !== 'USA' && 
-                        e.target.value !== 'Canada' && 
-                        e.target.value !== 'Mexico' &&
-                        !customDestinationCountries.includes(e.target.value)) {
-                      setCustomDestinationCountries(prev => [...prev, e.target.value]);
-                    }
-                  }}
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Select Country</option>
-                  <option value="USA">USA</option>
-                  <option value="Canada">Canada</option>
-                  <option value="Mexico">Mexico</option>
-                  {customDestinationCountries.map((country) => (
-                    <option key={country} value={country}>
-                      {country}
-                    </option>
-                  ))}
-                  {/* Show current value if it's not in any of the options */}
-                  {destinationCountry && 
-                   destinationCountry !== 'USA' && 
-                   destinationCountry !== 'Canada' && 
-                   destinationCountry !== 'Mexico' &&
-                   !customDestinationCountries.includes(destinationCountry) && (
-                    <option value={destinationCountry}>{destinationCountry}</option>
-                  )}
-                </select>
+              <div className="space-y-3">
+                {/* Address Book Dropdown */}
+                <div className="space-y-1">
+                  <label className="block text-sm font-semibold text-slate-900">Address Book (Optional)</label>
+                  <select
+                    value={destinationAddressBook}
+                    onChange={(e) => handleDestinationAddressBookChange(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">Select Address</option>
+                    {addressBookOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Separator with "or" */}
+                <div className="relative py-2">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-300"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="bg-white px-2 text-slate-500">or</span>
+                  </div>
+                </div>
+
+                {/* Manual Entry Fields */}
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <label className="block text-sm font-semibold text-slate-900">
+                      ZIP Code <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={destinationZipCode}
+                        onChange={(e) => setDestinationZipCode(e.target.value)}
+                        placeholder="Enter ZIP code"
+                        maxLength={10}
+                        className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      {destinationLoadingZip && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* City/State Display - shows auto-filled values, editable below */}
+                  <div className="space-y-1">
+                    {(destinationCity || destinationState) ? (
+                      <div className="px-2 py-1 text-sm text-slate-700">
+                        {destinationCity && destinationState ? `${destinationCity}, ${destinationState}` : destinationCity || destinationState}
+                      </div>
+                    ) : null}
+                    {/* Editable inputs for city and state */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={destinationCity}
+                        onChange={(e) => setDestinationCity(e.target.value)}
+                        placeholder="City"
+                        className="px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <input
+                        type="text"
+                        value={destinationState}
+                        onChange={(e) => setDestinationState(e.target.value.toUpperCase())}
+                        placeholder="State"
+                        maxLength={2}
+                        className="px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-sm font-semibold text-slate-900">
+                      Country <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={destinationCountry}
+                      onChange={(e) => {
+                        setDestinationCountry(e.target.value);
+                        if (e.target.value && 
+                            e.target.value !== 'USA' && 
+                            e.target.value !== 'Canada' && 
+                            e.target.value !== 'Mexico' &&
+                            !customDestinationCountries.includes(e.target.value)) {
+                          setCustomDestinationCountries(prev => [...prev, e.target.value]);
+                        }
+                      }}
+                      className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Select Country</option>
+                      <option value="USA">USA</option>
+                      <option value="Canada">Canada</option>
+                      <option value="Mexico">Mexico</option>
+                      {customDestinationCountries.map((country) => (
+                        <option key={country} value={country}>
+                          {country}
+                        </option>
+                      ))}
+                      {destinationCountry && 
+                       destinationCountry !== 'USA' && 
+                       destinationCountry !== 'Canada' && 
+                       destinationCountry !== 'Mexico' &&
+                       !customDestinationCountries.includes(destinationCountry) && (
+                        <option value={destinationCountry}>{destinationCountry}</option>
+                      )}
+                    </select>
+                  </div>
+                </div>
               </div>
             </div>
               </div>
@@ -1802,6 +2107,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           onNext={handleBillOfLandingNext}
           onPrevious={handlePreviousStep}
           quoteData={selectedQuote}
+          orderData={orderData}
           initialFormData={bolFormData}
           initialResponseData={bolResponseData}
           onFormDataChange={setBolFormData}

@@ -37,6 +37,8 @@ export const ESTES_BILL_TO_DEFAULTS = {
   contactName: "TARIF HAWASLY",
   address1: "19150 SUMMIT RIDGE",
   address2: "",
+  city: "Walnut",
+  state: "CA",
   zipCode: "91789",
   country: "USA",
   phone: "(626) 715-0682"
@@ -366,4 +368,85 @@ export const ESTES_ACCOUNTS: EstesAccount[] = [
     address: '19150 Summit Ridge, Walnut, CA 91789',
   },
 ] as const;
+
+export type AddressBookOption = {
+  value: string;
+  label: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
+};
+
+export const ESTES_ADDRESS_BOOK: AddressBookOption[] = [
+  {
+    value: 'coaster',
+    label: 'Coaster - CA - 20300.e Business Parkway, City Of Industry, CA 91789',
+    city: 'City Of Industry',
+    state: 'CA',
+    zip: '91789',
+    country: 'USA',
+  },
+  {
+    value: 'acme',
+    label: 'Acme Furniture - IL - 900 Phoenix Lake Ave., Streamwood, IL 60107',
+    city: 'Streamwood',
+    state: 'IL',
+    zip: '60107',
+    country: 'USA',
+  },
+] as const;
+
+export type ShipperAddressOption = {
+  value: string;
+  label: string;
+  name: string;
+  address1: string;
+  address2?: string;
+  city: string;
+  state: string;
+  zip: string;
+  country: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  account?: string;
+};
+
+// Shipper Information addresses
+export const ESTES_SHIPPER_ADDRESSES: ShipperAddressOption[] = [
+  {
+    value: 'Hawasly exit poundex',
+    label: 'Hawasly exit poundex - CA - 21490 baker parkway, City Of Industry, CA 91789',
+    name: 'hawasly exit poundex',
+    address1: '21490 baker parkway',
+    address2: '',
+    city: 'City Of Industry',
+    state: 'CA',
+    zip: '91789',
+    country: 'USA',
+    contactName: 'olga',
+    phone: '(909) 444-5878',
+    email: 'gofaiz23@gmail.com',
+    account: '0216496',
+  },
+] as const;
+
+// Default values for Rate Quote form
+export const ESTES_RATE_QUOTE_FORM_DEFAULTS = {
+  
+  // Ship time default
+  defaultShipTime: '11:00', // 11AM
+  
+  // Accessorials defaults
+  defaultLiftGateService: true,
+  defaultResidentialDelivery: false,
+  defaultAppointmentRequest: false,
+  
+  // Handling Unit defaults
+  defaultClass: '250',
+  defaultNMFC: '079300',
+  defaultSub: '03',
+  defaultDescription: 'Boxes of widgets',
+} as const;
 
