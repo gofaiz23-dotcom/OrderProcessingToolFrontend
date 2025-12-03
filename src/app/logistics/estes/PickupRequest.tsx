@@ -234,15 +234,26 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
     preserveScrollRef.current = null;
     isInitialMountRef.current = true;
     
-    // Scroll to top function
+    // Enhanced scroll to top function
     const scrollToTop = () => {
       // Try all scroll methods to ensure it works
-      window.scrollTo({ top: 0, behavior: 'instant' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo(0, 0);
       if (document.documentElement) {
         document.documentElement.scrollTop = 0;
+        document.documentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
       if (document.body) {
         document.body.scrollTop = 0;
+      }
+      // Scroll to the container if it exists
+      if (containerRef.current) {
+        containerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      // Also try scrolling to pickup request section wrapper
+      const pickupSection = document.querySelector('[data-pickup-request-section]');
+      if (pickupSection) {
+        pickupSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     };
     
@@ -261,7 +272,8 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
         setTimeout(scrollToTop, 200),
         setTimeout(scrollToTop, 300),
         setTimeout(scrollToTop, 500),
-        setTimeout(scrollToTop, 800)
+        setTimeout(scrollToTop, 800),
+        setTimeout(scrollToTop, 1000)
       );
     });
     
@@ -728,7 +740,7 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
   const totalWeight = shipments.reduce((sum, s) => sum + parseInt(s.weight || '0'), 0);
 
   return (
-    <div ref={containerRef} className="max-w-6xl mx-auto space-y-4 sm:space-y-6 pb-4 sm:pb-8 px-3 sm:px-0">
+    <div id="pickup-request-top" ref={containerRef} className="max-w-6xl mx-auto space-y-4 sm:space-y-6 pb-4 sm:pb-8 px-3 sm:px-0">
       <div className="bg-white rounded-lg border border-slate-200 p-3 sm:p-4 lg:p-6">
         <div className="flex items-center gap-3 mb-4 sm:mb-6">
           <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">

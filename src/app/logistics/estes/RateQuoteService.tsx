@@ -1153,31 +1153,46 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
 
   const handleBillOfLandingNext = () => {
     handleStepComplete(2);
-    // Scroll to top BEFORE changing step to prevent any scroll position preservation
+    
+    // Scroll to top immediately
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    
+    // Change step to Pickup Request
+    setCurrentStep(3);
+    
+    // Enhanced scroll to top after step change - multiple attempts to ensure it works
     const scrollToTop = () => {
-      window.scrollTo({ top: 0, behavior: 'instant' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       window.scrollTo(0, 0);
       if (document.documentElement) {
         document.documentElement.scrollTop = 0;
-        document.documentElement.scrollIntoView({ behavior: 'instant', block: 'start' });
+        document.documentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
       if (document.body) {
         document.body.scrollTop = 0;
       }
+      // Also try scrolling to the pickup request section if it exists
+      const pickupSection = document.querySelector('[data-pickup-request-section]');
+      if (pickupSection) {
+        pickupSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      // Try scrolling to the pickup request top ID
+      const pickupTop = document.getElementById('pickup-request-top');
+      if (pickupTop) {
+        pickupTop.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     };
-    scrollToTop();
-    setCurrentStep(3);
+    
     // Use requestAnimationFrame and multiple timeouts to ensure scroll happens after render
-    // Note: These timeouts are fire-and-forget for navigation, cleanup handled by useEffect
     requestAnimationFrame(() => {
       scrollToTop();
       setTimeout(scrollToTop, 0);
-      setTimeout(scrollToTop, 10);
       setTimeout(scrollToTop, 50);
       setTimeout(scrollToTop, 100);
       setTimeout(scrollToTop, 200);
       setTimeout(scrollToTop, 300);
       setTimeout(scrollToTop, 500);
+      setTimeout(scrollToTop, 700);
     });
   };
 
@@ -2117,13 +2132,15 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
 
       {/* Step 3: Pickup Request */}
       {currentStep === 3 && (
-        <PickupRequest
-          onPrevious={handlePreviousStep}
-          onComplete={(pickupResponse) => handlePickupRequestComplete(pickupResponse)}
-          quoteData={selectedQuote}
-          bolFormData={bolFormData}
-          bolResponseData={bolResponseData}
-        />
+        <div data-pickup-request-section>
+          <PickupRequest
+            onPrevious={handlePreviousStep}
+            onComplete={(pickupResponse) => handlePickupRequestComplete(pickupResponse)}
+            quoteData={selectedQuote}
+            bolFormData={bolFormData}
+            bolResponseData={bolResponseData}
+          />
+        </div>
       )}
 
       {/* Step 4: Response Summary */}
