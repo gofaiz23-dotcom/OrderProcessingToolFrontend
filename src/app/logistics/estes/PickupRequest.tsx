@@ -119,6 +119,7 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
   });
   const containerRef = useRef<HTMLDivElement>(null);
   const preserveScrollRef = useRef<number | null>(null);
+  const isInitialMountRef = useRef(true);
 
   // Prefill data from BOL form and response
   useEffect(() => {
@@ -194,8 +195,15 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
   }, [bolFormData, bolResponseData]);
 
   // Preserve scroll position after state updates (for add/remove operations)
+  // Only preserve scroll if it was explicitly set (not on initial mount)
   useEffect(() => {
-    if (preserveScrollRef.current !== null) {
+    // Skip on initial mount - let scroll-to-top effect handle it
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      return;
+    }
+    
+    if (preserveScrollRef.current !== null && preserveScrollRef.current !== 0) {
       // Restore scroll position after DOM updates
       const scrollY = preserveScrollRef.current;
       requestAnimationFrame(() => {
@@ -215,30 +223,58 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
     }
   }, [useRequesterInfo, requesterContactName, requesterEmail, requesterPhone, requesterExtension]);
 
-  // Scroll to top when component mounts (only once, minimal)
+  // Scroll to top when component mounts (only once)
   useEffect(() => {
     // Prevent any scroll restoration
     if ('scrollRestoration' in window.history) {
       window.history.scrollRestoration = 'manual';
     }
     
-    // Only scroll once on mount, with a single delayed attempt
+    // Clear any preserved scroll position on mount and mark as initial mount
+    preserveScrollRef.current = null;
+    isInitialMountRef.current = true;
+    
+    // Scroll to top function
     const scrollToTop = () => {
+      // Try all scroll methods to ensure it works
       window.scrollTo({ top: 0, behavior: 'instant' });
+      window.scrollTo(0, 0);
       if (document.documentElement) {
         document.documentElement.scrollTop = 0;
+        document.documentElement.scrollIntoView({ behavior: 'instant', block: 'start' });
       }
       if (document.body) {
         document.body.scrollTop = 0;
       }
+      // Also scroll the container if it exists
+      if (containerRef.current) {
+        containerRef.current.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }
     };
     
-    // Single scroll attempt after a short delay to ensure DOM is ready
-    const timeoutId = setTimeout(scrollToTop, 100);
+    // Immediate scroll
+    scrollToTop();
+    
+    // Multiple attempts with delays to ensure it works after DOM is ready
+    const timeoutIds: NodeJS.Timeout[] = [];
+    const rafId = requestAnimationFrame(() => {
+      scrollToTop();
+      // Multiple attempts with increasing delays to catch all render cycles
+      timeoutIds.push(
+        setTimeout(scrollToTop, 0),
+        setTimeout(scrollToTop, 50),
+        setTimeout(scrollToTop, 100),
+        setTimeout(scrollToTop, 200),
+        setTimeout(scrollToTop, 300),
+        setTimeout(scrollToTop, 500),
+        setTimeout(scrollToTop, 800)
+      );
+    });
     
     // Cleanup
     return () => {
-      clearTimeout(timeoutId);
+      cancelAnimationFrame(rafId);
+      timeoutIds.forEach(id => clearTimeout(id));
     };
   }, []);
 
