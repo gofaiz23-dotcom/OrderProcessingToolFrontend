@@ -152,11 +152,15 @@ export const OrderList = ({
     // Map carrier names to their route paths (default to estes if not found)
     const carrierRoutes: Record<string, string> = {
       'Estes': '/logistics/estes',
+      'XPO': '/logistics/xpo',
+      'Expo': '/logistics/xpo', // Alias for XPO
       'FedEx': '/logistics/estes', // Using estes as default for now
       'UPS': '/logistics/estes',   // Using estes as default for now
     };
     
-    const route = carrierRoutes[carrier] || '/logistics/estes';
+    // Normalize carrier name for routing (handle case variations)
+    const normalizedCarrier = carrier.trim();
+    const route = carrierRoutes[normalizedCarrier] || carrierRoutes[normalizedCarrier.toUpperCase()] || '/logistics/estes';
     router.push(`${route}?carrier=${encodeURIComponent(carrier)}&orderId=${order.id}`);
     setShowLogisticsDropdown(false);
   };

@@ -450,3 +450,283 @@ export const ESTES_RATE_QUOTE_FORM_DEFAULTS = {
   defaultDescription: 'Boxes of widgets',
 } as const;
 
+// XPO Address Book Options
+export type XPOAddressBookOption = {
+  value: string;
+  label: string;
+  city: string;
+  state: string;
+  zip: string;
+  country?: string;
+  company?: string;
+  streetAddress?: string;
+  addressLine2?: string;
+  phone?: string;
+  extension?: string;
+  contactName?: string;
+};
+
+// XPO Shipper Address Book
+export const XPO_SHIPPER_ADDRESS_BOOK: XPOAddressBookOption[] = [
+  {
+    value: 'ammana',
+    label: 'AMMANA - CA - 10506 SHOEMAKER AVE, SANTA FE SPRINGS, CA 90670',
+    company: 'AMMANA',
+    streetAddress: '10506 SHOEMAKER AVE',
+    addressLine2: '',
+    city: 'SANTA FE SPRINGS',
+    state: 'CA',
+    zip: '90670',
+    country: 'US',
+    phone: '+1 (626) 715-0682',
+    extension: '',
+    contactName: 'Tarif Hawasly',
+  },
+] as const;
+
+// XPO Consignee Address Book
+export const XPO_CONSIGNEE_ADDRESS_BOOK: XPOAddressBookOption[] = [
+  {
+    value: 'warehouse1',
+    label: 'Warehouse 1 - TX - 2125 Exchange Drive, Arlington, TX 76011',
+    city: 'Arlington',
+    state: 'TX',
+    zip: '76011',
+    country: 'US',
+  },
+  {
+    value: 'warehouse2',
+    label: 'Warehouse 2 - CA - 1234 Main Street, Los Angeles, CA 90210',
+    city: 'Los Angeles',
+    state: 'CA',
+    zip: '90210',
+    country: 'US',
+  },
+] as const;
+
+// US States Options
+export const US_STATES_OPTIONS = [
+  { value: 'AL', label: 'Alabama' },
+  { value: 'AK', label: 'Alaska' },
+  { value: 'AZ', label: 'Arizona' },
+  { value: 'AR', label: 'Arkansas' },
+  { value: 'CA', label: 'California' },
+  { value: 'CO', label: 'Colorado' },
+  { value: 'CT', label: 'Connecticut' },
+  { value: 'DE', label: 'Delaware' },
+  { value: 'FL', label: 'Florida' },
+  { value: 'GA', label: 'Georgia' },
+  { value: 'HI', label: 'Hawaii' },
+  { value: 'ID', label: 'Idaho' },
+  { value: 'IL', label: 'Illinois' },
+  { value: 'IN', label: 'Indiana' },
+  { value: 'IA', label: 'Iowa' },
+  { value: 'KS', label: 'Kansas' },
+  { value: 'KY', label: 'Kentucky' },
+  { value: 'LA', label: 'Louisiana' },
+  { value: 'ME', label: 'Maine' },
+  { value: 'MD', label: 'Maryland' },
+  { value: 'MA', label: 'Massachusetts' },
+  { value: 'MI', label: 'Michigan' },
+  { value: 'MN', label: 'Minnesota' },
+  { value: 'MS', label: 'Mississippi' },
+  { value: 'MO', label: 'Missouri' },
+  { value: 'MT', label: 'Montana' },
+  { value: 'NE', label: 'Nebraska' },
+  { value: 'NV', label: 'Nevada' },
+  { value: 'NH', label: 'New Hampshire' },
+  { value: 'NJ', label: 'New Jersey' },
+  { value: 'NM', label: 'New Mexico' },
+  { value: 'NY', label: 'New York' },
+  { value: 'NC', label: 'North Carolina' },
+  { value: 'ND', label: 'North Dakota' },
+  { value: 'OH', label: 'Ohio' },
+  { value: 'OK', label: 'Oklahoma' },
+  { value: 'OR', label: 'Oregon' },
+  { value: 'PA', label: 'Pennsylvania' },
+  { value: 'RI', label: 'Rhode Island' },
+  { value: 'SC', label: 'South Carolina' },
+  { value: 'SD', label: 'South Dakota' },
+  { value: 'TN', label: 'Tennessee' },
+  { value: 'TX', label: 'Texas' },
+  { value: 'UT', label: 'Utah' },
+  { value: 'VT', label: 'Vermont' },
+  { value: 'VA', label: 'Virginia' },
+  { value: 'WA', label: 'Washington' },
+  { value: 'WV', label: 'West Virginia' },
+  { value: 'WI', label: 'Wisconsin' },
+  { value: 'WY', label: 'Wyoming' },
+  { value: 'DC', label: 'District of Columbia' },
+] as const;
+
+// Freight Class Options
+export const FREIGHT_CLASS_OPTIONS = [
+  { value: '50', label: '50' },
+  { value: '55', label: '55' },
+  { value: '60', label: '60' },
+  { value: '65', label: '65' },
+  { value: '70', label: '70' },
+  { value: '77.5', label: '77.5' },
+  { value: '85', label: '85' },
+  { value: '92.5', label: '92.5' },
+  { value: '100', label: '100' },
+  { value: '110', label: '110' },
+  { value: '125', label: '125' },
+  { value: '150', label: '150' },
+  { value: '175', label: '175' },
+  { value: '200', label: '200' },
+  { value: '250', label: '250' },
+  { value: '300', label: '300' },
+  { value: '400', label: '400' },
+  { value: '500', label: '500' },
+] as const;
+
+// Additional Commodity Options
+export const ADDITIONAL_COMMODITY_OPTIONS = [
+  { value: '', label: 'Select Additional Commodity' },
+  { value: 'electronics', label: 'Electronics' },
+  { value: 'furniture', label: 'Furniture' },
+  { value: 'appliances', label: 'Appliances' },
+  { value: 'automotive', label: 'Automotive Parts' },
+  { value: 'machinery', label: 'Machinery' },
+  { value: 'textiles', label: 'Textiles' },
+  { value: 'food', label: 'Food Products' },
+  { value: 'chemicals', label: 'Chemicals' },
+  { value: 'building_materials', label: 'Building Materials' },
+  { value: 'other', label: 'Other' },
+] as const;
+
+// Excessive Length Options
+export const EXCESSIVE_LENGTH_OPTIONS = [
+  { value: '', label: 'Select Excessive Length' },
+  { value: 'none', label: 'None' },
+  { value: '12ft', label: '12 Feet' },
+  { value: '15ft', label: '15 Feet' },
+  { value: '18ft', label: '18 Feet' },
+  { value: '20ft', label: '20 Feet' },
+  { value: '22ft', label: '22 Feet' },
+  { value: '24ft', label: '24 Feet' },
+  { value: '26ft', label: '26 Feet' },
+  { value: '28ft', label: '28 Feet' },
+  { value: '30ft', label: '30 Feet' },
+  { value: 'custom', label: 'Custom Length' },
+] as const;
+
+// XPO Default Delivery Services
+// These services are selected by default: Lift Gate, Notification Prior to Delivery, Residential
+export const XPO_DEFAULT_DELIVERY_SERVICES: string[] = ['LIFT', 'NOTIFY', 'RESI'] as const;
+
+// XPO BOL Form Default Values
+export const XPO_BOL_DEFAULTS = {
+  // Basic Information
+  requesterRole: 'S', // Shipper
+  paymentTerms: 'P', // Prepaid
+  
+  // Pickup Location (default values from form)
+  pickupLocation: {
+    searchValue: 'AMMANA',
+    company: 'AMMANA',
+    careOf: '',
+    streetAddress: '8350 PARDEE DR STE 200',
+    addressLine2: '',
+    city: 'OAKLAND',
+    state: 'CA',
+    postalCode: '94621',
+    country: 'US',
+    phone: '',
+    extension: '',
+    email: '',
+  },
+  
+  // Delivery Location (default values from form)
+  deliveryLocation: {
+    searchValue: '',
+    company: '',
+    careOf: '',
+    streetAddress: '',
+    addressLine2: '',
+    city: 'WASHINGTON',
+    state: 'DC',
+    postalCode: '20001',
+    country: 'US',
+    phone: '',
+    extension: '',
+    email: '',
+  },
+  
+  // Commodity Defaults
+  commodity: {
+    desc: 'Items #CM-BK458Q-EXP-1 & #CM-BK458Q-EXP-2. one s',
+    grossWeight: {
+      weight: 350,
+    },
+    nmfcClass: '125',
+    pieceCnt: 1,
+    packaging: {
+      packageCd: 'PLT', // Pallet
+    },
+    nmfcItemCd: '',
+    sub: '',
+    hazmatInd: false,
+    freezableProtection: false,
+  },
+  
+  // Delivery Services (default selections)
+  defaultDeliveryServices: ['LIFT_GATE', 'NOTIFICATION_PRIOR', 'RESIDENTIAL'] as string[],
+  
+  // Pickup Services (default selections)
+  defaultPickupServices: [] as string[],
+  
+  // Premium Services (default selections)
+  defaultPremiumServices: [] as string[],
+  
+  // Pickup Request
+  schedulePickup: true,
+  pickupDate: '2025-12-04', // 12/4/2025
+  pickupReadyTime: '09:00', // 9:00 AM
+  dockCloseTime: '16:00', // 4:00 PM
+  contactCompanyName: 'Ammana',
+  contactName: 'Warehouse person',
+  contactPhone: '+1 (123) 456-7890',
+  contactExtension: '',
+  useMyContactInfo: false,
+  
+  // XPO Pro Number
+  proNumberOption: 'auto' as 'none' | 'auto' | 'preassigned',
+  preAssignedProNumber: '',
+  
+  // Reference Numbers
+  referenceNumbers: [
+    {
+      referenceTypeCd: 'Other',
+      reference: '10000270714370',
+      referenceCode: 'RQ#',
+      referenceDescr: 'Rate Quote Number',
+    },
+  ] as Array<{
+    referenceTypeCd: string;
+    reference: string;
+    referenceCode: string;
+    referenceDescr: string;
+  }>,
+  
+  // Additional Comments
+  comments: '',
+  
+  // Footer Options
+  saveAsTemplate: false,
+  signBOLWithRequester: false,
+  agreeToTerms: false,
+  
+  // Bill To
+  billTo: '',
+  
+  // Emergency Contact
+  emergencyContactName: '',
+  emergencyContactPhone: '',
+  
+  // Declared Value
+  totalDeclaredValue: '',
+  excessiveLiabilityAuth: '',
+};
+

@@ -332,7 +332,12 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                                             
                                                             if (existingToken) {
                                                                 // Token exists, redirect directly to rate quote page
-                                                                const rateQuoteUrl = `/logistics/estes?carrier=${encodeURIComponent(carrier)}`;
+                                                                // Map carrier to correct route
+                                                                const normalizedCarrier = carrier.toLowerCase();
+                                                                const carrierRoute = normalizedCarrier === 'xpo' || normalizedCarrier === 'expo' 
+                                                                    ? '/logistics/xpo' 
+                                                                    : '/logistics/estes';
+                                                                const rateQuoteUrl = `${carrierRoute}?carrier=${encodeURIComponent(carrier)}`;
                                                                 router.push(rateQuoteUrl);
                                                             } else {
                                                                 // Token doesn't exist, show login modal

@@ -1344,7 +1344,9 @@ export const BillOfLanding = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const token = getToken(carrier);
+    // Normalize carrier name to match how it's stored in Zustand (lowercase)
+    const normalizedCarrier = carrier.toLowerCase();
+    const token = getToken(normalizedCarrier);
     if (!token) {
       setError('Authentication required. Please login.');
       return;
@@ -1437,6 +1439,15 @@ export const BillOfLanding = ({
 
     try {
       const requestBody = buildRequestBody();
+      
+      // Get shippingCompany from carrier (normalize to lowercase)
+      const shippingCompany = normalizedCarrier === 'estes' ? 'estes' : normalizedCarrier;
+      
+      // Ensure shippingCompany is at the top level - this is critical!
+      const payload = {
+        shippingCompany: shippingCompany,
+        ...requestBody,
+      };
 
       const res = await fetch(buildApiUrl('/Logistics/create-bill-of-lading'), {
         method: 'POST',
@@ -1444,7 +1455,7 @@ export const BillOfLanding = ({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {

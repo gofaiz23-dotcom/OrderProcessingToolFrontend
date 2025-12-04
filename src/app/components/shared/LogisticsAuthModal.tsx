@@ -36,53 +36,115 @@ export const LogisticsAuthModal = ({ isOpen, onClose, carrier }: LogisticsAuthMo
     setError(null);
 
     try {
+      // Convert carrier name to lowercase shipping company name
+      // "XPO" -> "xpo", "Estes" -> "estes"
+      const shippingCompany = carrier.toLowerCase();
+
       const res = await fetch(buildApiUrl('/Logistics/Authenticate'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ 
+          username, 
+          password,
+          shippingCompany, // Required field for backend
+        }),
       });
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ message: res.statusText }));
-        throw new Error(errorData.message || `Authentication failed: ${res.statusText}`);
+        
+        // Provide more helpful error messages for common issues
+        let errorMessage = errorData.message || `Authentication failed: ${res.statusText}`;
+        
+        // Check for URL configuration errors - show user-friendly message
+        if (errorMessage.includes('BASE_URL') || 
+            errorMessage.includes('base URL') || 
+            errorMessage.includes('Failed to parse URL') ||
+            errorMessage.includes('CONFIG_MISSING') ||
+            errorMessage.includes('Configuration')) {
+          errorMessage = `Unable to connect to ${carrier} API. The ${carrier} service may not be configured. Please try again later or contact support.`;
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const data = await res.json();
       
+      // Extract token from response - handle different response structures
+      // XPO might return token directly, Estes might return it in data.token
+      const token = data.data?.token || 
+                    data.data?.accessToken || 
+                    data.data?.access_token || 
+                    data.token || 
+                    data.accessToken || 
+                    data.access_token ||
+                    data.data?.access_token;
+      
+      const shippingCompanyName = data.shippingCompanyName || shippingCompany;
+      
+      // Debug logging
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Auth Response:', {
+          shippingCompany,
+          shippingCompanyName,
+          hasToken: !!token,
+          tokenLength: token?.length || 0,
+          responseKeys: Object.keys(data),
+        });
+      }
+      
+      // Validate token exists and is not empty
+      if (!token || typeof token !== 'string' || token.trim() === '') {
+        throw new Error(`No valid token received from ${shippingCompanyName || shippingCompany}. Response: ${JSON.stringify(data)}`);
+      }
+      
       // Store token in Zustand
-      if (data.data?.token && data.shippingCompanyName) {
-        setToken(carrier, data.data.token, data.shippingCompanyName);
+      if (token && shippingCompanyName) {
+        // Normalize carrier name for consistent storage (use lowercase)
+        const normalizedCarrier = carrier.toLowerCase();
+        setToken(normalizedCarrier, token, shippingCompanyName);
         
         // Verify token is stored in Zustand
-        const storedToken = getToken(carrier);
+        const storedToken = getToken(normalizedCarrier);
         if (storedToken) {
-          console.log(`✅ Token successfully stored in Zustand for ${carrier}`);
+          console.log(`✅ Token successfully stored in Zustand for ${normalizedCarrier}`);
           console.log(`Token exists: ${storedToken ? 'Yes' : 'No'}`);
         } else {
-          console.error(`❌ Token was not stored in Zustand for ${carrier}`);
+          console.error(`❌ Token was not stored in Zustand for ${normalizedCarrier}`);
         }
         
         // Close modal first
         onClose();
-        // Navigate to estes page on success
+        
+        // Navigate to the correct carrier page based on carrier name
         if (carrier) {
+          // Map carrier names to route paths
+          const carrierRoutes: Record<string, string> = {
+            'estes': 'estes',
+            'xpo': 'xpo',
+            'expo': 'xpo', // Handle "expo" as alias for "xpo"
+          };
+          
+          const normalizedCarrierName = carrier.toLowerCase();
+          const routePath = carrierRoutes[normalizedCarrierName] || normalizedCarrierName;
+          
           // Check if there's order information in sessionStorage (from order selection)
-          let estesUrl = `/logistics/estes?carrier=${encodeURIComponent(carrier)}`;
+          let logisticsUrl = `/logistics/${routePath}?carrier=${encodeURIComponent(carrier)}`;
           try {
             const orderDataStr = sessionStorage.getItem('selectedOrderForLogistics');
             if (orderDataStr) {
               const orderData = JSON.parse(orderDataStr);
               if (orderData.id) {
-                estesUrl += `&orderId=${orderData.id}`;
+                logisticsUrl += `&orderId=${orderData.id}`;
               }
             }
           } catch (err) {
             // Ignore errors parsing sessionStorage
             console.warn('Could not parse order data from sessionStorage:', err);
           }
-          window.location.href = estesUrl;
+          window.location.href = logisticsUrl;
         }
       } else {
         throw new Error('Invalid response: token or shipping company name missing');

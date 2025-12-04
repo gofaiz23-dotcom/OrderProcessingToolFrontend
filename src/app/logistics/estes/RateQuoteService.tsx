@@ -63,13 +63,17 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   // Avoid hydration mismatch by getting token after mount
   useEffect(() => {
     setIsMounted(true);
-    const tokenFromStore = getToken(carrier) || token || '';
+    // Normalize carrier name to match how it's stored in Zustand (lowercase)
+    const normalizedCarrier = carrier.toLowerCase();
+    const tokenFromStore = getToken(normalizedCarrier) || token || '';
     setStoredToken(tokenFromStore);
   }, [carrier, token, getToken]);
 
   // Update token when it changes in store
   useEffect(() => {
-    const tokenFromStore = getToken(carrier) || token || '';
+    // Normalize carrier name to match how it's stored in Zustand (lowercase)
+    const normalizedCarrier = carrier.toLowerCase();
+    const tokenFromStore = getToken(normalizedCarrier) || token || '';
     setStoredToken(tokenFromStore);
   }, [carrier, getToken]);
 
@@ -954,7 +958,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     e.preventDefault();
     
     // Check if token exists
-    const currentToken = getToken(carrier) || storedToken;
+    // Normalize carrier name to match how it's stored in Zustand (lowercase)
+    const normalizedCarrier = carrier.toLowerCase();
+    const currentToken = getToken(normalizedCarrier) || storedToken;
     if (!currentToken) {
       // No token, show login modal
       // IMPORTANT: Form data is preserved - all state variables remain unchanged
@@ -1001,9 +1007,18 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         throw new Error('At least one handling unit is required');
       }
       
+      // Get shippingCompany from carrier prop (normalize to lowercase)
+      const shippingCompany = normalizedCarrier === 'estes' ? 'estes' : normalizedCarrier;
+      
+      // Ensure shippingCompany is at the top level - this is critical!
+      const payload = {
+        shippingCompany: shippingCompany,
+        ...requestBody,
+      };
+      
       // Log request only in development
       if (process.env.NODE_ENV === 'development') {
-        console.log('Rate Quote Request:', JSON.stringify(requestBody, null, 2));
+        console.log('Rate Quote Request:', JSON.stringify(payload, null, 2));
       }
 
       const res = await fetch(buildApiUrl('/Logistics/create-rate-quote'), {
@@ -1012,7 +1027,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           'Content-Type': 'application/json',
           Authorization: `Bearer ${currentToken}`,
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
@@ -2077,7 +2092,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         onClose={() => {
           setIsAuthModalOpen(false);
           // Refresh token from store after modal closes (in case user logged in)
-          const updatedToken = getToken(carrier);
+          // Normalize carrier name to match how it's stored in Zustand (lowercase)
+          const normalizedCarrier = carrier.toLowerCase();
+          const updatedToken = getToken(normalizedCarrier);
           if (updatedToken) {
             setStoredToken(updatedToken);
             setError(null);
