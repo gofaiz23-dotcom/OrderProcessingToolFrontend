@@ -14,12 +14,20 @@ import {
   XPO_PICKUP_REQUEST_COUNTRY_OPTIONS
 } from '@/app/api/ShippingUtil/xpo/PickupRequestField';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
+import type { XPOBillOfLadingAddress, XPOBillOfLadingCommodity } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
+
+type BOLFormData = {
+  shipper?: XPOBillOfLadingAddress;
+  consignee?: XPOBillOfLadingAddress;
+  shipDate?: string;
+  commodityLine?: XPOBillOfLadingCommodity[];
+};
 
 type PickupRequestProps = {
   onPrevious: () => void;
   onComplete: (pickupResponse?: unknown) => void;
   quoteData?: unknown;
-  bolFormData?: unknown;
+  bolFormData?: BOLFormData;
   bolResponseData?: unknown;
 };
 
@@ -132,7 +140,7 @@ export const XPOPickupRequest = ({
 
       // Pickup items from commodities
       if (bolFormData.commodityLine && bolFormData.commodityLine.length > 0) {
-        const items: XPOPickupRequestItem[] = bolFormData.commodityLine.map((commodity: any) => ({
+        const items: XPOPickupRequestItem[] = bolFormData.commodityLine.map((commodity) => ({
           destZip6: bolFormData.consignee?.address?.postalCd?.substring(0, 6) || '',
           totWeight: {
             weight: commodity.grossWeight?.weight || 0,
