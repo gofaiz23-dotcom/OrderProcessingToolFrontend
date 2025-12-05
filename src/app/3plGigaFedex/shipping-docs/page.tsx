@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Search, Trash2, RefreshCw, Loader2, Folder, FileText, Calendar, X, Download, Eye } from 'lucide-react';
+import { Search, Trash2, RefreshCw, Loader2, Folder, FileText, Calendar, X, Download, Eye, Pencil } from 'lucide-react';
 import {
   getAllThreePlGigaFedex,
   deleteThreePlGigaFedex,
   deleteThreePlGigaFedexByDateRange,
+  updateThreePlGigaFedex,
   type ThreePlGigaFedexRecord,
   type GetAllThreePlGigaFedexQueryOptions,
+  type UpdateThreePlGigaFedexPayload,
 } from '@/app/api/3plGigaFedexApi/shippingDocsApi';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { buildFileUrl } from '../../../../BaseUrl';
@@ -40,6 +42,10 @@ export default function ShippingDocsPage() {
   const [dateRangeDeleteLoading, setDateRangeDeleteLoading] = useState(false);
   const [previewFile, setPreviewFile] = useState<{ url: string; filename: string } | null>(null);
   const [timeDetailsModal, setTimeDetailsModal] = useState<{ record: ThreePlGigaFedexRecord | null }>({ record: null });
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  const [selectedRecordForUpdate, setSelectedRecordForUpdate] = useState<ThreePlGigaFedexRecord | null>(null);
+  const [updateLoading, setUpdateLoading] = useState(false);
+  const [updateError, setUpdateError] = useState<unknown>(null);
 
   const fetchRecords = useCallback(async () => {
     setLoading(true);
@@ -116,6 +122,29 @@ export default function ShippingDocsPage() {
       setError(err);
     } finally {
       setDateRangeDeleteLoading(false);
+    }
+  };
+
+  const handleUpdateClick = (record: ThreePlGigaFedexRecord) => {
+    setSelectedRecordForUpdate(record);
+    setUpdateModalOpen(true);
+    setUpdateError(null);
+  };
+
+  const handleUpdate = async (payload: UpdateThreePlGigaFedexPayload) => {
+    if (!selectedRecordForUpdate) return;
+
+    setUpdateLoading(true);
+    setUpdateError(null);
+    try {
+      await updateThreePlGigaFedex(selectedRecordForUpdate.id, payload);
+      setUpdateModalOpen(false);
+      setSelectedRecordForUpdate(null);
+      fetchRecords();
+    } catch (err) {
+      setUpdateError(err);
+    } finally {
+      setUpdateLoading(false);
     }
   };
 
@@ -437,6 +466,14 @@ export default function ShippingDocsPage() {
                               <Eye size={14} />
                             </button>
                             <button
+                              onClick={() => handleUpdateClick(record)}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 rounded hover:bg-green-100 transition-colors"
+                              title="Edit record"
+                            >
+                              <Pencil size={14} />
+                              <span>Edit</span>
+                            </button>
+                            <button
                               onClick={() => handleDeleteClick(record.id)}
                               className="flex items-center gap-1 px-3 py-1.5 bg-red-50 text-red-700 rounded hover:bg-red-100 transition-colors"
                             >
@@ -720,6 +757,271 @@ export default function ShippingDocsPage() {
           </div>
         </div>
       )}
+
+      {/* Update Modal */}
+      {updateModalOpen && selectedRecordForUpdate && (
+        <UpdateModal
+          record={selectedRecordForUpdate}
+          isOpen={updateModalOpen}
+          onClose={() => {
+            setUpdateModalOpen(false);
+            setSelectedRecordForUpdate(null);
+            setUpdateError(null);
+          }}
+          onSave={handleUpdate}
+          loading={updateLoading}
+          error={updateError}
+        />
+      )}
+    </div>
+  );
+}
+
+// Update Modal Component
+type UpdateModalProps = {
+  record: ThreePlGigaFedexRecord;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (payload: UpdateThreePlGigaFedexPayload) => Promise<void>;
+  loading?: boolean;
+  error?: unknown;
+};
+
+function UpdateModal({ record, isOpen, onClose, onSave, loading = false, error }: UpdateModalProps) {
+  const [trackingNo, setTrackingNo] = useState(record.trackingNo);
+  const [fedexJson, setFedexJson] = useState(JSON.stringify(record.fedexJson || {}, null, 2));
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [replaceFiles, setReplaceFiles] = useState(false);
+  const [existingFiles, setExistingFiles] = useState<string[]>(record.uploadArray || []);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTrackingNo(record.trackingNo);
+      setFedexJson(JSON.stringify(record.fedexJson || {}, null, 2));
+      setSelectedFiles([]);
+      setReplaceFiles(false);
+      setExistingFiles(record.uploadArray || []);
+      setJsonError(null);
+    }
+  }, [isOpen, record]);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setSelectedFiles(Array.from(e.target.files));
+    }
+  };
+
+  const handleRemoveExistingFile = (index: number) => {
+    setExistingFiles(existingFiles.filter((_, i) => i !== index));
+  };
+
+  const handleRemoveNewFile = (index: number) => {
+    setSelectedFiles(selectedFiles.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setJsonError(null);
+
+    // Validate JSON
+    let parsedFedexJson: Record<string, unknown> = {};
+    try {
+      parsedFedexJson = JSON.parse(fedexJson);
+    } catch (err) {
+      setJsonError('Invalid JSON format');
+      return;
+    }
+
+    // Check if files were removed
+    const filesRemoved = existingFiles.length !== (record.uploadArray || []).length ||
+      !existingFiles.every((file, index) => file === (record.uploadArray || [])[index]);
+
+    const payload: UpdateThreePlGigaFedexPayload = {
+      trackingNo: trackingNo !== record.trackingNo ? trackingNo : undefined,
+      fedexJson: JSON.stringify(parsedFedexJson) !== JSON.stringify(record.fedexJson) ? parsedFedexJson : undefined,
+    };
+
+    // Handle files: if new files selected, add them; if files removed, we need to send updated array
+    if (selectedFiles.length > 0) {
+      payload.files = selectedFiles;
+      payload.replaceFiles = replaceFiles;
+    } else if (filesRemoved) {
+      // If files were removed but no new files added, we need to send the updated array
+      // Note: Backend will handle this via uploadArray field in JSON payload
+      payload.uploadArray = existingFiles;
+    }
+
+    // Only send if there are actual changes
+    if (payload.trackingNo === undefined && payload.fedexJson === undefined && 
+        payload.files === undefined && payload.uploadArray === undefined) {
+      onClose();
+      return;
+    }
+
+    await onSave(payload);
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-bold text-slate-800">Update Record #{record.id}</h3>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+            disabled={loading}
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
+            <ErrorDisplay error={error} />
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Tracking Number */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Tracking Number
+            </label>
+            <input
+              type="text"
+              value={trackingNo}
+              onChange={(e) => setTrackingNo(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              required
+            />
+          </div>
+
+          {/* FedEx JSON */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              FedEx JSON
+            </label>
+            <textarea
+              value={fedexJson}
+              onChange={(e) => {
+                setFedexJson(e.target.value);
+                setJsonError(null);
+              }}
+              rows={10}
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm ${
+                jsonError ? 'border-red-300' : 'border-slate-300'
+              }`}
+              required
+            />
+            {jsonError && (
+              <p className="mt-1 text-sm text-red-600">{jsonError}</p>
+            )}
+          </div>
+
+          {/* Existing Files */}
+          {existingFiles.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">
+                Existing Files
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {existingFiles.map((filePath, index) => {
+                  const filename = filePath.split('/').pop() || 'file';
+                  return (
+                    <div
+                      key={index}
+                      className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg"
+                    >
+                      <FileText size={16} className="text-slate-600" />
+                      <span className="text-sm text-slate-700 max-w-[200px] truncate">{filename}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveExistingFile(index)}
+                        className="p-1 hover:bg-red-100 rounded text-red-600"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* File Upload */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-2">
+              Add New Files
+            </label>
+            <input
+              type="file"
+              multiple
+              onChange={handleFileChange}
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            {selectedFiles.length > 0 && (
+              <div className="mt-2 space-y-2">
+                {selectedFiles.map((file, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg"
+                  >
+                    <FileText size={16} className="text-blue-600" />
+                    <span className="text-sm text-blue-700 flex-1">{file.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveNewFile(index)}
+                      className="p-1 hover:bg-red-100 rounded text-red-600"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+                <div className="mt-2">
+                  <label className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={replaceFiles}
+                      onChange={(e) => setReplaceFiles(e.target.checked)}
+                      className="rounded"
+                    />
+                    <span>Replace all existing files (instead of appending)</span>
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 justify-end pt-4 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+            >
+              {loading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                'Update'
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

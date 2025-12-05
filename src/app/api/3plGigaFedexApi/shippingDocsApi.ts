@@ -170,3 +170,70 @@ export const deleteThreePlGigaFedexByDateRange = async (
 
   return response.json();
 };
+
+/**
+ * Update 3PL Giga Fedex record payload
+ */
+export type UpdateThreePlGigaFedexPayload = {
+  trackingNo?: string;
+  fedexJson?: Record<string, unknown>;
+  files?: File[];
+  replaceFiles?: boolean;
+  uploadArray?: string[]; // For removing files without adding new ones
+};
+
+/**
+ * Update 3PL Giga Fedex record response
+ */
+export type UpdateThreePlGigaFedexResponse = {
+  message: string;
+  data: ThreePlGigaFedexRecord;
+};
+
+/**
+ * Update 3PL Giga Fedex record by ID
+ */
+export const updateThreePlGigaFedex = async (
+  id: number,
+  payload: UpdateThreePlGigaFedexPayload
+): Promise<UpdateThreePlGigaFedexResponse> => {
+  const formData = new FormData();
+  
+  // Add text fields
+  if (payload.trackingNo !== undefined) {
+    formData.append('trackingNo', payload.trackingNo);
+  }
+  
+  if (payload.fedexJson !== undefined) {
+    formData.append('fedexJson', JSON.stringify(payload.fedexJson));
+  }
+  
+  if (payload.replaceFiles !== undefined) {
+    formData.append('replaceFiles', String(payload.replaceFiles));
+  }
+
+  // If uploadArray is provided (for file removal), send it as JSON
+  if (payload.uploadArray !== undefined) {
+    formData.append('uploadArray', JSON.stringify(payload.uploadArray));
+  }
+  
+  // Add files
+  if (payload.files && payload.files.length > 0) {
+    payload.files.forEach((file) => {
+      formData.append('files', file);
+    });
+  }
+
+  const response = await fetch(buildApiUrl(`/Logistics/3pl-giga-fedex/${id}`), {
+    method: 'PUT',
+    body: formData,
+    // Don't set Content-Type header - browser will set it with boundary for multipart/form-data
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    await handleApiError(response);
+  }
+
+  return response.json();
+};
