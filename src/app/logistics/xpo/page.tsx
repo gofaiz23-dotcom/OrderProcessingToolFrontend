@@ -3,12 +3,12 @@
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { EstesRateQuoteService } from './RateQuoteService';
+import { XPORateQuoteService } from './RateQuoteService';
 import { useLogisticsStore } from '@/store/logisticsStore';
 
-function EstesRateQuotePageContent() {
+function XPORateQuotePageContent() {
   const searchParams = useSearchParams();
-  const selectedCarrier = searchParams?.get('carrier') || 'Estes';
+  const selectedCarrier = searchParams?.get('carrier') || 'XPO';
   const orderId = searchParams?.get('orderId');
   const { getToken } = useLogisticsStore();
   // Normalize carrier name to match how it's stored in Zustand (lowercase)
@@ -71,7 +71,7 @@ function EstesRateQuotePageContent() {
 
   return (
     <div className="flex flex-col h-full overflow-y-auto">
-      <EstesRateQuoteService 
+      <XPORateQuoteService 
         carrier={selectedCarrier} 
         token={storedToken || undefined}
         orderData={orderData || undefined}
@@ -80,14 +80,14 @@ function EstesRateQuotePageContent() {
   );
 }
 
-export default function EstesRateQuotePage() {
+export default function XPORateQuotePage() {
   return (
     <Suspense fallback={
       <div className="flex h-full items-center justify-center">
         <div className="text-slate-600">Loading...</div>
       </div>
     }>
-      <EstesRateQuotePageContent />
+      <XPORateQuotePageContent />
     </Suspense>
   );
 }

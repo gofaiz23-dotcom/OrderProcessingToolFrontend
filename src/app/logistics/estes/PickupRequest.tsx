@@ -625,7 +625,9 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
     setError(null);
     setLoading(true);
 
-    const token = getToken(carrier);
+    // Normalize carrier name to match how it's stored in Zustand (lowercase)
+    const normalizedCarrier = carrier.toLowerCase();
+    const token = getToken(normalizedCarrier);
     if (!token) {
       setError('Authentication required. Please login.');
       setLoading(false);
@@ -657,6 +659,15 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
       const requestBody = buildRequestBody();
       // Removed console.log for production
 
+      // Get shippingCompany from carrier (normalize to lowercase)
+      const shippingCompany = normalizedCarrier === 'estes' ? 'estes' : normalizedCarrier;
+      
+      // Ensure shippingCompany is at the top level - this is critical!
+      const payload = {
+        shippingCompany: shippingCompany,
+        ...requestBody,
+      };
+      
       const apiUrl = buildApiUrl(`/Logistics/create-pickup-request`);
       const res = await fetch(apiUrl, {
         method: 'POST',
@@ -664,7 +675,7 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
