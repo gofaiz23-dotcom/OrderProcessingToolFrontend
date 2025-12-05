@@ -117,16 +117,25 @@ export const startScrapBol = async (
     formData.append('handle', 'false');
   }
 
-  const response = await fetch(buildPythonApiUrl('/api/v1/parcel-management/scrape'), {
-    method: 'POST',
-    body: formData,
-  });
+  try {
+    const response = await fetch(buildPythonApiUrl('/api/v1/parcel-management/scrape'), {
+      method: 'POST',
+      body: formData,
+    });
 
-  if (!response.ok) {
-    await handleApiError(response);
+    if (!response.ok) {
+      await handleApiError(response);
+    }
+
+    return response.json();
+  } catch (error) {
+    // Handle network errors (CORS, connection refused, etc.)
+    if (error instanceof TypeError && error.message.includes('fetch')) {
+      throw new Error('Failed to connect to Python backend. Please check if the server is running on http://localhost:8000');
+    }
+    // Re-throw other errors
+    throw error;
   }
-
-  return response.json();
 };
 
 /**

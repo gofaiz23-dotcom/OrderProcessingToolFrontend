@@ -34,6 +34,25 @@ export default function ScrapBolPage() {
       return;
     }
 
+    // Check if dates are more than 2 days in the future
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    const maxAllowedDate = new Date(todayDate);
+    maxAllowedDate.setDate(maxAllowedDate.getDate() + 2);
+    
+    const startDateObj = new Date(startDate);
+    const endDateObj = new Date(endDate);
+    
+    if (startDateObj > maxAllowedDate) {
+      setError('Start date cannot be more than 2 days in the future');
+      return;
+    }
+    
+    if (endDateObj > maxAllowedDate) {
+      setError('End date cannot be more than 2 days in the future');
+      return;
+    }
+
     setScraping(true);
     setError(null);
     setResponse(null);
@@ -49,7 +68,18 @@ export default function ScrapBolPage() {
         router.push('/3plGigaFedex/status');
       }, 1500); // Small delay to show success message
     } catch (err) {
-      setError(err);
+      // Better error handling - show more details
+      console.error('Scraping error:', err);
+      
+      // If it's a network error or fetch error, provide more helpful message
+      if (err instanceof TypeError && err.message.includes('fetch')) {
+        setError(new Error('Failed to connect to Python backend. Please ensure the backend server is running on http://localhost:8000'));
+      } else if (err instanceof Error) {
+        setError(err);
+      } else {
+        // For unknown errors, wrap in Error with more context
+        setError(new Error(`An unexpected error occurred: ${String(err)}`));
+      }
     } finally {
       setScraping(false);
     }
@@ -66,6 +96,11 @@ export default function ScrapBolPage() {
 
   // Get today's date in YYYY-MM-DD format
   const today = new Date().toISOString().split('T')[0];
+  
+  // Get max date (2 days from today) in YYYY-MM-DD format
+  const maxDate = new Date();
+  maxDate.setDate(maxDate.getDate() + 2);
+  const maxDateString = maxDate.toISOString().split('T')[0];
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -174,7 +209,7 @@ export default function ScrapBolPage() {
                         type="date"
                         value={startDate}
                         onChange={(e) => setStartDate(e.target.value)}
-                        max={today}
+                        max={maxDateString}
                         required
                         disabled={scraping}
                         className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
@@ -194,7 +229,7 @@ export default function ScrapBolPage() {
                         value={endDate}
                         onChange={(e) => setEndDate(e.target.value)}
                         min={startDate || undefined}
-                        max={today}
+                        max={maxDateString}
                         required
                         disabled={scraping || !startDate}
                         className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
