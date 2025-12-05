@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Loader2, Calendar, Info, X, Plus, HelpCircle, ChevronDown, ChevronUp, MapPin, Calculator, Search, ChevronRight } from 'lucide-react';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
@@ -15,12 +15,12 @@ import { XPO_RATE_QUOTE_COMMODITY_DEFAULTS, XPO_PAYMENT_TERM_OPTIONS, XPO_PACKAG
 import { StepIndicator } from './components/StepIndicator';
 import { XPOBillOfLading } from './BillOfLading';
 import { XPOPickupRequest } from './PickupRequest';
-import { BOLForm } from './components/BOL';
+import { BOLForm, BOLSuccessPage } from './components/BOL';
 import { ResponseSummary } from './components/ResponseSummary';
 import { getLogisticsShippedOrderById, getAllLogisticsShippedOrders } from '@/app/api/LogisticsApi/LogisticsShippedOrders';
 import { deleteOrder } from '@/app/api/OrderApi';
 import { ToastContainer } from '@/app/components/shared/Toast';
-import { XPO_SHIPPER_ADDRESS_BOOK, XPO_CONSIGNEE_ADDRESS_BOOK, US_STATES_OPTIONS, FREIGHT_CLASS_OPTIONS, ADDITIONAL_COMMODITY_OPTIONS, EXCESSIVE_LENGTH_OPTIONS, XPO_DEFAULT_DELIVERY_SERVICES } from '@/Shared/constant';
+import { XPO_SHIPPER_ADDRESS_BOOK, XPO_CONSIGNEE_ADDRESS_BOOK, US_STATES_OPTIONS, FREIGHT_CLASS_OPTIONS, ADDITIONAL_COMMODITY_OPTIONS, EXCESSIVE_LENGTH_OPTIONS, XPO_DEFAULT_DELIVERY_SERVICES, XPO_RATE_QUOTE_DEFAULTS, getAllCommodityOptions, addCustomCommodity, getCustomCommodityByValue, updateCustomCommodity, type CustomCommodity } from '@/Shared/constant';
 
 type XPORateQuoteServiceProps = {
   carrier: string;
@@ -102,6 +102,44 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
     const year = today.getFullYear();
     return `${month}/${day}/${year}`;
   });
+  
+  // Ref for date input
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  
+  // Convert MM/DD/YYYY to YYYY-MM-DD for date input
+  const convertToDateInputFormat = (dateStr: string): string => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+      const [month, day, year] = parts;
+      return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+    }
+    return '';
+  };
+  
+  // Convert YYYY-MM-DD to MM/DD/YYYY
+  const convertFromDateInputFormat = (dateStr: string): string => {
+    if (!dateStr) return '';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const [year, month, day] = parts;
+      return `${month}/${day}/${year}`;
+    }
+    return '';
+  };
+  
+  // Handle date input change
+  const handlePickupDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const dateValue = e.target.value;
+    if (dateValue) {
+      setPickupDate(convertFromDateInputFormat(dateValue));
+    }
+  };
+  
+  // Handle calendar icon click
+  const handleCalendarIconClick = () => {
+    dateInputRef.current?.showPicker?.() || dateInputRef.current?.click();
+  };
 
   // Form state - Pickup Location
   const [pickupLocation, setPickupLocation] = useState<string>('');
@@ -118,8 +156,18 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
   const [pickupContactName, setPickupContactName] = useState<string>('');
 
   // Form state - Delivery Location
-  const [deliveryCountry, setDeliveryCountry] = useState<string>('United States');
+  const [deliveryLocation, setDeliveryLocation] = useState<string>('');
+  const [showDeliveryDetails, setShowDeliveryDetails] = useState(false);
+  const [deliveryCompany, setDeliveryCompany] = useState<string>('');
+  const [deliveryStreetAddress, setDeliveryStreetAddress] = useState<string>('');
+  const [deliveryAddressLine2, setDeliveryAddressLine2] = useState<string>('');
+  const [deliveryCity, setDeliveryCity] = useState<string>('');
+  const [deliveryState, setDeliveryState] = useState<string>('');
   const [deliveryPostalCode, setDeliveryPostalCode] = useState<string>('');
+  const [deliveryCountry, setDeliveryCountry] = useState<string>('United States');
+  const [deliveryPhone, setDeliveryPhone] = useState<string>('');
+  const [deliveryExtension, setDeliveryExtension] = useState<string>('');
+  const [deliveryContactName, setDeliveryContactName] = useState<string>('');
 
   // Form state - Payment and Shipment Info
   const [paymentTermCd, setPaymentTermCd] = useState<string>('P');
@@ -132,8 +180,13 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
   const [freezableProtection, setFreezableProtection] = useState<boolean>(false);
   const [hazmatItem, setHazmatItem] = useState<boolean>(false);
   const [additionalCommodity, setAdditionalCommodity] = useState<string>('');
-  const [excessiveLength, setExcessiveLength] = useState<string>('');
+  const [excessiveLength, setExcessiveLength] = useState<string>(XPO_RATE_QUOTE_DEFAULTS.excessiveLength);
   const [excessValueCoverage, setExcessValueCoverage] = useState<string>('');
+  
+  // Custom commodities state
+  const [allCommodityOptions, setAllCommodityOptions] = useState<Array<{ value: string; label: string; id?: string }>>(getAllCommodityOptions());
+  const [selectedCommodityId, setSelectedCommodityId] = useState<string | null>(null);
+  const [showNewCommodityForm, setShowNewCommodityForm] = useState<boolean>(false);
 
   // Form state - Services
   const [pickupServices, setPickupServices] = useState<string[]>([]);
@@ -157,8 +210,11 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
   const [consigneeState, setConsigneeState] = useState<string>('');
   const [consigneeAddressBook, setConsigneeAddressBook] = useState<string>('');
 
+  // Delivery postal code loading state
+  const [deliveryLoadingZip, setDeliveryLoadingZip] = useState(false);
+
   // ZIP code lookup function using Zippopotam.us API
-  const lookupZipCode = async (zipCode: string, type: 'shipper' | 'consignee') => {
+  const lookupZipCode = async (zipCode: string, type: 'shipper' | 'consignee' | 'delivery') => {
     if (!zipCode || zipCode.length < 5) return;
 
     const cleanedZip = zipCode.replace(/\D/g, '').substring(0, 5);
@@ -166,8 +222,10 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
 
     if (type === 'shipper') {
       setShipperLoadingZip(true);
-    } else {
+    } else if (type === 'consignee') {
       setConsigneeLoadingZip(true);
+    } else if (type === 'delivery') {
+      setDeliveryLoadingZip(true);
     }
 
     try {
@@ -184,7 +242,13 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
           if (type === 'shipper') {
             setShipperCity(city);
             setShipperState(state);
-          } else {
+          } else if (type === 'consignee') {
+            setConsigneeCity(city);
+            setConsigneeState(state);
+          } else if (type === 'delivery') {
+            setDeliveryCity(city);
+            setDeliveryState(state);
+            // Also update consignee fields for backward compatibility
             setConsigneeCity(city);
             setConsigneeState(state);
           }
@@ -198,8 +262,10 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
     } finally {
       if (type === 'shipper') {
         setShipperLoadingZip(false);
-      } else {
+      } else if (type === 'consignee') {
         setConsigneeLoadingZip(false);
+      } else if (type === 'delivery') {
+        setDeliveryLoadingZip(false);
       }
     }
   };
@@ -222,6 +288,15 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
       return () => clearTimeout(timeoutId);
     }
   }, [consigneePostalCd]);
+
+  useEffect(() => {
+    if (deliveryPostalCode && deliveryPostalCode.length >= 5) {
+      const timeoutId = setTimeout(() => {
+        lookupZipCode(deliveryPostalCode, 'delivery');
+      }, 800);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [deliveryPostalCode]);
 
   // Handle address book selection for shipper
   const handleShipperAddressBookChange = (value: string) => {
@@ -249,8 +324,164 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
     }
   };
 
-  // Commodities
-  const [commodities, setCommodities] = useState<XPORateQuoteCommodity[]>([{ ...XPO_RATE_QUOTE_COMMODITY_DEFAULTS }]);
+  // Handle additional commodity dropdown change
+  const handleAdditionalCommodityChange = (value: string) => {
+    if (value === 'add_new') {
+      // Clear Commodity 1 form with defaults
+      const defaultCommodity = { 
+        ...XPO_RATE_QUOTE_COMMODITY_DEFAULTS,
+        nmfcClass: XPO_RATE_QUOTE_DEFAULTS.freightClass, // Set Freight Class to 250
+        packageCode: XPO_RATE_QUOTE_DEFAULTS.packaging, // Set Packaging to PLT
+      };
+      setCommodities([defaultCommodity]);
+      setCommodityDescriptions({ 0: '' });
+      setFreezableProtection(false);
+      setHazmatItem(false);
+      setSelectedCommodityId(null);
+      setAdditionalCommodity('');
+      setExcessiveLength(XPO_RATE_QUOTE_DEFAULTS.excessiveLength); // Set Excessive Length to 'none'
+      setShowNewCommodityForm(true);
+    } else if (value === '') {
+      // Clear selection
+      setShowNewCommodityForm(false);
+      setSelectedCommodityId(null);
+      setAdditionalCommodity('');
+    } else {
+      // Load saved commodity data into Commodity 1
+      const savedCommodity = getCustomCommodityByValue(value);
+      if (savedCommodity) {
+        setSelectedCommodityId(savedCommodity.id);
+        setAdditionalCommodity(value);
+        setShowNewCommodityForm(true);
+        
+        // Populate Commodity 1 with saved data
+        if (commodities.length > 0) {
+          const updatedCommodity = { ...commodities[0] };
+          
+          if (savedCommodity.description) {
+            setCommodityDescriptions({ 0: savedCommodity.description });
+          } else {
+            setCommodityDescriptions({ 0: '' });
+          }
+          if (savedCommodity.weight) {
+            updatedCommodity.grossWeight = {
+              ...updatedCommodity.grossWeight,
+              weight: savedCommodity.weight,
+            };
+          }
+          if (savedCommodity.freightClass) {
+            updatedCommodity.nmfcClass = savedCommodity.freightClass;
+          }
+          if (savedCommodity.length || savedCommodity.width || savedCommodity.height) {
+            updatedCommodity.dimensions = {
+              length: savedCommodity.length || 0,
+              width: savedCommodity.width || 0,
+              height: savedCommodity.height || 0,
+              dimensionsUom: updatedCommodity.dimensions?.dimensionsUom || 'INCH',
+            };
+          }
+          if (savedCommodity.pieces) {
+            updatedCommodity.pieceCnt = savedCommodity.pieces;
+          }
+          if (savedCommodity.packageCode) {
+            updatedCommodity.packageCode = savedCommodity.packageCode;
+          }
+          
+          setCommodities([updatedCommodity]);
+          setFreezableProtection(savedCommodity.freezableProtection || false);
+          setHazmatItem(savedCommodity.hazmatItem || false);
+        }
+      }
+    }
+  };
+
+  // Handle saving current Commodity 1 as new commodity
+  const handleSaveAsNew = () => {
+    if (commodities.length === 0) return;
+    
+    const commodity = commodities[0];
+    const description = commodityDescriptions[0] || '';
+    const commodityName = description || `Commodity ${Date.now()}`;
+    
+    const newCommodity = addCustomCommodity({
+      label: commodityName,
+      description: description,
+      weight: commodity.grossWeight?.weight,
+      freightClass: commodity.nmfcClass,
+      length: commodity.dimensions?.length,
+      width: commodity.dimensions?.width,
+      height: commodity.dimensions?.height,
+      pieces: commodity.pieceCnt,
+      packageCode: commodity.packageCode,
+      freezableProtection: freezableProtection,
+      hazmatItem: hazmatItem,
+    });
+    
+    setAllCommodityOptions(getAllCommodityOptions());
+    setSelectedCommodityId(newCommodity.id);
+    setAdditionalCommodity(newCommodity.value);
+    
+    // Show success message
+    const toastId = `toast-${Date.now()}`;
+    setToasts(prev => [...prev, {
+      id: toastId,
+      message: 'Commodity saved successfully!',
+      type: 'success',
+    }]);
+  };
+
+  // Handle updating selected commodity
+  const handleUpdateCommodity = () => {
+    if (!selectedCommodityId || commodities.length === 0) return;
+    
+    const commodity = commodities[0];
+    
+    updateCustomCommodity(selectedCommodityId, {
+      description: commodityDescriptions[0] || '',
+      weight: commodity.grossWeight?.weight,
+      freightClass: commodity.nmfcClass,
+      length: commodity.dimensions?.length,
+      width: commodity.dimensions?.width,
+      height: commodity.dimensions?.height,
+      pieces: commodity.pieceCnt,
+      packageCode: commodity.packageCode,
+      freezableProtection: freezableProtection,
+      hazmatItem: hazmatItem,
+    });
+    
+    setAllCommodityOptions(getAllCommodityOptions());
+    
+    // Show success message
+    const toastId = `toast-${Date.now()}`;
+    setToasts(prev => [...prev, {
+      id: toastId,
+      message: 'Commodity updated successfully!',
+      type: 'success',
+    }]);
+  };
+
+  // Refresh commodity options on mount and when localStorage changes
+  useEffect(() => {
+    setAllCommodityOptions(getAllCommodityOptions());
+    
+    // Listen for storage changes (in case another tab adds a commodity)
+    const handleStorageChange = () => {
+      setAllCommodityOptions(getAllCommodityOptions());
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Commodities with defaults
+  const [commodities, setCommodities] = useState<XPORateQuoteCommodity[]>([{ 
+    ...XPO_RATE_QUOTE_COMMODITY_DEFAULTS,
+    nmfcClass: XPO_RATE_QUOTE_DEFAULTS.freightClass, // Default Freight Class: 250
+    packageCode: XPO_RATE_QUOTE_DEFAULTS.packaging, // Default Packaging: PLT
+  }]);
+  
+  // Commodity descriptions (stored separately since not in API type)
+  const [commodityDescriptions, setCommodityDescriptions] = useState<Record<number, string>>({ 0: '' });
 
   // Optional fields
   const [palletCnt, setPalletCnt] = useState<number>(0);
@@ -842,6 +1073,15 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   };
+
+  const addToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
+    const toastId = `toast-${Date.now()}`;
+    setToasts(prev => [...prev, {
+      id: toastId,
+      message,
+      type,
+    }]);
+  };
   
   // Store BOL PDF URL
   const [bolPdfUrl, setBolPdfUrl] = useState<string | null>(null);
@@ -1089,12 +1329,28 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
         }
         return;
       }
-      if (commodities.some(c => !c.grossWeight || !c.grossWeight.weight || c.grossWeight.weight <= 0)) {
+      // Validate commodity weights - handle both number and string values
+      const invalidWeightCommodities = commodities.filter(c => {
+        if (!c.grossWeight || c.grossWeight === null || c.grossWeight === undefined) {
+          return true;
+        }
+        const weight = typeof c.grossWeight.weight === 'string' 
+          ? parseFloat(c.grossWeight.weight) 
+          : c.grossWeight.weight;
+        return !weight || isNaN(weight) || weight <= 0;
+      });
+      
+      if (invalidWeightCommodities.length > 0) {
         const errorMsg = 'All commodities must have a weight greater than 0';
         setError(new Error(errorMsg));
         setLoading(false);
         if (process.env.NODE_ENV === 'development') {
           console.error('Validation error:', errorMsg);
+          console.error('Invalid commodities:', invalidWeightCommodities.map((c, i) => ({
+            index: i,
+            weight: c.grossWeight?.weight,
+            type: typeof c.grossWeight?.weight
+          })));
         }
         return;
       }
@@ -1266,15 +1522,18 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
         setCompletedSteps([...completedSteps, 1]);
       }
       
-      // Always redirect to Quote Results Page when rate quote is created successfully
+      // Show Quote Results Page below the form when rate quote is created successfully
       // The response structure validation will happen in the render logic
       setShowQuoteResultsPage(true);
       setShowAccountInfo(false);
       setShowResponseDropdown(true);
       
-      // Scroll to top to show the results page
+      // Scroll to the results section smoothly
       setTimeout(() => {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        const resultsElement = document.querySelector('[data-quote-results]');
+        if (resultsElement) {
+          resultsElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       }, 100);
     } catch (err) {
       if (err instanceof Error && (
@@ -1337,7 +1596,8 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
   const handleBillOfLandingNext = () => {
     handleStepComplete(2);
     window.scrollTo({ top: 0, behavior: 'instant' });
-    setCurrentStep(3);
+    // Show BOL Success page (step 2.5)
+    setCurrentStep(2.5);
     
     const scrollToTop = () => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1360,6 +1620,53 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
       setTimeout(scrollToTop, 300);
       setTimeout(scrollToTop, 500);
     });
+  };
+
+  const handleBOLSuccessSchedulePickup = () => {
+    setCurrentStep(3);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
+  const handleBOLSuccessEdit = () => {
+    setCurrentStep(2);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
+  const handleBOLSuccessPrintDownload = () => {
+    if (bolPdfUrl) {
+      const link = document.createElement('a');
+      link.href = bolPdfUrl;
+      const proNumber = bolResponseData?.data?.referenceNumbers?.pro || 'BOL';
+      link.download = `BillOfLading_${proNumber}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      addToast('BOL PDF is not available yet', 'error');
+    }
+  };
+
+  const handleBOLSuccessPrintLabels = () => {
+    // TODO: Implement label printing
+    addToast('Label printing feature coming soon', 'info');
+  };
+
+  const handleBOLSuccessEmail = () => {
+    // TODO: Implement email BOL
+    addToast('Email BOL feature coming soon', 'info');
+  };
+
+  const handleBOLSuccessClose = () => {
+    // Go back to step 1 or close
+    setCurrentStep(1);
+    setResponse(null);
+    setSelectedQuote(null);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
+  const handleBOLSuccessManageBOL = () => {
+    // TODO: Navigate to manage BOL page
+    addToast('Manage BOL page coming soon', 'info');
   };
 
   const handlePickupRequestComplete = (pickupResponse?: any) => {
@@ -1554,23 +1861,43 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
     });
   }
   
-  // Always show QuoteResultsPage if showQuoteResultsPage is true and we have a response
-  // Even if quotesData is empty, we'll show the page with empty quotes (QuoteResultsPage handles this)
-  if (showQuoteResultsPage && response) {
+  // Helper functions to extract data for QuoteResultsPage
+  const getQuoteResultsData = () => {
+    if (!response) return null;
+
+    // Prepare quotesData - recalculate to ensure it's fresh
+    let finalQuotesData: any[] = [];
+    
+    if (response?.data?.data) {
+      // Check if it's an array
+      if (Array.isArray(response.data.data)) {
+        finalQuotesData = response.data.data;
+      } 
+      // Check if it's a single rateQuote object
+      else if (response.data.data.rateQuote) {
+        finalQuotesData = [response.data.data.rateQuote];
+      }
+      // Check if data itself is an array
+      else if (Array.isArray(response.data)) {
+        finalQuotesData = response.data;
+      }
+    } else if (Array.isArray(response?.data)) {
+      finalQuotesData = response.data;
+    }
+    
+    // If still empty but we have rateQuote in response, add it
+    if (finalQuotesData.length === 0 && response.data?.data?.rateQuote) {
+      finalQuotesData = [response.data.data.rateQuote];
+    }
+
     // Extract quote number from various possible locations
-    // Try to get it from the nested rateQuote object if quotesData is empty
-    const quoteNumber = hasValidQuotes 
-      ? (quotesData[0]?.confirmationNbr || quotesData[0]?.quoteId || quotesData[0]?.spotQuoteNbr)
+    const quoteNumber = finalQuotesData.length > 0
+      ? (finalQuotesData[0]?.confirmationNbr || finalQuotesData[0]?.quoteId || finalQuotesData[0]?.spotQuoteNbr)
       : (response.data?.data?.rateQuote?.confirmationNbr || 
          response.data?.data?.rateQuote?.spotQuoteNbr ||
          response.quoteId || 
          response.data?.quoteId || 
          `10000${Date.now()}`);
-    
-    // If quotesData is empty but we have rateQuote in response, add it
-    if (!hasValidQuotes && response.data?.data?.rateQuote) {
-      quotesData = [response.data.data.rateQuote];
-    }
     
     // Extract delivery location from response, order data, or form data
     const getDeliveryLocation = () => {
@@ -1705,85 +2032,19 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
              response?.data?.data?.rateQuote?.accountNbr ||
              undefined;
     };
-    
-    return (
-      <QuoteResultsPage
-        quoteNumber={quoteNumber}
-        pickupLocation={getPickupLocation()}
-        deliveryLocation={getDeliveryLocation()}
-        commodities={getCommodities()}
-        totalWeight={getTotalWeight()}
-        paymentTerms={formatPaymentTerms()}
-        accountCode={getAccountCode()}
-        accountNumber={getAccountNumber()}
-        quotes={quotesData}
-        onBack={() => setShowQuoteResultsPage(false)}
-        onRequote={() => {
-          setShowQuoteResultsPage(false);
-          setResponse(null);
-          setError(null);
-        }}
-        onClose={() => {
-          setShowQuoteResultsPage(false);
-          setResponse(null);
-        }}
-        onCreateBOLAndPickup={(quote) => {
-          setSelectedQuote({
-            quote,
-            formData: {
-              paymentTermCd,
-              shipmentDate,
-              accessorials,
-              shipperPostalCd: pickupPostalCode || shipperPostalCd,
-              consigneePostalCd: deliveryPostalCode || consigneePostalCd,
-              commodities,
-              palletCnt,
-              linealFt,
-            },
-          });
-          setShowQuoteResultsPage(false);
-          handleStepComplete(1);
-          setCurrentStep(2);
-        }}
-        onCreateBOL={(quote) => {
-          setSelectedQuote({
-            quote,
-            formData: {
-              paymentTermCd,
-              shipmentDate,
-              accessorials,
-              shipperPostalCd: pickupPostalCode || shipperPostalCd,
-              consigneePostalCd: deliveryPostalCode || consigneePostalCd,
-              commodities,
-              palletCnt,
-              linealFt,
-            },
-          });
-          setShowQuoteResultsPage(false);
-          handleStepComplete(1);
-          setCurrentStep(2);
-        }}
-        onSchedulePickup={(quote) => {
-          setSelectedQuote({
-            quote,
-            formData: {
-              paymentTermCd,
-              shipmentDate,
-              accessorials,
-              shipperPostalCd: pickupPostalCode || shipperPostalCd,
-              consigneePostalCd: deliveryPostalCode || consigneePostalCd,
-              commodities,
-              palletCnt,
-              linealFt,
-            },
-          });
-          setShowQuoteResultsPage(false);
-          handleStepComplete(1);
-          setCurrentStep(3);
-        }}
-      />
-    );
-  }
+
+    return {
+      quoteNumber,
+      pickupLocation: getPickupLocation(),
+      deliveryLocation: getDeliveryLocation(),
+      commodities: getCommodities(),
+      totalWeight: getTotalWeight(),
+      paymentTerms: formatPaymentTerms(),
+      accountCode: getAccountCode(),
+      accountNumber: getAccountNumber(),
+      quotes: finalQuotesData,
+    };
+  };
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 lg:space-y-8 pb-4 sm:pb-6 lg:pb-8 px-3 sm:px-4 lg:px-6">
@@ -1842,14 +2103,24 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                   </label>
                   <div className="relative">
                     <input
-                      type="text"
-                      value={pickupDate}
-                      onChange={(e) => setPickupDate(e.target.value)}
-                      placeholder="MM/DD/YYYY"
-                      className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                      ref={dateInputRef}
+                      type="date"
+                      value={convertToDateInputFormat(pickupDate)}
+                      onChange={handlePickupDateChange}
+                      className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10 appearance-none [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:right-0 [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer"
+                      style={{
+                        colorScheme: 'light',
+                      }}
                       required
                     />
-                    <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                    <button
+                      type="button"
+                      onClick={handleCalendarIconClick}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer z-10 pointer-events-auto"
+                      aria-label="Open calendar"
+                    >
+                      <Calendar size={20} />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2045,9 +2316,10 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
               </div>
             </section>
 
-            {/* To (Delivery Location) / Payment Terms Section */}
+            {/* Delivery Location Section */}
             <section>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <h2 className="text-lg font-bold text-slate-900 mb-4">TO (Delivery Location)</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-slate-900">
                     To Country <span className="text-red-500">*</span>
@@ -2069,36 +2341,48 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                   <label className="block text-sm font-semibold text-slate-900">
                     To Postal Code <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="text"
-                    value={deliveryPostalCode}
-                    onChange={(e) => setDeliveryPostalCode(e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={deliveryPostalCode}
+                      onChange={(e) => setDeliveryPostalCode(e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                    {deliveryLoadingZip && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
+                      </div>
+                    )}
+                  </div>
+                  {(deliveryCity || deliveryState) && !deliveryLoadingZip && (
+                    <p className="text-sm text-slate-600 mt-1">
+                      {[deliveryCity, deliveryState].filter(Boolean).join(', ')}
+                    </p>
+                  )}
                 </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-slate-900">
-                    Payment Terms <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={paymentTermCd}
-                    onChange={(e) => setPaymentTermCd(e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    {XPO_PAYMENT_TERM_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-semibold text-slate-900">
+                  Payment Terms <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={paymentTermCd}
+                  onChange={(e) => setPaymentTermCd(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                >
+                  {XPO_PAYMENT_TERM_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             </section>
 
             {/* Commodity Details Section */}
-            <section>
+            <section data-commodity-section>
               <h2 className="text-lg font-bold text-slate-900 mb-4">Commodity Details</h2>
               {commodities.map((commodity, index) => (
                 <div key={index} className="mb-6 p-4 border border-slate-200 rounded-lg">
@@ -2125,6 +2409,8 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                       </label>
                       <textarea
                         rows={3}
+                        value={commodityDescriptions[index] || ''}
+                        onChange={(e) => setCommodityDescriptions(prev => ({ ...prev, [index]: e.target.value }))}
                         className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
                     </div>
@@ -2134,14 +2420,19 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                       </label>
                       <input
                         type="number"
-                        value={commodity.grossWeight?.weight || 0}
-                        onChange={(e) => updateCommodity(index, 'grossWeight', { 
-                          ...commodity.grossWeight, 
-                          weight: parseFloat(e.target.value) || 0 
-                        })}
+                        value={commodity.grossWeight?.weight || ''}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          const numValue = value === '' ? 0 : parseFloat(value);
+                          updateCommodity(index, 'grossWeight', { 
+                            ...commodity.grossWeight, 
+                            weight: isNaN(numValue) ? 0 : numValue
+                          });
+                        }}
                         className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
                         min="0"
+                        step="0.01"
                       />
                       <p className="text-xs text-slate-500">lbs</p>
                     </div>
@@ -2218,117 +2509,308 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                         min="1"
                       />
                     </div>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-semibold text-slate-900">Packaging</label>
-                      <select
-                        value={commodity.packageCode || 'PLT'}
-                        onChange={(e) => updateCommodity(index, 'packageCode', e.target.value)}
-                        className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        {XPO_PACKAGE_CODE_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
+                  
+                  {/* Packaging, Checkboxes, and Buttons - Only for Commodity 1 */}
+                  {index === 0 && (
+                    <div className="mt-4 pt-4">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4">
+                        <div className="space-y-2">
+                          <label className="block text-sm font-semibold text-slate-900">Packaging</label>
+                          <select
+                            value={commodity.packageCode || 'PLT'}
+                            onChange={(e) => updateCommodity(index, 'packageCode', e.target.value)}
+                            className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-48"
+                          >
+                            {XPO_PACKAGE_CODE_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-4 flex-wrap flex-1">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={freezableProtection}
+                              onChange={(e) => setFreezableProtection(e.target.checked)}
+                              className="w-4 h-4 text-blue-600 rounded"
+                            />
+                            <span className="text-sm text-slate-700">Freezable Protection</span>
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={hazmatItem}
+                              onChange={(e) => setHazmatItem(e.target.checked)}
+                              className="w-4 h-4 text-blue-600 rounded"
+                            />
+                            <span className="text-sm text-slate-700">Hazmat Item</span>
+                          </label>
+                          <div className="flex gap-2 ml-auto">
+                            <button
+                              type="button"
+                              onClick={handleSaveAsNew}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                            >
+                              Save As New
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleUpdateCommodity}
+                              disabled={!selectedCommodityId}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:bg-slate-300 disabled:cursor-not-allowed"
+                            >
+                              Update Commodity
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </section>
 
-            {/* Packaging Section */}
+            {/* Additional Commodity Options Section */}
             <section>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-slate-900">Packaging</label>
-                  <select
-                    value={packaging}
-                    onChange={(e) => setPackaging(e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {XPO_PACKAGE_CODE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-end gap-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={freezableProtection}
-                      onChange={(e) => setFreezableProtection(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm text-slate-700">Freezable Protection</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={hazmatItem}
-                      onChange={(e) => setHazmatItem(e.target.checked)}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm text-slate-700">Hazmat Item</span>
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-                    >
-                      Save As New
-                    </button>
-                    <button
-                      type="button"
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
-                    >
-                      Update Commodity
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-slate-900">Additional Commodity</label>
                   <select
                     value={additionalCommodity}
-                    onChange={(e) => setAdditionalCommodity(e.target.value)}
+                    onChange={(e) => handleAdditionalCommodityChange(e.target.value)}
                     className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    {ADDITIONAL_COMMODITY_OPTIONS.map((option) => (
+                    <option value="">Select Commodity</option>
+                    {allCommodityOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
                     ))}
+                    <option value="add_new" className="text-blue-600 font-semibold">
+                      + Add New Commodity
+                    </option>
                   </select>
                 </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-slate-900">Excessive Length</label>
-                  <select
-                    value={excessiveLength}
-                    onChange={(e) => setExcessiveLength(e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {EXCESSIVE_LENGTH_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-slate-900">
-                    $ Excess Value Coverage (USD) (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={excessValueCoverage}
-                    onChange={(e) => setExcessValueCoverage(e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <p className="text-xs text-slate-500">USD</p>
+                
+                {/* Show Commodity Form when Add New or Saved Commodity is Selected */}
+                {showNewCommodityForm && commodities.length > 0 && (
+                  <div className="mt-6 p-4 border border-slate-200 rounded-lg bg-white">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-semibold text-slate-900">Commodity 1</h3>
+                        <Info className="text-blue-500" size={18} />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowNewCommodityForm(false);
+                          setAdditionalCommodity('');
+                          setSelectedCommodityId(null);
+                        }}
+                        className="text-slate-400 hover:text-slate-600 transition-colors"
+                        aria-label="Close commodity form"
+                      >
+                        <X size={20} />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="space-y-2 md:col-span-2 lg:col-span-3">
+                        <label className="block text-sm font-semibold text-slate-900">
+                          Commodity Description (Optional)
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={commodityDescriptions[0] || ''}
+                          onChange={(e) => setCommodityDescriptions(prev => ({ ...prev, 0: e.target.value }))}
+                          className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-slate-900">
+                          Total Weight <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          value={commodities[0].grossWeight?.weight || ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const numValue = value === '' ? 0 : parseFloat(value);
+                            updateCommodity(0, 'grossWeight', { 
+                              ...commodities[0].grossWeight, 
+                              weight: isNaN(numValue) ? 0 : numValue
+                            });
+                          }}
+                          className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required
+                          min="0"
+                          step="0.01"
+                        />
+                        <p className="text-xs text-slate-500">lbs</p>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-slate-900">
+                          Freight Class <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={commodities[0].nmfcClass || ''}
+                          onChange={(e) => updateCommodity(0, 'nmfcClass', e.target.value)}
+                          className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required
+                        >
+                          <option value="">Select Class</option>
+                          {FREIGHT_CLASS_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="text-blue-600 hover:text-blue-700 text-sm flex items-center gap-1 mt-1"
+                        >
+                          <Calculator className="w-4 h-4" />
+                          Class Calculator
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-slate-900">
+                          Length (Inches) (Optional)
+                        </label>
+                        <input
+                          type="number"
+                          value={commodities[0].dimensions?.length || ''}
+                          onChange={(e) => updateCommodity(0, 'dimensions', { ...commodities[0].dimensions, length: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min="0"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-slate-900">
+                          Width (Inches) (Optional)
+                        </label>
+                        <input
+                          type="number"
+                          value={commodities[0].dimensions?.width || ''}
+                          onChange={(e) => updateCommodity(0, 'dimensions', { ...commodities[0].dimensions, width: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min="0"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-slate-900">
+                          Height (Inches) (Optional)
+                        </label>
+                        <input
+                          type="number"
+                          value={commodities[0].dimensions?.height || ''}
+                          onChange={(e) => updateCommodity(0, 'dimensions', { ...commodities[0].dimensions, height: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min="0"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-slate-900">
+                          Pieces/Quantity (Optional)
+                        </label>
+                        <input
+                          type="number"
+                          value={commodities[0].pieceCnt || 1}
+                          onChange={(e) => updateCommodity(0, 'pieceCnt', parseInt(e.target.value) || 1)}
+                          className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min="1"
+                        />
+                      </div>
+                    </div>
+                    
+                    {/* Packaging, Checkboxes, and Buttons */}
+                    <div className="mt-4 pt-4">
+                      <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4">
+                        <div className="space-y-2">
+                          <label className="block text-sm font-semibold text-slate-900">Packaging</label>
+                          <select
+                            value={commodities[0].packageCode || 'PLT'}
+                            onChange={(e) => updateCommodity(0, 'packageCode', e.target.value)}
+                            className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-48"
+                          >
+                            {XPO_PACKAGE_CODE_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-4 flex-wrap flex-1">
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={freezableProtection}
+                              onChange={(e) => setFreezableProtection(e.target.checked)}
+                              className="w-4 h-4 text-blue-600 rounded"
+                            />
+                            <span className="text-sm text-slate-700">Freezable Protection</span>
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={hazmatItem}
+                              onChange={(e) => setHazmatItem(e.target.checked)}
+                              className="w-4 h-4 text-blue-600 rounded"
+                            />
+                            <span className="text-sm text-slate-700">Hazmat Item</span>
+                          </label>
+                          <div className="flex gap-2 ml-auto">
+                            <button
+                              type="button"
+                              onClick={handleSaveAsNew}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                            >
+                              Save As New
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleUpdateCommodity}
+                              disabled={!selectedCommodityId}
+                              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm disabled:bg-slate-300 disabled:cursor-not-allowed"
+                            >
+                              Update Commodity
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-slate-900">Excessive Length</label>
+                    <select
+                      value={excessiveLength}
+                      onChange={(e) => setExcessiveLength(e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {EXCESSIVE_LENGTH_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-semibold text-slate-900">
+                      $ Excess Value Coverage (USD) (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={excessValueCoverage}
+                      onChange={(e) => setExcessValueCoverage(e.target.value)}
+                      className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-slate-500">USD</p>
+                  </div>
                 </div>
               </div>
             </section>
@@ -2524,7 +3006,94 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
             carrier={carrier}
           />
 
-          {response && response.data?.data && Array.isArray(response.data.data) && response.data.data.length > 0 && (
+          {/* Quote Results Page - Show below the form when quote is retrieved */}
+          {showQuoteResultsPage && response && (() => {
+            const quoteData = getQuoteResultsData();
+            if (!quoteData) return null;
+            
+            return (
+              <div className="mt-6" data-quote-results>
+                <QuoteResultsPage
+                  quoteNumber={quoteData.quoteNumber}
+                  pickupLocation={quoteData.pickupLocation}
+                  deliveryLocation={quoteData.deliveryLocation}
+                  commodities={quoteData.commodities}
+                  totalWeight={quoteData.totalWeight}
+                  paymentTerms={quoteData.paymentTerms}
+                  accountCode={quoteData.accountCode}
+                  accountNumber={quoteData.accountNumber}
+                  quotes={quoteData.quotes}
+                  onBack={() => setShowQuoteResultsPage(false)}
+                  onRequote={() => {
+                    setShowQuoteResultsPage(false);
+                    setResponse(null);
+                    setError(null);
+                  }}
+                  onClose={() => {
+                    setShowQuoteResultsPage(false);
+                    setResponse(null);
+                  }}
+                  onCreateBOLAndPickup={(quote) => {
+                    setSelectedQuote({
+                      quote,
+                      formData: {
+                        paymentTermCd,
+                        shipmentDate,
+                        accessorials,
+                        shipperPostalCd: pickupPostalCode || shipperPostalCd,
+                        consigneePostalCd: deliveryPostalCode || consigneePostalCd,
+                        commodities,
+                        palletCnt,
+                        linealFt,
+                      },
+                    });
+                    setShowQuoteResultsPage(false);
+                    handleStepComplete(1);
+                    setCurrentStep(2);
+                  }}
+                  onCreateBOL={(quote) => {
+                    setSelectedQuote({
+                      quote,
+                      formData: {
+                        paymentTermCd,
+                        shipmentDate,
+                        accessorials,
+                        shipperPostalCd: pickupPostalCode || shipperPostalCd,
+                        consigneePostalCd: deliveryPostalCode || consigneePostalCd,
+                        commodities,
+                        palletCnt,
+                        linealFt,
+                      },
+                    });
+                    setShowQuoteResultsPage(false);
+                    handleStepComplete(1);
+                    setCurrentStep(2);
+                  }}
+                  onSchedulePickup={(quote) => {
+                    setSelectedQuote({
+                      quote,
+                      formData: {
+                        paymentTermCd,
+                        shipmentDate,
+                        accessorials,
+                        shipperPostalCd: pickupPostalCode || shipperPostalCd,
+                        consigneePostalCd: deliveryPostalCode || consigneePostalCd,
+                        commodities,
+                        palletCnt,
+                        linealFt,
+                      },
+                    });
+                    setShowQuoteResultsPage(false);
+                    handleStepComplete(1);
+                    setCurrentStep(3);
+                  }}
+                />
+              </div>
+            );
+          })()}
+
+          {/* Legacy quote cards display - keeping for backward compatibility */}
+          {response && response.data?.data && Array.isArray(response.data.data) && response.data.data.length > 0 && !showQuoteResultsPage && (
             <div className="mt-6 space-y-6">
               <div className="bg-white rounded-lg border border-slate-200 p-6">
                 <div className="flex items-center justify-between mb-2">
@@ -2550,24 +3119,6 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
               </div>
             </div>
           )}
-          
-          {/* Handle case where response exists but data structure is different */}
-          {response && showQuoteResultsPage && (
-            <div className="mt-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="text-yellow-800 font-semibold">Processing quote response...</p>
-              <p className="text-yellow-700 text-sm mt-1">
-                {response.message || 'Checking response structure...'}
-              </p>
-              {process.env.NODE_ENV === 'development' && (
-                <details className="mt-2">
-                  <summary className="text-yellow-700 text-xs cursor-pointer">View Response Structure</summary>
-                  <pre className="mt-2 text-xs bg-yellow-100 p-2 rounded overflow-auto max-h-40">
-                    {JSON.stringify(response, null, 2)}
-                  </pre>
-                </details>
-              )}
-            </div>
-          )}
         </>
       )}
 
@@ -2583,6 +3134,21 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
           onFormDataChange={setBolFormData}
           onResponseDataChange={setBolResponseData}
           consigneeData={consigneeData}
+        />
+      )}
+
+      {/* Step 2.5: BOL Success Page */}
+      {currentStep === 2.5 && (
+        <BOLSuccessPage
+          bolResponseData={bolResponseData}
+          bolFormData={bolFormData}
+          onEditBOL={handleBOLSuccessEdit}
+          onSchedulePickup={handleBOLSuccessSchedulePickup}
+          onPrintDownloadBOL={handleBOLSuccessPrintDownload}
+          onPrintDownloadLabels={handleBOLSuccessPrintLabels}
+          onEmailBOL={handleBOLSuccessEmail}
+          onClose={handleBOLSuccessClose}
+          onManageBOL={handleBOLSuccessManageBOL}
         />
       )}
 

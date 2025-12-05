@@ -139,46 +139,212 @@ export const buildXPORateQuoteRequestBody = (params: BuildXPORateQuoteParams) =>
   };
 };
 
+// Helper function to normalize country code to 2-letter ISO format
+const normalizeCountryCode = (country: string): string => {
+  if (!country) return 'US';
+  
+  const normalized = country.trim().toUpperCase();
+  
+  // Handle common variations
+  if (normalized === 'UNITED STATES' || normalized === 'USA' || normalized === 'US') {
+    return 'US';
+  }
+  if (normalized === 'CANADA' || normalized === 'CA') {
+    return 'CA';
+  }
+  if (normalized === 'MEXICO' || normalized === 'MX') {
+    return 'MX';
+  }
+  
+  // If already a 2-letter code, return as-is
+  if (normalized.length === 2) {
+    return normalized;
+  }
+  
+  // Default to US if unknown
+  return 'US';
+};
+
+// Helper function to remove null and undefined values from object
+// XPO API rejects requests with null values for required fields
+// This matches the backend logic in BillOfLadingService.js
+const removeNullValues = (obj: any): any => {
+  if (obj === null || obj === undefined) {
+    return undefined;
+  }
+  
+  if (Array.isArray(obj)) {
+    const cleaned = obj.map(removeNullValues).filter(item => item !== undefined && item !== null);
+    return cleaned.length > 0 ? cleaned : undefined;
+  }
+  
+  if (typeof obj === 'object') {
+    const cleaned: any = {};
+    for (const key in obj) {
+      // Special handling for email objects - if emailAddr is null, remove the entire email object
+      // This matches backend logic in BillOfLadingService.js
+      if (key === 'email' && typeof obj[key] === 'object' && obj[key] !== null) {
+        if (obj[key].emailAddr === null || obj[key].emailAddr === undefined) {
+          // Skip this email object entirely if emailAddr is null/undefined
+          continue;
+        }
+      }
+      
+      const value = removeNullValues(obj[key]);
+      // Only include the key if the value is not undefined/null
+      if (value !== undefined && value !== null) {
+        // Special handling for objects that become empty after cleaning (but allow arrays)
+        if (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0) {
+          continue;
+        }
+        cleaned[key] = value;
+      }
+    }
+    return Object.keys(cleaned).length > 0 ? cleaned : undefined;
+  }
+  
+  return obj;
+};
+
+// Helper function to clean empty strings (convert to undefined for optional fields)
+const cleanEmptyStrings = (obj: any): any => {
+  if (obj === null || obj === undefined) return obj;
+  
+  if (typeof obj === 'string') {
+    return obj.trim() === '' ? undefined : obj.trim();
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(cleanEmptyStrings).filter(item => item !== undefined);
+  }
+  
+  if (typeof obj === 'object') {
+    const cleaned: any = {};
+    for (const key in obj) {
+      const value = cleanEmptyStrings(obj[key]);
+      if (value !== undefined) {
+        cleaned[key] = value;
+      }
+    }
+    return cleaned;
+  }
+  
+  return obj;
+};
+
+// Helper function to normalize address country codes and clean empty strings
+const normalizeAddress = (address: any) => {
+  if (!address) return address;
+  
+  const cleaned = cleanEmptyStrings(address);
+  
+  return {
+    ...cleaned,
+    countryCd: normalizeCountryCode(cleaned?.countryCd || 'US'),
+  };
+};
+
+// Helper function to normalize contact info and clean empty strings
+// Phone numbers preserve hyphens (e.g., "123-4567890") to match backend validation
+// Email objects are always included (emailAddr set to null if empty)
+const normalizeContactInfo = (contactInfo: any) => {
+  if (!contactInfo) return contactInfo;
+  
+  const cleaned = cleanEmptyStrings(contactInfo);
+  
+  // Always include email object - set emailAddr to null if empty
+  // Backend will remove the entire email object if emailAddr is null
+  if (!cleaned.email) {
+    cleaned.email = { emailAddr: null };
+  } else {
+    if (cleaned.email.emailAddr === '' || cleaned.email.emailAddr === null || cleaned.email.emailAddr === undefined) {
+      cleaned.email.emailAddr = null;
+    }
+  }
+  
+  // Phone numbers: preserve hyphens and format (backend normalizes by removing spaces/parentheses but keeps hyphens)
+  // If phoneNbr is empty, keep it as empty string (backend will handle it)
+  if (cleaned?.phone && cleaned.phone.phoneNbr) {
+    // Only trim, don't remove hyphens - backend will normalize by removing spaces/parentheses only
+    cleaned.phone.phoneNbr = cleaned.phone.phoneNbr.trim();
+  }
+  
+  return cleaned;
+};
+
 type BuildXPOBillOfLadingParams = XPOBillOfLadingFields;
 
 export const buildXPOBillOfLadingRequestBody = (params: BuildXPOBillOfLadingParams) => {
-  // Return the params as-is since they already match the XPO API structure
-  // Just ensure all required fields are present
-  return {
+  // Normalize country codes, clean empty strings, and ensure all required fields are present
+  const builtBody = {
     bol: {
       requester: {
         role: params.bol.requester.role || 'S',
       },
-      consignee: params.bol.consignee,
-      shipper: params.bol.shipper,
-      billToCust: params.bol.billToCust,
-      commodityLine: params.bol.commodityLine.map(item => ({
-        pieceCnt: item.pieceCnt || 0,
-        packaging: {
-          packageCd: item.packaging.packageCd || 'PLT',
-        },
-        grossWeight: {
-          weight: item.grossWeight.weight || 0,
-        },
-        desc: item.desc || '',
-        nmfcClass: item.nmfcClass || undefined,
-        nmfcItemCd: item.nmfcItemCd || undefined,
-        sub: item.sub || undefined,
-        hazmatInd: item.hazmatInd || false,
-      })),
+      consignee: {
+        ...params.bol.consignee,
+        address: normalizeAddress(params.bol.consignee.address),
+        contactInfo: normalizeContactInfo(params.bol.consignee.contactInfo),
+      },
+      shipper: {
+        ...params.bol.shipper,
+        address: normalizeAddress(params.bol.shipper.address),
+        contactInfo: normalizeContactInfo(params.bol.shipper.contactInfo),
+      },
+      billToCust: {
+        ...params.bol.billToCust,
+        address: normalizeAddress(params.bol.billToCust.address),
+        contactInfo: normalizeContactInfo(params.bol.billToCust.contactInfo),
+      },
+      commodityLine: params.bol.commodityLine.map((item: any) => {
+        // Match backend template order: pieceCnt, packaging, grossWeight, desc, hazmatInd, nmfcClass, nmfcItemCd, sub
+        return {
+          pieceCnt: item.pieceCnt || 0,
+          packaging: {
+            packageCd: item.packaging?.packageCd || 'PLT',
+          },
+          grossWeight: {
+            weight: item.grossWeight?.weight || 0,
+          },
+          desc: item.desc || '',
+          hazmatInd: item.hazmatInd || false,
+          ...(item.nmfcClass && item.nmfcClass.trim() !== '' && { nmfcClass: item.nmfcClass.trim() }),
+          ...(item.nmfcItemCd && item.nmfcItemCd.trim() !== '' && { nmfcItemCd: item.nmfcItemCd.trim() }),
+          ...(item.sub && item.sub.trim() !== '' && { sub: item.sub.trim() }),
+        };
+      }),
       chargeToCd: params.bol.chargeToCd || 'P',
-      ...(params.bol.remarks && { remarks: params.bol.remarks }),
-      ...(params.bol.emergencyContactName && { emergencyContactName: params.bol.emergencyContactName }),
-      ...(params.bol.emergencyContactPhone && { emergencyContactPhone: params.bol.emergencyContactPhone }),
-      ...(params.bol.additionalService && params.bol.additionalService.length > 0 && { additionalService: params.bol.additionalService }),
+      ...(params.bol.remarks && params.bol.remarks.trim() !== '' && { remarks: params.bol.remarks.trim() }),
+      // Always include emergencyContactName and emergencyContactPhone
+      // Can be empty string or have values (matches working payload)
+      emergencyContactName: params.bol.emergencyContactName !== undefined && params.bol.emergencyContactName !== null
+        ? params.bol.emergencyContactName
+        : '',
+      emergencyContactPhone: {
+        phoneNbr: params.bol.emergencyContactPhone?.phoneNbr !== undefined && params.bol.emergencyContactPhone?.phoneNbr !== null
+          ? (params.bol.emergencyContactPhone.phoneNbr.trim() || '')
+          : '',
+      },
+      // Always include additionalService as array (empty array if not provided)
+      additionalService: params.bol.additionalService && params.bol.additionalService.length > 0 
+        ? params.bol.additionalService 
+        : [],
+      // Include suppRef if provided
       ...(params.bol.suppRef && { suppRef: params.bol.suppRef }),
-      ...(params.bol.pickupInfo && { pickupInfo: params.bol.pickupInfo }),
-      ...(params.bol.declaredValueAmt && { declaredValueAmt: params.bol.declaredValueAmt }),
-      ...(params.bol.declaredValueAmtPerLb && { declaredValueAmtPerLb: params.bol.declaredValueAmtPerLb }),
-      ...(params.bol.excessLiabilityChargeInit && { excessLiabilityChargeInit: params.bol.excessLiabilityChargeInit }),
     },
     autoAssignPro: params.autoAssignPro !== undefined ? params.autoAssignPro : true,
   };
+
+  // Remove null and undefined values (matching backend logic)
+  // XPO API rejects requests with null values for required fields
+  const cleanedBody = removeNullValues(builtBody);
+
+  // Log the cleaned body for debugging (only in development)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Cleaned BOL Request Body:', JSON.stringify(cleanedBody, null, 2));
+  }
+
+  return cleanedBody;
 };
 
 type BuildXPOPickupRequestParams = XPOPickupRequestFields;

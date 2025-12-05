@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
+import Link from 'next/link';
 import { buildApiUrl } from '../../../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
 import { buildXPOBillOfLadingRequestBody } from '../../utils/requestBuilder';
@@ -89,6 +90,10 @@ export const BOLForm = ({
   const carrier = 'xpo';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [responseJson, setResponseJson] = useState<any>(null);
+  const [showPayloadPreview, setShowPayloadPreview] = useState(false);
+  const [showResponseJson, setShowResponseJson] = useState(false);
+  const [payloadPreview, setPayloadPreview] = useState<any>(null);
   // Basic Information
   const [requesterRole, setRequesterRole] = useState(XPO_BOL_DEFAULTS.requesterRole);
   const [paymentTerms, setPaymentTerms] = useState(XPO_BOL_DEFAULTS.paymentTerms);
@@ -191,12 +196,46 @@ export const BOLForm = ({
   const [signBOLWithRequester, setSignBOLWithRequester] = useState(XPO_BOL_DEFAULTS.signBOLWithRequester);
   const [agreeToTerms, setAgreeToTerms] = useState(XPO_BOL_DEFAULTS.agreeToTerms);
 
-  // ZIP Code Lookup
+  // ZIP/Postal Code Lookup - Auto-fills city, state, and country
   const lookupZipCode = async (zipCode: string, type: 'pickup' | 'delivery') => {
-    if (!zipCode || zipCode.length < 5) return;
+    if (!zipCode || zipCode.trim().length === 0) return;
 
-    const cleanedZip = zipCode.replace(/\D/g, '').substring(0, 5);
-    if (cleanedZip.length !== 5) return;
+    // Get current location data to determine country
+    const currentLocation = type === 'pickup' ? pickupLocation : deliveryLocation;
+    let currentCountry = currentLocation.country || 'US';
+    
+    // Normalize country code (handle both 'US' and 'United States')
+    if (currentCountry === 'United States' || currentCountry === 'USA') {
+      currentCountry = 'US';
+    } else if (currentCountry === 'Canada') {
+      currentCountry = 'CA';
+    } else if (currentCountry === 'Mexico') {
+      currentCountry = 'MX';
+    }
+
+    // Clean the postal code based on country
+    let cleanedPostalCode = zipCode.trim().toUpperCase();
+    
+    // For US: extract 5 digits
+    if (currentCountry === 'US') {
+      cleanedPostalCode = zipCode.replace(/\D/g, '').substring(0, 5);
+      if (cleanedPostalCode.length < 5) return;
+    }
+    // For Canada: format A1A 1A1 (alphanumeric, 6 chars)
+    else if (currentCountry === 'CA') {
+      cleanedPostalCode = zipCode.replace(/\s+/g, '').substring(0, 6).toUpperCase();
+      if (cleanedPostalCode.length < 6) return;
+    }
+    // For Mexico: extract 5 digits
+    else if (currentCountry === 'MX') {
+      cleanedPostalCode = zipCode.replace(/\D/g, '').substring(0, 5);
+      if (cleanedPostalCode.length < 5) return;
+    }
+    // Default: try to extract digits (minimum 3 for international)
+    else {
+      cleanedPostalCode = zipCode.replace(/\s+/g, '').substring(0, 10);
+      if (cleanedPostalCode.length < 3) return;
+    }
 
     if (type === 'pickup') {
       setPickupLoadingZip(true);
@@ -205,25 +244,59 @@ export const BOLForm = ({
     }
 
     try {
-      const response = await fetch(`https://api.zippopotam.us/us/${cleanedZip}`);
+      // Map country codes to API country codes
+      const countryCodeMap: Record<string, string> = {
+        'US': 'us',
+        'CA': 'ca',
+        'MX': 'mx',
+      };
+      
+      const apiCountryCode = countryCodeMap[currentCountry] || 'us';
+      const apiUrl = `https://api.zippopotam.us/${apiCountryCode}/${cleanedPostalCode}`;
+      
+      const response = await fetch(apiUrl);
       
       if (response.ok) {
         const data = await response.json();
         if (data.places && data.places.length > 0) {
           const place = data.places[0];
-          const city = place['place name'];
-          const state = place['state abbreviation'];
-          const country = data.country || 'US';
+          const city = place['place name'] || place['placeName'] || '';
+          const state = place['state abbreviation'] || place['stateAbbreviation'] || place['state'] || '';
+          
+          // Map API country code to form country code (ISO format)
+          const apiCountry = data.country || apiCountryCode.toUpperCase();
+          const formCountry = apiCountry.toUpperCase() === 'USA' ? 'US' : 
+                             apiCountry.toUpperCase() === 'CAN' ? 'CA' :
+                             apiCountry.toUpperCase() === 'MEX' ? 'MX' :
+                             apiCountry.toUpperCase();
 
           if (type === 'pickup') {
-            setPickupLocation(prev => ({ ...prev, city, state, country }));
+            setPickupLocation(prev => ({ 
+              ...prev, 
+              city: city || prev.city, 
+              state: state || prev.state, 
+              country: formCountry || prev.country 
+            }));
           } else {
-            setDeliveryLocation(prev => ({ ...prev, city, state, country }));
+            setDeliveryLocation(prev => ({ 
+              ...prev, 
+              city: city || prev.city, 
+              state: state || prev.state, 
+              country: formCountry || prev.country 
+            }));
           }
+        }
+      } else if (response.status === 404) {
+        // Postal code not found - silently fail, user can enter manually
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`Postal code ${cleanedPostalCode} not found for country ${currentCountry}`);
         }
       }
     } catch (error) {
-      console.error('ZIP code lookup failed:', error);
+      // Silently fail - user can still enter manually
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Postal code lookup failed:', error);
+      }
     } finally {
       if (type === 'pickup') {
         setPickupLoadingZip(false);
@@ -386,10 +459,59 @@ export const BOLForm = ({
   useEffect(() => {
     if (initialResponseData && onResponseDataChange) {
       onResponseDataChange(initialResponseData);
+      setResponseJson(initialResponseData);
+      setShowResponseJson(true);
     }
   }, [initialResponseData, onResponseDataChange]);
 
-  const buildRequestBody = (): XPOBillOfLadingFields => {
+  // Helper function to format date and time to ISO 8601 with timezone
+  const formatDateTimeWithTimezone = (dateStr: string, timeStr: string): string => {
+    if (!dateStr || !timeStr) return '';
+    
+    // Parse date (YYYY-MM-DD) and time (HH:MM)
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    
+    // Create date in local timezone
+    const date = new Date(dateStr + 'T' + timeStr + ':00');
+    
+    // Get timezone offset in minutes (negative for timezones ahead of UTC)
+    const offsetMinutes = date.getTimezoneOffset();
+    const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
+    const offsetMins = Math.abs(offsetMinutes) % 60;
+    // Note: getTimezoneOffset() returns positive for timezones behind UTC (like PST -08:00)
+    // So we need to negate it to get the correct sign
+    const offsetSign = offsetMinutes > 0 ? '-' : '+';
+    const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
+    
+    // Format as ISO 8601 with timezone
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hour = String(date.getHours()).padStart(2, '0');
+    const minute = String(date.getMinutes()).padStart(2, '0');
+    const second = String(date.getSeconds()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}T${hour}:${minute}:${second}${offsetStr}`;
+  };
+
+  const buildRequestBody = useCallback((): XPOBillOfLadingFields => {
+    // Build pickupInfo if schedulePickup is enabled
+    let pickupInfo: any = undefined;
+    if (schedulePickup && pickupDate && pickupReadyTime && dockCloseTime && contactCompanyName && contactName && contactPhone) {
+      pickupInfo = {
+        pkupDate: formatDateTimeWithTimezone(pickupDate, pickupReadyTime),
+        pkupTime: formatDateTimeWithTimezone(pickupDate, pickupReadyTime),
+        dockCloseTime: formatDateTimeWithTimezone(pickupDate, dockCloseTime),
+        contact: {
+          companyName: contactCompanyName,
+          fullName: contactName,
+          phone: {
+            phoneNbr: contactPhone,
+          },
+        },
+      };
+    }
+
     return {
       bol: {
         requester: {
@@ -406,7 +528,7 @@ export const BOLForm = ({
           contactInfo: {
             companyName: deliveryLocation.company,
             email: {
-              emailAddr: deliveryLocation.email || '',
+              emailAddr: deliveryLocation.email || null,
             },
             phone: {
               phoneNbr: deliveryLocation.phone || '',
@@ -424,7 +546,7 @@ export const BOLForm = ({
           contactInfo: {
             companyName: pickupLocation.company,
             email: {
-              emailAddr: pickupLocation.email || '',
+              emailAddr: pickupLocation.email || null,
             },
             phone: {
               phoneNbr: pickupLocation.phone || '',
@@ -442,7 +564,7 @@ export const BOLForm = ({
           contactInfo: {
             companyName: pickupLocation.company,
             email: {
-              emailAddr: pickupLocation.email || '',
+              emailAddr: pickupLocation.email || null,
             },
             phone: {
               phoneNbr: pickupLocation.phone || '',
@@ -452,11 +574,20 @@ export const BOLForm = ({
         commodityLine: commodities,
         chargeToCd: paymentTerms,
         ...(comments && { remarks: comments }),
-        ...(emergencyContactName && { emergencyContactName }),
-        ...(emergencyContactPhone && { emergencyContactPhone: { phoneNbr: emergencyContactPhone } }),
-        ...(selectedPickupServices.length > 0 || selectedDeliveryServices.length > 0 ? {
-          additionalService: [...selectedPickupServices, ...selectedDeliveryServices, ...selectedPremiumServices]
-        } : {}),
+        // Always include emergencyContactName and emergencyContactPhone
+        // Can be empty string or have values (matches working payload)
+        emergencyContactName: emergencyContactName !== undefined && emergencyContactName !== null 
+          ? emergencyContactName 
+          : '',
+        emergencyContactPhone: {
+          phoneNbr: emergencyContactPhone !== undefined && emergencyContactPhone !== null 
+            ? emergencyContactPhone 
+            : '',
+        },
+        // Always include additionalService as array
+        // XPO API expects array of objects, not strings - send empty array for now
+        // TODO: Convert service strings to proper object format when XPO object structure is known
+        additionalService: [],
         ...(references.length > 0 && references.some(r => r.reference) ? {
           suppRef: {
             otherRefs: references.filter(r => r.reference)
@@ -464,10 +595,56 @@ export const BOLForm = ({
         } : {}),
         ...(totalDeclaredValue && { declaredValueAmt: { amt: parseFloat(totalDeclaredValue) || 0 } }),
         ...(excessiveLiabilityAuth && { excessLiabilityChargeInit: excessiveLiabilityAuth }),
+        ...(pickupInfo && { pickupInfo }),
       },
       autoAssignPro: proNumberOption === 'auto',
     };
-  };
+  }, [
+    requesterRole,
+    paymentTerms,
+    pickupLocation,
+    deliveryLocation,
+    billTo,
+    commodities,
+    emergencyContactName,
+    emergencyContactPhone,
+    totalDeclaredValue,
+    excessiveLiabilityAuth,
+    selectedPickupServices,
+    selectedDeliveryServices,
+    selectedPremiumServices,
+    references,
+    comments,
+    proNumberOption,
+    schedulePickup,
+    pickupDate,
+    pickupReadyTime,
+    dockCloseTime,
+    contactCompanyName,
+    contactName,
+    contactPhone,
+  ]);
+
+  // Build live payload preview
+  useEffect(() => {
+    try {
+      const requestBody = buildRequestBody();
+      const normalizedCarrier = carrier.toLowerCase();
+      const token = getToken(normalizedCarrier);
+      
+      if (token) {
+        const payload = buildXPOBillOfLadingRequestBody(requestBody);
+        const finalPayload = {
+          shippingCompany: normalizedCarrier,
+          ...payload,
+        };
+        setPayloadPreview(finalPayload);
+      }
+    } catch (err) {
+      // Silently fail - preview will update when form is valid
+      setPayloadPreview(null);
+    }
+  }, [buildRequestBody, carrier, getToken]);
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) {
@@ -531,11 +708,79 @@ export const BOLForm = ({
       });
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ message: res.statusText }));
-        throw new Error(errorData.message || `BOL creation failed: ${res.statusText}`);
+        let errorMessage = `BOL creation failed: ${res.status} ${res.statusText}`;
+        let errorDetails: any = null;
+        
+        try {
+          // Read response as text first (can only read once)
+          const errorText = await res.text();
+          
+          if (errorText && errorText.trim()) {
+            // Try to parse as JSON if it looks like JSON
+            if (errorText.trim().startsWith('{') || errorText.trim().startsWith('[')) {
+              try {
+                const errorData = JSON.parse(errorText);
+                errorDetails = errorData;
+                
+                // Extract error message from various possible formats
+                const extractedMessage = 
+                  errorData.message || 
+                  errorData.error?.message || 
+                  errorData.errorMessage ||
+                  errorData.error?.errorMessage ||
+                  errorData.detail ||
+                  errorData.error?.detail ||
+                  errorData.title ||
+                  errorData.type ||
+                  (typeof errorData.error === 'string' ? errorData.error : null) ||
+                  (errorData.errors && Array.isArray(errorData.errors) 
+                    ? errorData.errors.map((e: any) => e.message || e.msg || e.field || e).join(', ')
+                    : null) ||
+                  errorData.originalError ||
+                  null;
+                
+                // Ensure we have a valid string message
+                if (extractedMessage && typeof extractedMessage === 'string' && extractedMessage.trim()) {
+                  errorMessage = extractedMessage;
+                } else if (errorText && errorText.trim()) {
+                  errorMessage = errorText.substring(0, 200);
+                } else {
+                  errorMessage = `BOL creation failed: ${res.status} ${res.statusText}`;
+                }
+              } catch (parseError) {
+                // If JSON parsing fails, use the text as error message
+                errorMessage = errorText.substring(0, 500) || `BOL creation failed: ${res.status} ${res.statusText}`;
+              }
+            } else {
+              // Not JSON, use text as error message
+              errorMessage = errorText.substring(0, 500) || `BOL creation failed: ${res.status} ${res.statusText}`;
+            }
+          }
+        } catch (textError) {
+          // If we can't read the response, use default error message
+          console.error('Failed to extract error message:', textError);
+          errorMessage = `BOL creation failed: ${res.status} ${res.statusText}`;
+        }
+        
+        // Ensure errorMessage is always a valid non-empty string
+        if (!errorMessage || typeof errorMessage !== 'string' || errorMessage.trim() === '') {
+          errorMessage = `BOL creation failed: ${res.status} ${res.statusText}`;
+        }
+        
+        // Sanitize errorMessage to ensure it's safe to use
+        const safeErrorMessage = String(errorMessage).trim() || `BOL creation failed: ${res.status} ${res.statusText}`;
+        
+        // Create a more informative error
+        const apiError = new Error(safeErrorMessage);
+        (apiError as any).status = res.status;
+        (apiError as any).details = errorDetails;
+        throw apiError;
       }
 
       const data = await res.json();
+      setResponseJson(data);
+      setShowResponseJson(true);
+      
       if (onResponseDataChange) {
         onResponseDataChange(data);
       }
@@ -580,7 +825,47 @@ export const BOLForm = ({
         onNext();
       }
     } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
+      console.error('BOL Creation Error:', err);
+      
+      // Extract error message from various error types
+      let errorMessage = 'An unexpected error occurred while creating the Bill of Lading.';
+      
+      try {
+        if (err instanceof Error) {
+          errorMessage = err.message || errorMessage;
+        } else if (typeof err === 'string') {
+          errorMessage = err;
+        } else if (err && typeof err === 'object') {
+          errorMessage = (err as any).message || (err as any).error || String(err);
+        } else if (err !== null && err !== undefined) {
+          errorMessage = String(err);
+        }
+      } catch (extractError) {
+        // If we can't extract the error message, use default
+        console.error('Failed to extract error message:', extractError);
+        errorMessage = 'An unexpected error occurred while creating the Bill of Lading.';
+      }
+      
+      // Ensure errorMessage is always a valid string
+      if (!errorMessage || typeof errorMessage !== 'string' || errorMessage.trim() === '') {
+        errorMessage = 'An unexpected error occurred while creating the Bill of Lading.';
+      }
+      
+      // Create a user-friendly error with guaranteed valid message
+      const safeErrorMessage = String(errorMessage).trim() || 'An unexpected error occurred while creating the Bill of Lading.';
+      const userError = new Error(safeErrorMessage);
+      
+      // Preserve error metadata if available
+      if (err && typeof err === 'object') {
+        if ('status' in err) {
+          (userError as any).status = (err as any).status;
+        }
+        if ('details' in err) {
+          (userError as any).details = (err as any).details;
+        }
+      }
+      
+      setError(userError);
     } finally {
       setLoading(false);
     }
@@ -603,12 +888,6 @@ export const BOLForm = ({
           <h1 className="text-2xl font-bold text-slate-900">Create Bill Of Lading</h1>
         </div>
 
-        {error ? (
-          <div className="mb-4">
-            <ErrorDisplay error={error} />
-          </div>
-        ) : null}
-
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Information */}
           <div className="bg-white rounded-lg border border-slate-200 p-6">
@@ -629,7 +908,7 @@ export const BOLForm = ({
               onDataChange={setPickupLocation}
               onZipLookup={(zip) => lookupZipCode(zip, 'pickup')}
               loadingZip={pickupLoadingZip}
-              showEmail={false}
+              showEmail={true}
               required={true}
               addressBookOptions={XPO_SHIPPER_ADDRESS_BOOK.map(addr => ({
                 value: addr.value,
@@ -804,21 +1083,151 @@ export const BOLForm = ({
 
           {/* Footer Actions */}
           <div className="bg-white rounded-lg border border-slate-200 p-6">
-            <BOLFooterActions
-              loading={loading}
-              onCreateBOL={() => handleSubmit()}
-              onCreateBOLTemplate={() => {
-                setSaveAsTemplate(true);
-                handleSubmit();
-              }}
-              saveAsTemplate={saveAsTemplate}
-              onSaveAsTemplateChange={setSaveAsTemplate}
-              signBOLWithRequester={signBOLWithRequester}
-              onSignBOLWithRequesterChange={setSignBOLWithRequester}
-              agreeToTerms={agreeToTerms}
-              onAgreeToTermsChange={setAgreeToTerms}
-            />
+            <div className="space-y-6 pt-6 border-t border-slate-200">
+              {/* Checkboxes */}
+              <div className="space-y-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={saveAsTemplate}
+                    onChange={(e) => setSaveAsTemplate(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-slate-700">Save as a new BOL Template</span>
+                </label>
+
+                <div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={signBOLWithRequester}
+                      onChange={(e) => setSignBOLWithRequester(e.target.checked)}
+                      className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-slate-700">Sign BOL with Requester Name</span>
+                  </label>
+                  <p className="text-xs text-slate-500 mt-1 ml-6">
+                    If you check this box, we will automatically pre-print the name of the requester in the &quot;Authorized Signature&quot; field of the BOL
+                  </p>
+                </div>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={agreeToTerms}
+                    onChange={(e) => setAgreeToTerms(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+                    required
+                  />
+                  <span className="text-sm text-slate-700">
+                    I agree to{' '}
+                    <Link href="#" className="text-blue-600 underline">
+                      Terms of Service
+                    </Link>
+                    {' '}({' '}
+                    <Link href="#" className="text-blue-600 underline">
+                      View tariff rules and regulations
+                    </Link>
+                    {' '})
+                  </span>
+                </label>
+              </div>
+
+              {/* Payload Preview - Below checkboxes */}
+              <div className="pt-6 border-t border-slate-200">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-semibold text-slate-900">Request Payload Preview</h2>
+                  <button
+                    type="button"
+                    onClick={() => setShowPayloadPreview(!showPayloadPreview)}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    {showPayloadPreview ? 'Hide' : 'Show'} Preview
+                  </button>
+                </div>
+                {showPayloadPreview && (
+                  <div className="mt-4">
+                    {payloadPreview ? (
+                      <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                        <pre className="text-xs text-slate-700 overflow-auto max-h-96 whitespace-pre-wrap break-words">
+                          {JSON.stringify(payloadPreview, null, 2)}
+                        </pre>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-500 italic">Fill in the form to see the payload preview</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Error Display - At bottom before action buttons */}
+              {error && (
+                <div className="pt-6 border-t border-slate-200">
+                  <ErrorDisplay error={error} />
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-between gap-4 pt-6 border-t border-slate-200">
+                <div className="flex items-center gap-4 ml-auto">
+                  <button
+                    type="submit"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleSubmit();
+                    }}
+                    disabled={loading || !agreeToTerms}
+                    className="px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-semibold disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                        Creating BOL...
+                      </>
+                    ) : (
+                      'Create BOL'
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setSaveAsTemplate(true);
+                      handleSubmit();
+                    }}
+                    className="px-6 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg hover:bg-slate-50 transition-colors font-semibold"
+                  >
+                    Create BOL Template
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* Response JSON */}
+          {responseJson && (
+            <div className="bg-white rounded-lg border border-slate-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-slate-900">Response JSON</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowResponseJson(!showResponseJson)}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  {showResponseJson ? 'Hide' : 'Show'} Response
+                </button>
+              </div>
+              {showResponseJson && (
+                <div className="mt-4">
+                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                    <pre className="text-xs text-slate-700 overflow-auto max-h-96 whitespace-pre-wrap break-words">
+                      {JSON.stringify(responseJson, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </form>
       </div>
     </div>

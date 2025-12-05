@@ -326,13 +326,13 @@ export const QuoteResultsPage = ({
                       Create BOL + Pickup
                     </button>
                     <button
-                      onClick={() => onCreateBOL(quote)}
+                      // onClick={() => onCreateBOL(quote)}
                       className="px-4 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg hover:bg-slate-50 transition-colors font-semibold text-sm whitespace-nowrap"
                     >
                       Create BOL
                     </button>
                     <button
-                      onClick={() => onSchedulePickup(quote)}
+                      // onClick={() => onSchedulePickup(quote)}
                       className="px-4 py-2 bg-white border border-slate-300 text-slate-900 rounded-lg hover:bg-slate-50 transition-colors font-semibold text-sm whitespace-nowrap"
                     >
                       Schedule Pickup

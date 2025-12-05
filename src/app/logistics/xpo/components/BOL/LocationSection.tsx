@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Search, X, ChevronDown } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { XPO_BOL_COUNTRY_OPTIONS } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
 import { US_STATES } from './constants';
+import { formatPhoneInput, handlePhoneInputChange, handlePhoneInputFocus, handlePhoneInputBlur } from '../../utils/phoneFormatter';
 
 type LocationData = {
   searchValue: string;
@@ -56,17 +57,104 @@ export const LocationSection = ({
   addressBookOptions,
 }: LocationSectionProps) => {
   const [showDetails, setShowDetails] = useState(true);
+  // Use refs to store the latest callbacks/props to avoid dependency array issues
+  const onZipLookupRef = useRef(onZipLookup);
+  const loadingZipRef = useRef(loadingZip);
+  
+  // Update refs whenever props change
+  useEffect(() => {
+    onZipLookupRef.current = onZipLookup;
+  }, [onZipLookup]);
+  
+  useEffect(() => {
+    loadingZipRef.current = loadingZip;
+  }, [loadingZip]);
 
   const handleFieldChange = (field: keyof LocationData, value: string) => {
     onDataChange({ ...data, [field]: value });
   };
 
-  const handleZipChange = async (value: string) => {
+  const handleZipChange = (value: string) => {
     handleFieldChange('postalCode', value);
-    if (onZipLookup && value.length >= 5) {
-      await onZipLookup(value);
+    // The useEffect will handle the lookup automatically when postal code changes
+  };
+
+  // Trigger lookup when country changes if postal code already exists
+  const handleCountryChange = async (value: string) => {
+    const previousCountry = data.country;
+    handleFieldChange('country', value);
+    
+    // If postal code exists and country actually changed, trigger lookup with new country
+    // The lookup function will use the updated country from the location state
+    const currentLookup = onZipLookupRef.current;
+    if (currentLookup && data.postalCode && data.postalCode.trim().length > 0 && previousCountry !== value) {
+      // Small delay to ensure React state is updated before lookup
+      setTimeout(() => {
+        const latestLookup = onZipLookupRef.current;
+        if (latestLookup) {
+          latestLookup(data.postalCode);
+        }
+      }, 150);
     }
   };
+
+  // Auto-trigger lookup when postal code changes (with debounce)
+  useEffect(() => {
+    const currentLookup = onZipLookupRef.current;
+    if (!currentLookup || loadingZipRef.current) return;
+    
+    const trimmedValue = (data.postalCode || '').trim();
+    if (!trimmedValue) return;
+    
+    const country = data.country || 'US';
+    
+    // Check if postal code meets minimum length requirements
+    let shouldLookup = false;
+    
+    // US: 5 digits
+    if (country === 'US' || country === 'United States' || country === 'USA') {
+      const digits = trimmedValue.replace(/\D/g, '');
+      if (digits.length >= 5) {
+        shouldLookup = true;
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Triggering ZIP lookup for US:', digits);
+        }
+      }
+    }
+    // Canada: 6 alphanumeric characters (A1A1A1 format)
+    else if (country === 'CA' || country === 'Canada') {
+      const cleaned = trimmedValue.replace(/\s+/g, '');
+      if (cleaned.length >= 6) {
+        shouldLookup = true;
+      }
+    }
+    // Mexico: 5 digits
+    else if (country === 'MX' || country === 'Mexico') {
+      const digits = trimmedValue.replace(/\D/g, '');
+      if (digits.length >= 5) {
+        shouldLookup = true;
+      }
+    }
+    // Other countries: minimum 3 characters
+    else if (trimmedValue.length >= 3) {
+      shouldLookup = true;
+    }
+    
+    if (shouldLookup) {
+      const timeoutId = setTimeout(() => {
+        const latestLookup = onZipLookupRef.current;
+        const isLoading = loadingZipRef.current;
+        if (latestLookup && data.postalCode && !isLoading) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Calling ZIP lookup with:', data.postalCode, 'for country:', country);
+          }
+          latestLookup(data.postalCode);
+        }
+      }, 800); // Debounce delay
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [data.postalCode, data.country]);
 
   const clearSearch = () => {
     handleFieldChange('searchValue', '');
@@ -296,6 +384,11 @@ export const LocationSection = ({
                   </div>
                 )}
               </div>
+              {(data.city || data.state) && !loadingZip && (
+                <p className="text-sm text-slate-600 mt-1">
+                  {[data.city, data.state].filter(Boolean).join(', ')}
+                </p>
+              )}
             </div>
 
             {/* Country */}
@@ -305,7 +398,7 @@ export const LocationSection = ({
               </label>
               <select
                 value={data.country}
-                onChange={(e) => handleFieldChange('country', e.target.value)}
+                onChange={(e) => handleCountryChange(e.target.value)}
                 className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-10"
                 required={required}
               >
@@ -324,8 +417,10 @@ export const LocationSection = ({
               </label>
               <input
                 type="tel"
-                value={data.phone || ''}
-                onChange={(e) => handleFieldChange('phone', e.target.value)}
+                value={data.phone || '+1'}
+                onChange={(e) => handlePhoneInputChange(e, data.phone || '+1', (value) => handleFieldChange('phone', value))}
+                onFocus={(e) => handlePhoneInputFocus(e, data.phone || '', (value) => handleFieldChange('phone', value))}
+                onBlur={() => handlePhoneInputBlur(data.phone || '', (value) => handleFieldChange('phone', value))}
                 placeholder="+1 (123) 456-7890"
                 className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required={required}
