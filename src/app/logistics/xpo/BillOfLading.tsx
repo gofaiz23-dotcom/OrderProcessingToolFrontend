@@ -706,11 +706,11 @@ export const XPOBillOfLading = ({
         <p className="text-slate-600 mt-1">Create a bill of lading for XPO shipping</p>
       </div>
 
-      {error && (
+      {error ? (
         <div className="mb-4">
           <ErrorDisplay error={error} />
         </div>
-      )}
+      ) : null}
 
       <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
         {/* Requester Role */}

@@ -603,11 +603,11 @@ export const BOLForm = ({
           <h1 className="text-2xl font-bold text-slate-900">Create Bill Of Lading</h1>
         </div>
 
-        {error && (
+        {error ? (
           <div className="mb-4">
             <ErrorDisplay error={error} />
           </div>
-        )}
+        ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic Information */}

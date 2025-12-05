@@ -2080,11 +2080,11 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         </div>
       )}
 
-      {error && (
+      {error ? (
         <div className="mt-6">
           <ErrorDisplay error={error} />
         </div>
-      )}
+      ) : null}
 
       {/* Logistics Authentication Modal */}
       <LogisticsAuthModal

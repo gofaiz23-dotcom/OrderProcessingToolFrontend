@@ -2503,11 +2503,11 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
           </form>
 
 
-          {error && (
+          {error ? (
             <div className="mt-6">
               <ErrorDisplay error={error} />
             </div>
-          )}
+          ) : null}
 
           {/* Logistics Authentication Modal */}
           <LogisticsAuthModal
