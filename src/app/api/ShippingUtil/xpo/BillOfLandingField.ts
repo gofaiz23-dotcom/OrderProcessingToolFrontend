@@ -66,6 +66,10 @@ export interface XPOBillOfLadingCommodity {
   nmfcItemCd: string; // e.g., "079300"
   sub: string; // e.g., "03"
   hazmatInd: boolean;
+  length?: number;
+  width?: number;
+  height?: number;
+  freezableProtection?: boolean;
 }
 
 export interface XPOBillOfLadingReference {

@@ -104,7 +104,7 @@ export const CommodityDetailsSection = ({
           <input
             type="number"
             value={commodity.length || ''}
-            onChange={(e) => onUpdate(index, 'length' as any, e.target.value ? parseFloat(e.target.value) : '')}
+            onChange={(e) => onUpdate(index, 'length', e.target.value ? parseFloat(e.target.value) : undefined)}
             className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             min="0"
             step="0.01"
@@ -119,7 +119,7 @@ export const CommodityDetailsSection = ({
           <input
             type="number"
             value={commodity.width || ''}
-            onChange={(e) => onUpdate(index, 'width' as any, e.target.value ? parseFloat(e.target.value) : '')}
+            onChange={(e) => onUpdate(index, 'width', e.target.value ? parseFloat(e.target.value) : undefined)}
             className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             min="0"
             step="0.01"
@@ -134,7 +134,7 @@ export const CommodityDetailsSection = ({
           <input
             type="number"
             value={commodity.height || ''}
-            onChange={(e) => onUpdate(index, 'height' as any, e.target.value ? parseFloat(e.target.value) : '')}
+            onChange={(e) => onUpdate(index, 'height', e.target.value ? parseFloat(e.target.value) : undefined)}
             className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             min="0"
             step="0.01"
@@ -207,7 +207,7 @@ export const CommodityDetailsSection = ({
           <input
             type="checkbox"
             checked={commodity.freezableProtection || false}
-            onChange={(e) => onUpdate(index, 'freezableProtection' as any, e.target.checked)}
+            onChange={(e) => onUpdate(index, 'freezableProtection', e.target.checked)}
             className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
           />
           <span className="text-sm text-slate-700">Freezable Protection</span>
