@@ -12,4 +12,5 @@ export { ReferenceNumbersSection } from './ReferenceNumbersSection';
 export { AdditionalCommentsSection } from './AdditionalCommentsSection';
 export { BOLFooterActions } from './BOLFooterActions';
 export { BOLForm } from './BOLForm';
+export { BOLSuccessPage } from './BOLSuccessPage';
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { formatPhoneInput, handlePhoneInputChange, handlePhoneInputFocus, handlePhoneInputBlur } from '../../utils/phoneFormatter';
+
 type EmergencyContactSectionProps = {
   name: string;
   onNameChange: (value: string) => void;
@@ -36,8 +38,10 @@ export const EmergencyContactSection = ({
           </label>
           <input
             type="tel"
-            value={phone}
-            onChange={(e) => onPhoneChange(e.target.value)}
+            value={phone || '+1'}
+            onChange={(e) => handlePhoneInputChange(e, phone || '+1', onPhoneChange)}
+            onFocus={(e) => handlePhoneInputFocus(e, phone || '', onPhoneChange)}
+            onBlur={() => handlePhoneInputBlur(phone || '', onPhoneChange)}
             placeholder="+1 (123) 456-7890"
             className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />

@@ -15,7 +15,7 @@ export const AdditionalCommentsSection = ({
       
       <div className="space-y-2">
         <label className="block text-sm font-semibold text-slate-900">
-          Comments (Optional)
+          Remark
         </label>
         <textarea
           value={comments}

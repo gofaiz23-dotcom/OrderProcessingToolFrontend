@@ -75,8 +75,9 @@ export const ReferenceNumbersSection = ({
                   <input
                     type="text"
                     value={ref.reference || ''}
-                    onChange={(e) => updateReference(index, 'reference', e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    readOnly
+                    className="w-full px-4 py-2 border border-slate-300 bg-slate-50 text-slate-700 rounded-lg focus:outline-none cursor-not-allowed"
+                    title="This field cannot be changed"
                   />
                 </div>
 

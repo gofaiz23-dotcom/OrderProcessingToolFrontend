@@ -596,6 +596,93 @@ export const ADDITIONAL_COMMODITY_OPTIONS = [
   { value: 'other', label: 'Other' },
 ] as const;
 
+// Custom Commodity Type with full details
+export type CustomCommodity = {
+  id: string;
+  value: string;
+  label: string;
+  createdAt: string;
+  // Commodity details
+  description?: string;
+  weight?: number;
+  freightClass?: string;
+  length?: number;
+  width?: number;
+  height?: number;
+  pieces?: number;
+  packageCode?: string;
+  freezableProtection?: boolean;
+  hazmatItem?: boolean;
+};
+
+// Storage key for custom commodities
+export const CUSTOM_COMMODITIES_STORAGE_KEY = 'xpo_custom_commodities';
+
+// Helper functions to manage custom commodities in localStorage
+export const getCustomCommodities = (): CustomCommodity[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(CUSTOM_COMMODITIES_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const addCustomCommodity = (commodityData: Omit<CustomCommodity, 'id' | 'createdAt' | 'value'>): CustomCommodity => {
+  const newCommodity: CustomCommodity = {
+    id: `custom_${Date.now()}`,
+    value: commodityData.label.toLowerCase().replace(/\s+/g, '_'),
+    label: commodityData.label,
+    createdAt: new Date().toISOString(),
+    description: commodityData.description,
+    weight: commodityData.weight,
+    freightClass: commodityData.freightClass,
+    length: commodityData.length,
+    width: commodityData.width,
+    height: commodityData.height,
+    pieces: commodityData.pieces,
+    packageCode: commodityData.packageCode,
+    freezableProtection: commodityData.freezableProtection,
+    hazmatItem: commodityData.hazmatItem,
+  };
+  
+  const existing = getCustomCommodities();
+  const updated = [...existing, newCommodity];
+  
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(CUSTOM_COMMODITIES_STORAGE_KEY, JSON.stringify(updated));
+  }
+  
+  return newCommodity;
+};
+
+export const updateCustomCommodity = (id: string, commodityData: Partial<CustomCommodity>): void => {
+  const existing = getCustomCommodities();
+  const updated = existing.map(cc => 
+    cc.id === id ? { ...cc, ...commodityData } : cc
+  );
+  
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(CUSTOM_COMMODITIES_STORAGE_KEY, JSON.stringify(updated));
+  }
+};
+
+export const getCustomCommodityById = (id: string): CustomCommodity | undefined => {
+  const commodities = getCustomCommodities();
+  return commodities.find(cc => cc.id === id);
+};
+
+export const getCustomCommodityByValue = (value: string): CustomCommodity | undefined => {
+  const commodities = getCustomCommodities();
+  return commodities.find(cc => cc.value === value);
+};
+
+export const getAllCommodityOptions = () => {
+  const customCommodities = getCustomCommodities();
+  return customCommodities.map(cc => ({ value: cc.value, label: cc.label, id: cc.id }));
+};
+
 // Excessive Length Options
 export const EXCESSIVE_LENGTH_OPTIONS = [
   { value: '', label: 'Select Excessive Length' },
@@ -615,6 +702,13 @@ export const EXCESSIVE_LENGTH_OPTIONS = [
 // XPO Default Delivery Services
 // These services are selected by default: Lift Gate, Notification Prior to Delivery, Residential
 export const XPO_DEFAULT_DELIVERY_SERVICES: string[] = ['LIFT', 'NOTIFY', 'RESI'] as const;
+
+// XPO Rate Quote Form Defaults
+export const XPO_RATE_QUOTE_DEFAULTS = {
+  freightClass: '250', // Default Freight Class
+  packaging: 'PLT', // Default Packaging (Pallet)
+  excessiveLength: 'none', // Default Excessive Length (None)
+} as const;
 
 // XPO BOL Form Default Values
 export const XPO_BOL_DEFAULTS = {
@@ -710,13 +804,13 @@ export const XPO_BOL_DEFAULTS = {
     referenceDescr: string;
   }>,
   
-  // Additional Comments
-  comments: '',
+  // Additional Comments / Remarks
+  comments: 'Added Accessorials Require Pre Approval. Do Not Break Down the Pallet. Do Not Remove Shrink Wrap from Skid. Fragile-Handle with Care.',
   
   // Footer Options
   saveAsTemplate: false,
   signBOLWithRequester: false,
-  agreeToTerms: false,
+  agreeToTerms: true, // Default to checked
   
   // Bill To
   billTo: '',

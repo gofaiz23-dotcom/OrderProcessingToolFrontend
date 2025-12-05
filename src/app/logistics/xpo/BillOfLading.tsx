@@ -536,8 +536,73 @@ export const XPOBillOfLading = ({
       });
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({ message: res.statusText }));
-        throw new Error(errorData.message || `BOL creation failed: ${res.statusText}`);
+        let errorMessage = `BOL creation failed: ${res.status} ${res.statusText}`;
+        let errorDetails: any = null;
+        
+        try {
+          // Read response as text first (can only read once)
+          const errorText = await res.text();
+          
+          if (errorText && errorText.trim()) {
+            // Try to parse as JSON if it looks like JSON
+            if (errorText.trim().startsWith('{') || errorText.trim().startsWith('[')) {
+              try {
+                const errorData = JSON.parse(errorText);
+                errorDetails = errorData;
+                
+                // Extract error message from various possible formats
+                const extractedMessage = 
+                  errorData.message || 
+                  errorData.error?.message || 
+                  errorData.errorMessage ||
+                  errorData.error?.errorMessage ||
+                  errorData.detail ||
+                  errorData.error?.detail ||
+                  errorData.title ||
+                  errorData.type ||
+                  (typeof errorData.error === 'string' ? errorData.error : null) ||
+                  (errorData.errors && Array.isArray(errorData.errors) 
+                    ? errorData.errors.map((e: any) => e.message || e.msg || e.field || e).join(', ')
+                    : null) ||
+                  errorData.originalError ||
+                  null;
+                
+                // Ensure we have a valid string message
+                if (extractedMessage && typeof extractedMessage === 'string' && extractedMessage.trim()) {
+                  errorMessage = extractedMessage;
+                } else if (errorText && errorText.trim()) {
+                  errorMessage = errorText.substring(0, 200);
+                } else {
+                  errorMessage = `BOL creation failed: ${res.status} ${res.statusText}`;
+                }
+              } catch (parseError) {
+                // If JSON parsing fails, use the text as error message
+                errorMessage = errorText.substring(0, 500) || `BOL creation failed: ${res.status} ${res.statusText}`;
+              }
+            } else {
+              // Not JSON, use text as error message
+              errorMessage = errorText.substring(0, 500) || `BOL creation failed: ${res.status} ${res.statusText}`;
+            }
+          }
+        } catch (textError) {
+          // If we can't read the response, use default error message
+          console.error('Failed to extract error message:', textError);
+          errorMessage = `BOL creation failed: ${res.status} ${res.statusText}`;
+        }
+        
+        // Ensure errorMessage is always a valid non-empty string
+        if (!errorMessage || typeof errorMessage !== 'string' || errorMessage.trim() === '') {
+          errorMessage = `BOL creation failed: ${res.status} ${res.statusText}`;
+        }
+        
+        // Sanitize errorMessage to ensure it's safe to use
+        const safeErrorMessage = String(errorMessage).trim() || `BOL creation failed: ${res.status} ${res.statusText}`;
+        
+        // Create a more informative error
+        const apiError = new Error(safeErrorMessage);
+        (apiError as any).status = res.status;
+        (apiError as any).details = errorDetails;
+        throw apiError;
       }
 
       const data = await res.json();
@@ -548,7 +613,47 @@ export const XPOBillOfLading = ({
       // Call onNext to proceed to next step
       onNext();
     } catch (err) {
-      setError(err);
+      console.error('BOL Creation Error:', err);
+      
+      // Extract error message from various error types
+      let errorMessage = 'An unexpected error occurred while creating the Bill of Lading.';
+      
+      try {
+        if (err instanceof Error) {
+          errorMessage = err.message || errorMessage;
+        } else if (typeof err === 'string') {
+          errorMessage = err;
+        } else if (err && typeof err === 'object') {
+          errorMessage = (err as any).message || (err as any).error || String(err);
+        } else if (err !== null && err !== undefined) {
+          errorMessage = String(err);
+        }
+      } catch (extractError) {
+        // If we can't extract the error message, use default
+        console.error('Failed to extract error message:', extractError);
+        errorMessage = 'An unexpected error occurred while creating the Bill of Lading.';
+      }
+      
+      // Ensure errorMessage is always a valid string
+      if (!errorMessage || typeof errorMessage !== 'string' || errorMessage.trim() === '') {
+        errorMessage = 'An unexpected error occurred while creating the Bill of Lading.';
+      }
+      
+      // Create a user-friendly error with guaranteed valid message
+      const safeErrorMessage = String(errorMessage).trim() || 'An unexpected error occurred while creating the Bill of Lading.';
+      const userError = new Error(safeErrorMessage);
+      
+      // Preserve error metadata if available
+      if (err && typeof err === 'object') {
+        if ('status' in err) {
+          (userError as any).status = (err as any).status;
+        }
+        if ('details' in err) {
+          (userError as any).details = (err as any).details;
+        }
+      }
+      
+      setError(userError);
     } finally {
       setLoading(false);
     }
