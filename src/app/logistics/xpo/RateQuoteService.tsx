@@ -15,7 +15,7 @@ import { XPO_RATE_QUOTE_COMMODITY_DEFAULTS, XPO_PAYMENT_TERM_OPTIONS, XPO_PACKAG
 import { StepIndicator } from './components/StepIndicator';
 import { XPOBillOfLading } from './BillOfLading';
 import { XPOPickupRequest } from './PickupRequest';
-import { BOLForm, BOLSuccessPage } from './components/BOL';
+import { BOLForm } from './components/BOL';
 import { ResponseSummary } from './components/ResponseSummary';
 import { getLogisticsShippedOrderById, getAllLogisticsShippedOrders } from '@/app/api/LogisticsApi/LogisticsShippedOrders';
 import { deleteOrder } from '@/app/api/OrderApi';
@@ -1595,79 +1595,11 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
 
   const handleBillOfLandingNext = () => {
     handleStepComplete(2);
-    window.scrollTo({ top: 0, behavior: 'instant' });
-    // Show BOL Success page (step 2.5)
-    setCurrentStep(2.5);
-    
-    const scrollToTop = () => {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      window.scrollTo(0, 0);
-      if (document.documentElement) {
-        document.documentElement.scrollTop = 0;
-        document.documentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-      if (document.body) {
-        document.body.scrollTop = 0;
-      }
-    };
-    
-    requestAnimationFrame(() => {
-      scrollToTop();
-      setTimeout(scrollToTop, 0);
-      setTimeout(scrollToTop, 50);
-      setTimeout(scrollToTop, 100);
-      setTimeout(scrollToTop, 200);
-      setTimeout(scrollToTop, 300);
-      setTimeout(scrollToTop, 500);
-    });
-  };
-
-  const handleBOLSuccessSchedulePickup = () => {
+    // Go directly to step 3 (Pickup Request)
     setCurrentStep(3);
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
 
-  const handleBOLSuccessEdit = () => {
-    setCurrentStep(2);
-    window.scrollTo({ top: 0, behavior: 'instant' });
-  };
-
-  const handleBOLSuccessPrintDownload = () => {
-    if (bolPdfUrl) {
-      const link = document.createElement('a');
-      link.href = bolPdfUrl;
-      const proNumber = bolResponseData?.data?.referenceNumbers?.pro || 'BOL';
-      link.download = `BillOfLading_${proNumber}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } else {
-      addToast('BOL PDF is not available yet', 'error');
-    }
-  };
-
-  const handleBOLSuccessPrintLabels = () => {
-    // TODO: Implement label printing
-    addToast('Label printing feature coming soon', 'info');
-  };
-
-  const handleBOLSuccessEmail = () => {
-    // TODO: Implement email BOL
-    addToast('Email BOL feature coming soon', 'info');
-  };
-
-  const handleBOLSuccessClose = () => {
-    // Go back to step 1 or close
-    setCurrentStep(1);
-    setResponse(null);
-    setSelectedQuote(null);
-    window.scrollTo({ top: 0, behavior: 'instant' });
-  };
-
-  const handleBOLSuccessManageBOL = () => {
-    // TODO: Navigate to manage BOL page
-    addToast('Manage BOL page coming soon', 'info');
-  };
 
   const handlePickupRequestComplete = (pickupResponse?: any) => {
     handleStepComplete(3);
@@ -3133,22 +3065,14 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
           initialResponseData={bolResponseData}
           onFormDataChange={setBolFormData}
           onResponseDataChange={setBolResponseData}
+          onPdfFileChange={(pdfFile) => {
+            if (pdfFile) {
+              setBolFiles([pdfFile]);
+            } else {
+              setBolFiles([]);
+            }
+          }}
           consigneeData={consigneeData}
-        />
-      )}
-
-      {/* Step 2.5: BOL Success Page */}
-      {currentStep === 2.5 && (
-        <BOLSuccessPage
-          bolResponseData={bolResponseData}
-          bolFormData={bolFormData}
-          onEditBOL={handleBOLSuccessEdit}
-          onSchedulePickup={handleBOLSuccessSchedulePickup}
-          onPrintDownloadBOL={handleBOLSuccessPrintDownload}
-          onPrintDownloadLabels={handleBOLSuccessPrintLabels}
-          onEmailBOL={handleBOLSuccessEmail}
-          onClose={handleBOLSuccessClose}
-          onManageBOL={handleBOLSuccessManageBOL}
         />
       )}
 
