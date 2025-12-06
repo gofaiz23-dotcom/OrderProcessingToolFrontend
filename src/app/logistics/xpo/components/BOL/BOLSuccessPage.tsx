@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Printer, Download, Edit, Calendar, Mail, X, FileText } from 'lucide-react';
+import { Printer, Download, Edit, Calendar, Mail, X, FileText, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 
 type BOLSuccessPageProps = {
   bolResponseData?: any;
@@ -27,6 +27,7 @@ export const BOLSuccessPage = ({
   onManageBOL,
 }: BOLSuccessPageProps) => {
   const [signBOLWithRequester, setSignBOLWithRequester] = useState(false);
+  const [showResponseJson, setShowResponseJson] = useState(false);
 
   // Extract data from BOL response
   const proNumber = bolResponseData?.data?.referenceNumbers?.pro || bolResponseData?.data?.proNumber || 'N/A';
@@ -79,6 +80,16 @@ export const BOLSuccessPage = ({
     return country;
   };
 
+  // Copy to clipboard function
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      // You could add a toast notification here if needed
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
       {/* Header */}
@@ -121,58 +132,58 @@ export const BOLSuccessPage = ({
       </div>
 
       {/* BOL Preview Section */}
-      <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
+      <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900 mb-6">BOL Preview</h2>
         
         {/* BOL Form Preview */}
-        <div className="border-2 border-slate-300 rounded-lg p-6 bg-slate-50">
+        <div className="border-2 border-slate-400 rounded-lg p-6 bg-white overflow-visible">
           {/* Header */}
-          <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-300">
+          <div className="flex items-center justify-between mb-4 pb-4 border-b-2 border-slate-400">
             <div className="text-2xl font-bold text-blue-600">XPO</div>
-            <div className="text-center">
+            <div className="text-center flex-1">
               <h3 className="text-xl font-bold text-slate-900">STRAIGHT BILL OF LADING</h3>
             </div>
-            <div className="text-right text-xs">
-              <div className="flex items-center gap-2">
+            <div className="text-right text-xs text-slate-700">
+              <div className="flex items-center gap-2 whitespace-nowrap">
                 <span>DRIVER PLEASE NOTE IF SINGLE SHIPMENT CHECK BOX BELOW</span>
-                <input type="checkbox" className="w-4 h-4" disabled />
+                <input type="checkbox" className="w-4 h-4 border-slate-400" disabled />
               </div>
             </div>
           </div>
 
           {/* Freight Charges */}
-          <div className="mb-4 pb-4 border-b border-slate-300">
-            <div className="flex items-center gap-2 text-sm">
+          <div className="mb-4 pb-4 border-b-2 border-slate-400">
+            <div className="flex items-center gap-2 text-sm text-slate-900 flex-wrap">
               <span className="font-semibold">SHIPPER PLEASE NOTE</span>
               <span>FREIGHT CHARGES ARE PREPAID UNLESS MARKED COLLECT</span>
-              <input type="checkbox" className="w-4 h-4" disabled />
+              <input type="checkbox" className="w-4 h-4 border-slate-400" disabled />
               <span>COLLECT</span>
             </div>
-            <p className="text-xs text-slate-600 mt-1">Reminder: Print/Affix Pro Labels To Your Shipment.</p>
+            <p className="text-xs text-slate-700 mt-1 font-medium">Reminder: Print/Affix Pro Labels To Your Shipment.</p>
           </div>
 
           {/* Shipment Details */}
-          <div className="mb-4 pb-4 border-b border-slate-300 grid grid-cols-2 gap-4 text-sm">
+          <div className="mb-4 pb-4 border-b-2 border-slate-400 grid grid-cols-2 gap-4 text-sm text-slate-900">
             <div>
-              <span className="font-semibold">XPO PRO#:</span> <span>{proNumber}</span>
+              <span className="font-semibold">XPO PRO#:</span> <span className="font-medium">{proNumber}</span>
             </div>
             <div>
-              <span className="font-semibold">DATE</span> <span>{date}</span>
+              <span className="font-semibold">DATE:</span> <span className="font-medium">{date}</span>
             </div>
             <div className="col-span-2">
-              <span className="font-semibold">CUSTOMER'S SPECIAL REFERENCE NUMBER</span> <span>{customerRef}</span>
+              <span className="font-semibold">CUSTOMER'S SPECIAL REFERENCE NUMBER:</span> <span className="font-medium">{customerRef}</span>
             </div>
-            <div className="col-span-2 text-right text-xs text-slate-600">
+            <div className="col-span-2 text-right text-xs text-slate-700 font-medium">
               ORIGINAL - NOT NEGOTIABLE Page 1 of 1
             </div>
           </div>
 
           {/* Shipper and Consignee */}
-          <div className="mb-4 pb-4 border-b border-slate-300 grid grid-cols-2 gap-6 text-sm">
+          <div className="mb-4 pb-4 border-b-2 border-slate-400 grid grid-cols-2 gap-6 text-sm text-slate-900">
             {/* Shipper */}
             <div>
-              <div className="font-semibold mb-2">SHIPPER (FROM)</div>
-              <div className="space-y-1">
+              <div className="font-semibold mb-2 text-slate-900">SHIPPER (FROM)</div>
+              <div className="space-y-1 text-slate-800">
                 <div className="font-semibold">{shipperCompany}</div>
                 <div>STREET: {shipperStreet}</div>
                 <div>
@@ -184,8 +195,8 @@ export const BOLSuccessPage = ({
 
             {/* Consignee */}
             <div>
-              <div className="font-semibold mb-2">CONSIGNEE (TO)</div>
-              <div className="space-y-1">
+              <div className="font-semibold mb-2 text-slate-900">CONSIGNEE (TO)</div>
+              <div className="space-y-1 text-slate-800">
                 <div className="font-semibold">{consigneeCompany}</div>
                 <div>STREET: {consigneeStreet}</div>
                 <div>
@@ -198,9 +209,9 @@ export const BOLSuccessPage = ({
 
           {/* Commodity Details */}
           <div className="mb-4 text-sm">
-            <div className="font-semibold mb-2">COMMODITY DETAILS</div>
-            <div className="border border-slate-300 rounded p-3 bg-white">
-              <div className="grid grid-cols-6 gap-2 mb-2 text-xs font-semibold border-b border-slate-200 pb-2">
+            <div className="font-semibold mb-2 text-slate-900">COMMODITY DETAILS</div>
+            <div className="border-2 border-slate-400 rounded p-3 bg-white">
+              <div className="grid grid-cols-8 gap-2 mb-2 text-xs font-semibold border-b-2 border-slate-300 pb-2 text-slate-900">
                 <div>NUMBER SHIPPING UNITS</div>
                 <div>HM</div>
                 <div className="col-span-2">KIND OF PACKAGING, DESCRIPTION</div>
@@ -209,14 +220,14 @@ export const BOLSuccessPage = ({
                 <div>CLASS</div>
                 <div>WEIGHT</div>
               </div>
-              <div className="grid grid-cols-6 gap-2 text-xs">
-                <div>{packageCount}</div>
-                <div>-</div>
-                <div className="col-span-2">{packageCode}(s) {commodityDesc}</div>
-                <div>{nmfcNo}</div>
-                <div>{nmfcSub}</div>
-                <div>{freightClass}</div>
-                <div>{formattedWeight}</div>
+              <div className="grid grid-cols-8 gap-2 text-xs text-slate-800">
+                <div className="font-medium">{packageCount}</div>
+                <div className="font-medium">-</div>
+                <div className="col-span-2 font-medium">{packageCode}(s) {commodityDesc}</div>
+                <div className="font-medium">{nmfcNo}</div>
+                <div className="font-medium">{nmfcSub}</div>
+                <div className="font-medium">{freightClass}</div>
+                <div className="font-medium">{formattedWeight}</div>
               </div>
             </div>
           </div>
@@ -226,22 +237,64 @@ export const BOLSuccessPage = ({
            bolFormData?.selectedDeliveryServices?.length > 0 || 
            bolFormData?.selectedPremiumServices?.length > 0 ? (
             <div className="mb-4 text-sm">
-              <div className="font-semibold mb-2">ADDITIONAL SERVICES</div>
-              <div className="space-y-1 text-xs">
+              <div className="font-semibold mb-2 text-slate-900">ADDITIONAL SERVICES</div>
+              <div className="space-y-1 text-xs text-slate-800">
                 {bolFormData?.selectedPickupServices?.map((service: string) => (
-                  <div key={service}>{service} - PREPAID</div>
+                  <div key={service} className="font-medium">{service} - PREPAID</div>
                 ))}
                 {bolFormData?.selectedDeliveryServices?.map((service: string) => (
-                  <div key={service}>{service} - PREPAID</div>
+                  <div key={service} className="font-medium">{service} - PREPAID</div>
                 ))}
                 {bolFormData?.selectedPremiumServices?.map((service: string) => (
-                  <div key={service}>{service} - PREPAID</div>
+                  <div key={service} className="font-medium">{service} - PREPAID</div>
                 ))}
               </div>
             </div>
           ) : null}
         </div>
       </div>
+
+      {/* Response JSON Section */}
+      {bolResponseData && (
+        <div className="bg-white rounded-lg border border-slate-200 p-6 mb-6">
+          <div className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors rounded-lg p-4">
+            <div className="flex items-center gap-2 flex-1">
+              <button
+                type="button"
+                onClick={() => setShowResponseJson(!showResponseJson)}
+                className="text-left"
+              >
+                <h2 className="text-lg font-semibold text-slate-900">Response JSON</h2>
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowResponseJson(!showResponseJson)}
+              className="text-slate-500 hover:text-slate-700 transition-colors"
+            >
+              {showResponseJson ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+            </button>
+          </div>
+          {showResponseJson && (
+            <div className="mt-4 space-y-3">
+              <div className="relative">
+                <pre className="px-4 py-3 border border-slate-300 bg-slate-50 text-slate-900 rounded-lg overflow-auto max-h-96 text-sm font-mono">
+                  {JSON.stringify(bolResponseData, null, 2)}
+                </pre>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(JSON.stringify(bolResponseData, null, 2))}
+                  className="absolute top-2 right-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+                  title="Copy to clipboard"
+                >
+                  <Copy size={16} />
+                  <span className="text-xs">Copy</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Action Buttons Section */}
       <div className="bg-white rounded-lg border border-slate-200 p-6">
