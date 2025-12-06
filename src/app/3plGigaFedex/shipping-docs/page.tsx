@@ -253,7 +253,7 @@ export default function ShippingDocsPage() {
           </div>
 
           {/* Error Display */}
-          {error && (
+          {error !== null && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
               <ErrorDisplay error={error} />
             </div>
@@ -878,7 +878,7 @@ function UpdateModal({ record, isOpen, onClose, onSave, loading = false, error }
           </button>
         </div>
 
-        {error && (
+        {error !== null && (
           <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
             <ErrorDisplay error={error} />
           </div>

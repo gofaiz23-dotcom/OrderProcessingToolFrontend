@@ -221,7 +221,7 @@ export default function StatusPage() {
           </div>
 
           {/* Error Display */}
-          {error && (
+          {error !== null && (
             <div className="mb-6 bg-red-50 border-2 border-red-200 rounded-xl p-4 shadow-sm">
               <ErrorDisplay error={error} />
             </div>
