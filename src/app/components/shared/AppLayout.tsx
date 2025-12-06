@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { ReactNode, useState, useEffect, useRef } from 'react';
-import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart, Truck, PackageSearch, Users, LogOut, User, Menu, X } from 'lucide-react';
+import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart, Truck, PackageSearch, Users, LogOut, User, Menu, X, FileSpreadsheet, BarChart3, Folder } from 'lucide-react';
 import API_BASE_URL from '../../../../BaseUrl';
 import { MARKETPLACES, LOGISTICS_CARRIERS } from '@/Shared/constant';
 import { LogisticsAuthModal } from './LogisticsAuthModal';
@@ -39,12 +39,14 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     const [isOrdersExpanded, setIsOrdersExpanded] = useState(false);
     const [isLogisticsExpanded, setIsLogisticsExpanded] = useState(false);
     const [isProcessedOrdersExpanded, setIsProcessedOrdersExpanded] = useState(false);
+    const [is3plGlobalExpanded, setIs3plGlobalExpanded] = useState(false);
     const [selectedCarrier, setSelectedCarrier] = useState<string | null>(null);
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const ordersDropdownRef = useRef<HTMLDivElement>(null);
     const logisticsDropdownRef = useRef<HTMLDivElement>(null);
     const processedOrdersDropdownRef = useRef<HTMLDivElement>(null);
+    const threePlGlobalDropdownRef = useRef<HTMLDivElement>(null);
 
     const handleLogout = () => {
         logout();
@@ -87,6 +89,13 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         }
     }, [pathname]);
 
+    // Auto-expand 3plGlobal section if on 3plGigaFedex page
+    useEffect(() => {
+        if (pathname?.startsWith('/3plGigaFedex')) {
+            setIs3plGlobalExpanded(true);
+        }
+    }, [pathname]);
+
     // Close orders dropdown when clicking outside or when navigating
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -112,21 +121,25 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
             if (processedOrdersDropdownRef.current && !processedOrdersDropdownRef.current.contains(target)) {
                 setIsProcessedOrdersExpanded(false);
             }
+            if (threePlGlobalDropdownRef.current && !threePlGlobalDropdownRef.current.contains(target)) {
+                setIs3plGlobalExpanded(false);
+            }
         };
 
-        if (isOrdersExpanded || isLogisticsExpanded || isProcessedOrdersExpanded) {
+        if (isOrdersExpanded || isLogisticsExpanded || isProcessedOrdersExpanded || is3plGlobalExpanded) {
             document.addEventListener('click', handleClickOutside);
             return () => {
                 document.removeEventListener('click', handleClickOutside);
             };
         }
-    }, [isOrdersExpanded, isLogisticsExpanded, isProcessedOrdersExpanded]);
+    }, [isOrdersExpanded, isLogisticsExpanded, isProcessedOrdersExpanded, is3plGlobalExpanded]);
 
     const hasActiveEmailItem = emailSubItems.some(item => isActivePath(pathname, item.href));
     const hasActiveOrdersItem = pathname?.startsWith('/orders');
     const hasActiveLogisticsItem = pathname?.startsWith('/logistics');
     const hasActiveProcessedOrdersItem = pathname?.startsWith('/ProcessedOrders');
     const hasActiveCustomerDetailsItem = pathname?.startsWith('/CustomerDetails');
+    const hasActive3plGlobalItem = pathname?.startsWith('/3plGigaFedex');
 
     return (
         <div className="flex h-screen w-full bg-gradient-to-br from-slate-100 to-slate-200 relative overflow-hidden">
@@ -399,6 +412,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                             setIsOrdersExpanded(false);
                                             setIsLogisticsExpanded(false);
                                             setIsProcessedOrdersExpanded(false);
+                                            setIs3plGlobalExpanded(false);
                                         }}
                                     >
                                         <div
@@ -415,6 +429,103 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                             <span className="text-xs sm:text-sm font-medium flex-1 text-left">Customer Details</span>
                                         </div>
                                     </Link>
+                                </div>
+
+                                {/* 3plGlobal Section - Collapsible with Dropdown */}
+                                <div ref={threePlGlobalDropdownRef}>
+                                    <button
+                                        onClick={() => setIs3plGlobalExpanded(!is3plGlobalExpanded)}
+                                        className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-colors ${
+                                            hasActive3plGlobalItem
+                                                ? 'bg-blue-50 text-blue-700'
+                                                : 'text-slate-700 hover:bg-slate-50'
+                                        }`}
+                                    >
+                                        <FileSpreadsheet
+                                            size={18}
+                                            className={`flex-shrink-0 ${hasActive3plGlobalItem ? 'text-blue-600' : 'text-slate-400'}`}
+                                        />
+                                        <span className="text-xs sm:text-sm font-medium flex-1 text-left">3-PL-Global</span>
+                                        {is3plGlobalExpanded ? (
+                                            <ChevronDown size={16} className="text-slate-400 flex-shrink-0" />
+                                        ) : (
+                                            <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
+                                        )}
+                                    </button>
+
+                                    {/* 3plGlobal Sub-items */}
+                                    {is3plGlobalExpanded && (
+                                        <div className="ml-4 sm:ml-6 mt-1 space-y-0.5">
+                                            <Link 
+                                                href="/3plGigaFedex/import-excel"
+                                            >
+                                                <div
+                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
+                                                        pathname === '/3plGigaFedex/import-excel'
+                                                            ? 'bg-blue-50 text-blue-700'
+                                                            : 'text-slate-600 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    <FileSpreadsheet
+                                                        size={16}
+                                                        className={`flex-shrink-0 ${pathname === '/3plGigaFedex/import-excel' ? 'text-blue-600' : 'text-slate-400'}`}
+                                                    />
+                                                    <span className="text-xs sm:text-sm font-medium">Import Excel</span>
+                                                </div>
+                                            </Link>
+                                            <Link 
+                                                href="/3plGigaFedex/scrap-bol"
+                                            >
+                                                <div
+                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
+                                                        pathname === '/3plGigaFedex/scrap-bol'
+                                                            ? 'bg-blue-50 text-blue-700'
+                                                            : 'text-slate-600 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    <BarChart3
+                                                        size={16}
+                                                        className={`flex-shrink-0 ${pathname === '/3plGigaFedex/scrap-bol' ? 'text-blue-600' : 'text-slate-400'}`}
+                                                    />
+                                                    <span className="text-xs sm:text-sm font-medium">Scrap-Bol</span>
+                                                </div>
+                                            </Link>
+                                            <Link 
+                                                href="/3plGigaFedex/status"
+                                            >
+                                                <div
+                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
+                                                        pathname === '/3plGigaFedex/status'
+                                                            ? 'bg-blue-50 text-blue-700'
+                                                            : 'text-slate-600 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    <BarChart3
+                                                        size={16}
+                                                        className={`flex-shrink-0 ${pathname === '/3plGigaFedex/status' ? 'text-blue-600' : 'text-slate-400'}`}
+                                                    />
+                                                    <span className="text-xs sm:text-sm font-medium">Status</span>
+                                                </div>
+                                            </Link>
+                                            <Link 
+                                                href="/3plGigaFedex/shipping-docs"
+                                            >
+                                                <div
+                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
+                                                        pathname === '/3plGigaFedex/shipping-docs'
+                                                            ? 'bg-blue-50 text-blue-700'
+                                                            : 'text-slate-600 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    <Folder
+                                                        size={16}
+                                                        className={`flex-shrink-0 ${pathname === '/3plGigaFedex/shipping-docs' ? 'text-blue-600' : 'text-slate-400'}`}
+                                                    />
+                                                    <span className="text-xs sm:text-sm font-medium">Shipping Docs</span>
+                                                </div>
+                                            </Link>
+                                        </div>
+                                    )}
                                 </div>
                             </nav>
                         </div>
