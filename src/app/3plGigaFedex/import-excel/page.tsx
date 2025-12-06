@@ -210,7 +210,7 @@ export default function ImportExcelPage() {
               </div>
 
               {/* Error Display */}
-              {error && (
+              {error !== null && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                   <ErrorDisplay error={error} />
                 </div>
