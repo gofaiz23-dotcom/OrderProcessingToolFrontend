@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Loader2, Download, FileText, Eye, X } from 'lucide-react';
-import jsPDF from 'jspdf';
+import { ArrowLeft, Loader2, Download, Printer, Copy, X } from 'lucide-react';
 import Link from 'next/link';
 import { buildApiUrl } from '../../../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
@@ -21,7 +20,6 @@ import {
   XPOProNumberSection,
   ReferenceNumbersSection,
   AdditionalCommentsSection,
-  BOLFooterActions,
 } from './index';
 import { PICKUP_SERVICES, DELIVERY_SERVICES, PREMIUM_SERVICES } from './constants';
 import { XPO_SHIPPER_ADDRESS_BOOK, XPO_BOL_DEFAULTS } from '@/Shared/constant';
@@ -46,16 +44,16 @@ type LocationData = {
 type BOLFormProps = {
   onNext?: () => void;
   onPrevious?: () => void;
-  quoteData?: any;
+  quoteData?: Record<string, unknown>;
   orderData?: {
     sku?: string;
     orderOnMarketPlace?: string;
     ordersJsonb?: Record<string, unknown>;
   } | null;
-  initialFormData?: any;
-  initialResponseData?: any;
-  onFormDataChange?: (data: any) => void;
-  onResponseDataChange?: (data: any) => void;
+  initialFormData?: Record<string, unknown>;
+  initialResponseData?: Record<string, unknown>;
+  onFormDataChange?: (data: Record<string, unknown>) => void;
+  onResponseDataChange?: (data: Record<string, unknown>) => void;
   onPdfFileChange?: (file: File | null) => void;
   consigneeData?: {
     address: {
@@ -80,8 +78,6 @@ type BOLFormProps = {
 export const BOLForm = ({
   onNext,
   onPrevious,
-  quoteData,
-  orderData,
   initialFormData,
   initialResponseData,
   onFormDataChange,
@@ -93,19 +89,12 @@ export const BOLForm = ({
   const carrier = 'xpo';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const [responseJson, setResponseJson] = useState<any>(null);
-  const [pdfResponseJson, setPdfResponseJson] = useState<any>(null);
-  const [pdfRequestPayload, setPdfRequestPayload] = useState<any>(null);
+  const [responseJson, setResponseJson] = useState<Record<string, unknown> | null>(null);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [jsonPdfUrl, setJsonPdfUrl] = useState<string | null>(null);
-  const [showJsonPdfViewer, setShowJsonPdfViewer] = useState(false);
-  const [bolJsonPdfUrl, setBolJsonPdfUrl] = useState<string | null>(null);
-  const [showBolJsonPdfViewer, setShowBolJsonPdfViewer] = useState(false);
+  const [bolPdfUrl, setBolPdfUrl] = useState<string | null>(null);
+  const [showResponsePreview, setShowResponsePreview] = useState(false);
   const [showPayloadPreview, setShowPayloadPreview] = useState(false);
-  const [showResponseJson, setShowResponseJson] = useState(false);
-  const [showPdfResponseJson, setShowPdfResponseJson] = useState(false);
-  const [showPdfRequestPayload, setShowPdfRequestPayload] = useState(false);
-  const [payloadPreview, setPayloadPreview] = useState<any>(null);
+  const [payloadPreview, setPayloadPreview] = useState<Record<string, unknown> | null>(null);
   // Basic Information
   const [requesterRole, setRequesterRole] = useState(XPO_BOL_DEFAULTS.requesterRole);
   const [paymentTerms, setPaymentTerms] = useState(XPO_BOL_DEFAULTS.paymentTerms);
@@ -319,22 +308,29 @@ export const BOLForm = ({
   };
 
   // Commodity Management
-  const updateCommodity = (index: number, field: keyof XPOBillOfLadingCommodity, value: any) => {
+  const updateCommodity = (index: number, field: keyof XPOBillOfLadingCommodity, value: unknown) => {
     const updated = [...commodities];
     updated[index] = { ...updated[index], [field]: value };
     setCommodities(updated);
   };
 
-  const updateCommodityNested = (index: number, path: string[], value: any) => {
+  const updateCommodityNested = (index: number, path: string[], value: unknown) => {
     const updated = [...commodities];
     const commodity = { ...updated[index] };
-    let current: any = commodity;
+    let current: Record<string, unknown> = commodity as Record<string, unknown>;
     for (let i = 0; i < path.length - 1; i++) {
-      current[path[i]] = { ...current[path[i]] };
-      current = current[path[i]];
+      const nextKey = path[i];
+      const nextValue = current[nextKey];
+      if (nextValue && typeof nextValue === 'object' && !Array.isArray(nextValue)) {
+        current[nextKey] = { ...nextValue as Record<string, unknown> };
+        current = current[nextKey] as Record<string, unknown>;
+      } else {
+        current[nextKey] = {};
+        current = current[nextKey] as Record<string, unknown>;
+      }
     }
     current[path[path.length - 1]] = value;
-    updated[index] = commodity;
+    updated[index] = commodity as XPOBillOfLadingCommodity;
     setCommodities(updated);
   };
 
@@ -458,11 +454,21 @@ export const BOLForm = ({
   useEffect(() => {
     if (initialFormData) {
       // Load form data from previous step
-      if (initialFormData.requesterRole) setRequesterRole(initialFormData.requesterRole);
-      if (initialFormData.paymentTerms) setPaymentTerms(initialFormData.paymentTerms);
-      if (initialFormData.pickupLocation) setPickupLocation(initialFormData.pickupLocation);
-      if (initialFormData.deliveryLocation) setDeliveryLocation(initialFormData.deliveryLocation);
-      if (initialFormData.commodities) setCommodities(initialFormData.commodities);
+      if (initialFormData.requesterRole && typeof initialFormData.requesterRole === 'string') {
+        setRequesterRole(initialFormData.requesterRole);
+      }
+      if (initialFormData.paymentTerms && typeof initialFormData.paymentTerms === 'string') {
+        setPaymentTerms(initialFormData.paymentTerms);
+      }
+      if (initialFormData.pickupLocation && typeof initialFormData.pickupLocation === 'object') {
+        setPickupLocation(initialFormData.pickupLocation as LocationData);
+      }
+      if (initialFormData.deliveryLocation && typeof initialFormData.deliveryLocation === 'object') {
+        setDeliveryLocation(initialFormData.deliveryLocation as LocationData);
+      }
+      if (initialFormData.commodities && Array.isArray(initialFormData.commodities)) {
+        setCommodities(initialFormData.commodities as XPOBillOfLadingCommodity[]);
+      }
       // ... load other fields
     }
   }, [initialFormData]);
@@ -472,16 +478,12 @@ export const BOLForm = ({
     if (initialResponseData && onResponseDataChange) {
       onResponseDataChange(initialResponseData);
       setResponseJson(initialResponseData);
-      setShowResponseJson(true);
     }
   }, [initialResponseData, onResponseDataChange]);
 
   // Helper function to format date and time to ISO 8601 with timezone
   const formatDateTimeWithTimezone = (dateStr: string, timeStr: string): string => {
     if (!dateStr || !timeStr) return '';
-    
-    // Parse date (YYYY-MM-DD) and time (HH:MM)
-    const [hours, minutes] = timeStr.split(':').map(Number);
     
     // Create date in local timezone
     const date = new Date(dateStr + 'T' + timeStr + ':00');
@@ -508,7 +510,18 @@ export const BOLForm = ({
 
   const buildRequestBody = useCallback((): XPOBillOfLadingFields => {
     // Build pickupInfo if schedulePickup is enabled
-    let pickupInfo: any = undefined;
+    let pickupInfo: {
+      pkupDate: string;
+      pkupTime: string;
+      dockCloseTime: string;
+      contact: {
+        companyName: string;
+        fullName: string;
+        phone: {
+          phoneNbr: string;
+        };
+      };
+    } | undefined = undefined;
     if (schedulePickup && pickupDate && pickupReadyTime && dockCloseTime && contactCompanyName && contactName && contactPhone) {
       pickupInfo = {
         pkupDate: formatDateTimeWithTimezone(pickupDate, pickupReadyTime),
@@ -540,7 +553,7 @@ export const BOLForm = ({
           contactInfo: {
             companyName: deliveryLocation.company,
             email: {
-              emailAddr: deliveryLocation.email || null,
+              emailAddr: deliveryLocation.email ? String(deliveryLocation.email) : '',
             },
             phone: {
               phoneNbr: deliveryLocation.phone || '',
@@ -558,7 +571,7 @@ export const BOLForm = ({
           contactInfo: {
             companyName: pickupLocation.company,
             email: {
-              emailAddr: pickupLocation.email || null,
+              emailAddr: pickupLocation.email ? String(pickupLocation.email) : '',
             },
             phone: {
               phoneNbr: pickupLocation.phone || '',
@@ -576,7 +589,7 @@ export const BOLForm = ({
           contactInfo: {
             companyName: pickupLocation.company,
             email: {
-              emailAddr: pickupLocation.email || null,
+              emailAddr: pickupLocation.email ? String(pickupLocation.email) : '',
             },
             phone: {
               phoneNbr: pickupLocation.phone || '',
@@ -616,15 +629,11 @@ export const BOLForm = ({
     paymentTerms,
     pickupLocation,
     deliveryLocation,
-    billTo,
     commodities,
     emergencyContactName,
     emergencyContactPhone,
     totalDeclaredValue,
     excessiveLiabilityAuth,
-    selectedPickupServices,
-    selectedDeliveryServices,
-    selectedPremiumServices,
     references,
     comments,
     proNumberOption,
@@ -652,11 +661,75 @@ export const BOLForm = ({
         };
         setPayloadPreview(finalPayload);
       }
-    } catch (err) {
+    } catch {
       // Silently fail - preview will update when form is valid
       setPayloadPreview(null);
     }
   }, [buildRequestBody, carrier, getToken]);
+
+  // Cleanup PDF URL when component unmounts or PDF changes
+  useEffect(() => {
+    return () => {
+      if (bolPdfUrl) {
+        URL.revokeObjectURL(bolPdfUrl);
+      }
+    };
+  }, [bolPdfUrl]);
+
+  // Function to download PDF
+  const downloadPDF = () => {
+    try {
+      if (!pdfFile && !bolPdfUrl) {
+        setError(new Error('PDF data not found in response'));
+        return;
+      }
+      
+      if (pdfFile) {
+        const url = URL.createObjectURL(pdfFile);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = pdfFile.name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } else if (bolPdfUrl) {
+        const link = document.createElement('a');
+        link.href = bolPdfUrl;
+        const fileName = 'BillOfLading.pdf';
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to download PDF'));
+    }
+  };
+
+  // Function to print PDF
+  const printPDF = () => {
+    try {
+      if (!bolPdfUrl) {
+        setError(new Error('PDF data not found in response'));
+        return;
+      }
+
+      const printWindow = window.open(bolPdfUrl, '_blank');
+      
+      if (printWindow) {
+        printWindow.onload = () => {
+          setTimeout(() => {
+            printWindow.print();
+          }, 250);
+        };
+      } else {
+        setError(new Error('Popup blocked. Please allow popups to print.'));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to print PDF'));
+    }
+  };
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) {
@@ -721,7 +794,7 @@ export const BOLForm = ({
 
       if (!res.ok) {
         let errorMessage = `BOL creation failed: ${res.status} ${res.statusText}`;
-        let errorDetails: any = null;
+        let errorDetails: Record<string, unknown> | null = null;
         
         try {
           // Read response as text first (can only read once)
@@ -731,24 +804,24 @@ export const BOLForm = ({
             // Try to parse as JSON if it looks like JSON
             if (errorText.trim().startsWith('{') || errorText.trim().startsWith('[')) {
               try {
-                const errorData = JSON.parse(errorText);
+                const errorData = JSON.parse(errorText) as Record<string, unknown>;
                 errorDetails = errorData;
                 
                 // Extract error message from various possible formats
                 const extractedMessage = 
-                  errorData.message || 
-                  errorData.error?.message || 
-                  errorData.errorMessage ||
-                  errorData.error?.errorMessage ||
-                  errorData.detail ||
-                  errorData.error?.detail ||
-                  errorData.title ||
-                  errorData.type ||
+                  (errorData.message as string) || 
+                  ((errorData.error as Record<string, unknown>)?.message as string) || 
+                  (errorData.errorMessage as string) ||
+                  ((errorData.error as Record<string, unknown>)?.errorMessage as string) ||
+                  (errorData.detail as string) ||
+                  ((errorData.error as Record<string, unknown>)?.detail as string) ||
+                  (errorData.title as string) ||
+                  (errorData.type as string) ||
                   (typeof errorData.error === 'string' ? errorData.error : null) ||
-                  (errorData.errors && Array.isArray(errorData.errors) 
-                    ? errorData.errors.map((e: any) => e.message || e.msg || e.field || e).join(', ')
+                  (Array.isArray(errorData.errors)
+                    ? (errorData.errors as Array<Record<string, unknown>>).map((e) => (e.message as string) || (e.msg as string) || (e.field as string) || String(e)).join(', ')
                     : null) ||
-                  errorData.originalError ||
+                  (errorData.originalError as string) ||
                   null;
                 
                 // Ensure we have a valid string message
@@ -759,7 +832,7 @@ export const BOLForm = ({
                 } else {
                   errorMessage = `BOL creation failed: ${res.status} ${res.statusText}`;
                 }
-              } catch (parseError) {
+              } catch {
                 // If JSON parsing fails, use the text as error message
                 errorMessage = errorText.substring(0, 500) || `BOL creation failed: ${res.status} ${res.statusText}`;
               }
@@ -783,15 +856,14 @@ export const BOLForm = ({
         const safeErrorMessage = String(errorMessage).trim() || `BOL creation failed: ${res.status} ${res.statusText}`;
         
         // Create a more informative error
-        const apiError = new Error(safeErrorMessage);
-        (apiError as any).status = res.status;
-        (apiError as any).details = errorDetails;
+        const apiError = new Error(safeErrorMessage) as Error & { status?: number; details?: Record<string, unknown> | null };
+        apiError.status = res.status;
+        apiError.details = errorDetails;
         throw apiError;
       }
 
       const data = await res.json();
       setResponseJson(data);
-      setShowResponseJson(true);
       
       if (onResponseDataChange) {
         onResponseDataChange(data);
@@ -800,16 +872,18 @@ export const BOLForm = ({
       // After successful BOL creation, call download-bol-pdf API
       try {
         // Extract PDF URI from BOL response - look for link with rel="self" and uri containing "/pdf"
-        const bolInfo = data?.data?.data?.bolInfo || data?.data?.bolInfo;
-        const links = bolInfo?.link || data?.data?.link || [];
+        const bolInfo = (data as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
+        const dataBolInfo = bolInfo?.data as Record<string, unknown> | undefined;
+        const finalBolInfo = dataBolInfo?.bolInfo || bolInfo?.bolInfo;
+        const links = ((finalBolInfo as Record<string, unknown>)?.link || bolInfo?.link || []) as Array<Record<string, unknown>>;
         
         // Find the link with rel="self" and uri containing "/pdf"
-        const pdfLinkObj = links.find((link: any) => 
-          link.uri?.includes('/pdf') && (link.rel === 'self' || !link.rel)
+        const pdfLinkObj = links.find((link) => 
+          (link.uri as string)?.includes('/pdf') && ((link.rel as string) === 'self' || !link.rel)
         );
         
         // If not found with rel="self", try any link with "/pdf"
-        const pdfUri = pdfLinkObj?.uri || links.find((link: any) => link.uri?.includes('/pdf'))?.uri;
+        const pdfUri = (pdfLinkObj?.uri as string) || (links.find((link) => (link.uri as string)?.includes('/pdf'))?.uri as string);
 
         if (pdfUri && token) {
           // Prepare request body for download-bol-pdf API
@@ -818,10 +892,6 @@ export const BOLForm = ({
             pdfUri: pdfUri,
             token: token,
           };
-
-          // Store the request payload for display
-          setPdfRequestPayload(pdfRequestBody);
-          setShowPdfRequestPayload(true);
 
           console.log('Calling download-bol-pdf API with payload:', JSON.stringify(pdfRequestBody, null, 2));
 
@@ -835,25 +905,30 @@ export const BOLForm = ({
           });
 
           const pdfData = await pdfRes.json();
-          setPdfResponseJson(pdfData);
-          setShowPdfResponseJson(true);
           
           console.log('PDF Download API Response:', pdfData);
           
           // Convert base64 PDF to File and store in cache
-          if (pdfData.code === '200' && pdfData.data?.bolpdf?.fileContent) {
+          // XPO response has contentType field (similar to Estes which uses images.bol)
+          if (pdfData.code === '200' && pdfData.data?.bolpdf?.contentType) {
             try {
-              const base64Content = pdfData.data.bolpdf.fileContent;
+              const base64Content = pdfData.data.bolpdf.contentType;
               const fileName = pdfData.data.bolpdf.fileName || 'BillOfLading.pdf';
               
-              // Convert base64 to binary
-              const byteCharacters = atob(base64Content);
-              const byteNumbers = new Array(byteCharacters.length);
-              for (let i = 0; i < byteCharacters.length; i++) {
-                byteNumbers[i] = byteCharacters.charCodeAt(i);
+              // Convert base64 to binary (same as Estes)
+              const binaryString = atob(base64Content);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
               }
-              const byteArray = new Uint8Array(byteNumbers);
-              const blob = new Blob([byteArray], { type: 'application/pdf' });
+              const blob = new Blob([bytes], { type: 'application/pdf' });
+              
+              // Create PDF URL for viewing (similar to Estes)
+              const pdfUrl = URL.createObjectURL(blob);
+              setBolPdfUrl(pdfUrl);
+              
+              // Show response preview (like Estes)
+              setShowResponsePreview(true);
               
               // Create File object
               const pdfFileObj = new File([blob], fileName, { type: 'application/pdf' });
@@ -890,6 +965,8 @@ export const BOLForm = ({
             } catch (convertError) {
               console.error('Error converting PDF base64 to File:', convertError);
             }
+          } else {
+            console.warn('PDF data not found in expected format:', pdfData);
           }
         } else {
           console.warn('PDF URI or token not available. PDF URI:', pdfUri, 'Token:', !!token);
@@ -948,7 +1025,8 @@ export const BOLForm = ({
         } else if (typeof err === 'string') {
           errorMessage = err;
         } else if (err && typeof err === 'object') {
-          errorMessage = (err as any).message || (err as any).error || String(err);
+          const errObj = err as Record<string, unknown>;
+          errorMessage = (errObj.message as string) || (errObj.error as string) || String(err);
         } else if (err !== null && err !== undefined) {
           errorMessage = String(err);
         }
@@ -965,15 +1043,16 @@ export const BOLForm = ({
       
       // Create a user-friendly error with guaranteed valid message
       const safeErrorMessage = String(errorMessage).trim() || 'An unexpected error occurred while creating the Bill of Lading.';
-      const userError = new Error(safeErrorMessage);
+      const userError = new Error(safeErrorMessage) as Error & { status?: number; details?: Record<string, unknown> | null };
       
       // Preserve error metadata if available
       if (err && typeof err === 'object') {
-        if ('status' in err) {
-          (userError as any).status = (err as any).status;
+        const errObj = err as Record<string, unknown>;
+        if ('status' in errObj) {
+          userError.status = errObj.status as number;
         }
-        if ('details' in err) {
-          (userError as any).details = (err as any).details;
+        if ('details' in errObj) {
+          userError.details = errObj.details as Record<string, unknown> | null;
         }
       }
       
@@ -1261,7 +1340,7 @@ export const BOLForm = ({
                   <div className="mt-4">
                     {payloadPreview ? (
                       <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                        <pre className="text-xs text-slate-700 overflow-auto max-h-96 whitespace-pre-wrap break-words">
+                        <pre className="text-xs text-slate-700 overflow-auto max-h-96 whitespace-pre-wrap wrap-break-word">
                           {JSON.stringify(payloadPreview, null, 2)}
                         </pre>
                       </div>
@@ -1316,615 +1395,83 @@ export const BOLForm = ({
             </div>
           </div>
 
-          {/* Response JSON */}
-          {responseJson && (
-            <div className="bg-white rounded-lg border border-slate-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-slate-900">BOL Response JSON</h2>
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowResponseJson(!showResponseJson)}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    {showResponseJson ? 'Hide' : 'Show'} Response
-                  </button>
+          {/* Response Preview - Estes Style */}
+          {showResponsePreview && responseJson && (
+            <div className="mt-6 space-y-4" data-response-preview>
+              {/* PDF Preview Section */}
+              {bolPdfUrl && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                      <h3 className="text-lg font-bold text-slate-900">BOL Created Successfully!</h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={downloadPDF}
+                        className="px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 text-sm"
+                        title="Download PDF"
+                      >
+                        <Download size={16} />
+                        Download
+                      </button>
+                      <button
+                        type="button"
+                        onClick={printPDF}
+                        className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
+                        title="Print PDF"
+                      >
+                        <Printer size={16} />
+                        Print
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowResponsePreview(false);
+                          setResponseJson(null);
+                        }}
+                        className="px-3 py-2 bg-slate-500 text-white rounded-lg hover:bg-slate-600 transition-colors flex items-center gap-2 text-sm"
+                      >
+                        <X size={16} />
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-lg p-4">
+                    <iframe
+                      src={bolPdfUrl}
+                      className="w-full h-[600px] border-0 rounded-lg"
+                      title="PDF Preview"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
               
-              {/* Readable Response Format */}
-              <div className="space-y-4 mb-4">
-                {/* Status Information Card */}
-                {responseJson.code && (
-                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide mb-1">Response Code</p>
-                        <p className="text-lg font-bold text-blue-700">
-                          {responseJson.code || 'N/A'}
-                        </p>
-                      </div>
-                      {responseJson.transactionTimestamp && (
-                        <div>
-                          <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide mb-1">Transaction Timestamp</p>
-                          <p className="text-sm text-blue-700">
-                            {new Date(responseJson.transactionTimestamp).toLocaleString()}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Convert JSON to PDF Buttons */}
-              <div className="bg-purple-50 rounded-lg p-4 border border-purple-200 mb-4">
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      try {
-                        const doc = new jsPDF();
-                        let yPos = 20;
-                        const pageWidth = doc.internal.pageSize.getWidth();
-                        const margin = 20;
-                        const maxWidth = pageWidth - 2 * margin;
-                        
-                        // Title
-                        doc.setFontSize(16);
-                        doc.setFont('helvetica', 'bold');
-                        doc.text('BOL Response JSON', margin, yPos);
-                        yPos += 15;
-                        
-                        // Status Information
-                        if (responseJson.code || responseJson.transactionTimestamp) {
-                          doc.setFontSize(12);
-                          doc.setFont('helvetica', 'bold');
-                          doc.text('Status Information', margin, yPos);
-                          yPos += 8;
-                          
-                          doc.setFontSize(10);
-                          doc.setFont('helvetica', 'normal');
-                          if (responseJson.code) {
-                            doc.text(`Response Code: ${responseJson.code}`, margin, yPos);
-                            yPos += 6;
-                          }
-                          
-                          if (responseJson.transactionTimestamp) {
-                            const date = new Date(responseJson.transactionTimestamp).toLocaleString();
-                            doc.text(`Transaction Timestamp: ${date}`, margin, yPos);
-                            yPos += 6;
-                          }
-                          yPos += 5;
-                        }
-                        
-                        // Full JSON Response
-                        yPos += 5;
-                        doc.setFontSize(12);
-                        doc.setFont('helvetica', 'bold');
-                        doc.text('Full JSON Response', margin, yPos);
-                        yPos += 8;
-                        
-                        doc.setFontSize(8);
-                        doc.setFont('courier', 'normal');
-                        const jsonString = JSON.stringify(responseJson, null, 2);
-                        const jsonLines = doc.splitTextToSize(jsonString, maxWidth);
-                        
-                        jsonLines.forEach((line: string) => {
-                          if (yPos > doc.internal.pageSize.getHeight() - 20) {
-                            doc.addPage();
-                            yPos = 20;
-                          }
-                          doc.text(line, margin, yPos);
-                          yPos += 5;
-                        });
-                        
-                        // Generate PDF blob URL for viewing
-                        const pdfBlob = doc.output('blob');
-                        const pdfUrl = URL.createObjectURL(pdfBlob);
-                        setBolJsonPdfUrl(pdfUrl);
-                        setShowBolJsonPdfViewer(true);
-                      } catch (error) {
-                        console.error('Error generating PDF:', error);
-                        alert('Failed to generate PDF. Please try again.');
-                      }
-                    }}
-                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
-                  >
-                    <Eye size={16} />
-                    View JSON as PDF
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      try {
-                        const doc = new jsPDF();
-                        let yPos = 20;
-                        const pageWidth = doc.internal.pageSize.getWidth();
-                        const margin = 20;
-                        const maxWidth = pageWidth - 2 * margin;
-                        
-                        // Title
-                        doc.setFontSize(16);
-                        doc.setFont('helvetica', 'bold');
-                        doc.text('BOL Response JSON', margin, yPos);
-                        yPos += 15;
-                        
-                        // Status Information
-                        if (responseJson.code || responseJson.transactionTimestamp) {
-                          doc.setFontSize(12);
-                          doc.setFont('helvetica', 'bold');
-                          doc.text('Status Information', margin, yPos);
-                          yPos += 8;
-                          
-                          doc.setFontSize(10);
-                          doc.setFont('helvetica', 'normal');
-                          if (responseJson.code) {
-                            doc.text(`Response Code: ${responseJson.code}`, margin, yPos);
-                            yPos += 6;
-                          }
-                          
-                          if (responseJson.transactionTimestamp) {
-                            const date = new Date(responseJson.transactionTimestamp).toLocaleString();
-                            doc.text(`Transaction Timestamp: ${date}`, margin, yPos);
-                            yPos += 6;
-                          }
-                          yPos += 5;
-                        }
-                        
-                        // Full JSON Response
-                        yPos += 5;
-                        doc.setFontSize(12);
-                        doc.setFont('helvetica', 'bold');
-                        doc.text('Full JSON Response', margin, yPos);
-                        yPos += 8;
-                        
-                        doc.setFontSize(8);
-                        doc.setFont('courier', 'normal');
-                        const jsonString = JSON.stringify(responseJson, null, 2);
-                        const jsonLines = doc.splitTextToSize(jsonString, maxWidth);
-                        
-                        jsonLines.forEach((line: string) => {
-                          if (yPos > doc.internal.pageSize.getHeight() - 20) {
-                            doc.addPage();
-                            yPos = 20;
-                          }
-                          doc.text(line, margin, yPos);
-                          yPos += 5;
-                        });
-                        
-                        // Save PDF
-                        const fileName = `BOL_Response_${new Date().toISOString().split('T')[0]}.pdf`;
-                        doc.save(fileName);
-                      } catch (error) {
-                        console.error('Error generating PDF:', error);
-                        alert('Failed to generate PDF. Please try again.');
-                      }
-                    }}
-                    className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-sm font-medium"
-                  >
-                    <Download size={16} />
-                    Download PDF
-                  </button>
-                </div>
-              </div>
-
-              {/* Raw JSON (Collapsible) */}
-              {showResponseJson && (
-                <div className="mt-4">
-                  <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                    <p className="text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">Raw JSON Response</p>
-                    <pre className="text-xs text-slate-700 overflow-auto max-h-96 whitespace-pre-wrap break-words font-mono">
-                      {JSON.stringify(responseJson, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* PDF Download Request Payload */}
-          {pdfRequestPayload && (
-            <div className="bg-white rounded-lg border border-slate-200 p-6 mt-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-slate-900">PDF Download API - Request Payload</h2>
-                <button
-                  type="button"
-                  onClick={() => setShowPdfRequestPayload(!showPdfRequestPayload)}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  {showPdfRequestPayload ? 'Hide' : 'Show'} Payload
-                </button>
-              </div>
-              {showPdfRequestPayload && (
-                <div className="mt-4">
-                  <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-                    <pre className="text-xs text-slate-700 overflow-auto max-h-96 whitespace-pre-wrap break-words">
-                      {JSON.stringify(pdfRequestPayload, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* PDF Download Response JSON */}
-          {pdfResponseJson && (
-            <div className="bg-white rounded-lg border border-slate-200 p-6 mt-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-slate-900">PDF Download API - Response</h2>
-                <div className="flex items-center gap-3">
-                  {/* Download PDF Button */}
-                  {pdfFile && (
+              {/* JSON Response Preview Section */}
+              <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-bold text-slate-900">JSON Response</h3>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {
-                        const url = URL.createObjectURL(pdfFile);
-                        const link = document.createElement('a');
-                        link.href = url;
-                        link.download = pdfFile.name;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        URL.revokeObjectURL(url);
+                        navigator.clipboard.writeText(JSON.stringify(responseJson, null, 2));
                       }}
-                      className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium"
+                      className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 text-sm"
+                      title="Copy JSON"
                     >
-                      <Download size={16} />
-                      Download PDF
+                      <Copy size={16} />
+                      Copy
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setShowPdfResponseJson(!showPdfResponseJson)}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    {showPdfResponseJson ? 'Hide' : 'Show'} Raw JSON
-                  </button>
+                  </div>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-lg p-4 overflow-auto max-h-96">
+                  <pre className="text-sm text-slate-800 whitespace-pre-wrap font-mono">
+                    {JSON.stringify(responseJson, null, 2)}
+                  </pre>
                 </div>
               </div>
-              
-              {/* Readable Response Format */}
-              <div className="space-y-4">
-                {/* Status Card */}
-                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide mb-1">Status Code</p>
-                      <p className="text-lg font-bold text-blue-700">
-                        {pdfResponseJson.code || 'N/A'}
-                      </p>
-                    </div>
-                    {pdfResponseJson.transactionTimestamp && (
-                      <div>
-                        <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide mb-1">Transaction Timestamp</p>
-                        <p className="text-sm text-blue-700">
-                          {new Date(pdfResponseJson.transactionTimestamp).toLocaleString()}
-                        </p>
-                      </div>
-                    )}
-                    {pdfResponseJson.shippingCompanyName && (
-                      <div>
-                        <p className="text-xs font-semibold text-blue-900 uppercase tracking-wide mb-1">Shipping Company</p>
-                        <p className="text-sm font-medium text-blue-700">
-                          {pdfResponseJson.shippingCompanyName.toUpperCase()}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* PDF Information Card */}
-                {pdfResponseJson.data?.bolpdf && (
-                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                    <h3 className="text-sm font-semibold text-green-900 uppercase tracking-wide mb-3">PDF Information</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-xs font-semibold text-green-800 mb-1">File Name</p>
-                        <p className="text-sm font-medium text-green-900">
-                          {pdfResponseJson.data.bolpdf.fileName || 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-semibold text-green-800 mb-1">Content Type</p>
-                        <p className="text-sm text-green-700">
-                          {pdfResponseJson.data.bolpdf.contentType ? 
-                            (pdfResponseJson.data.bolpdf.contentType.substring(0, 50) + (pdfResponseJson.data.bolpdf.contentType.length > 50 ? '...' : '')) 
-                            : 'N/A'}
-                        </p>
-                      </div>
-                      {pdfResponseJson.data.bolpdf.fileContent && (
-                        <div className="md:col-span-2">
-                          <p className="text-xs font-semibold text-green-800 mb-1">File Size</p>
-                          <p className="text-sm text-green-700">
-                            {pdfFile ? `${(pdfFile.size / 1024).toFixed(2)} KB` : 
-                             `${(pdfResponseJson.data.bolpdf.fileContent.length * 0.75 / 1024).toFixed(2)} KB (estimated)`}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Error Information (if any) */}
-                {pdfResponseJson.error && (
-                  <div className="bg-red-50 rounded-lg p-4 border border-red-200">
-                    <h3 className="text-sm font-semibold text-red-900 uppercase tracking-wide mb-3">Error Information</h3>
-                    <div className="space-y-2">
-                      {pdfResponseJson.error.errorCode && (
-                        <div>
-                          <p className="text-xs font-semibold text-red-800 mb-1">Error Code</p>
-                          <p className="text-sm font-medium text-red-900">{pdfResponseJson.error.errorCode}</p>
-                        </div>
-                      )}
-                      {pdfResponseJson.error.message && (
-                        <div>
-                          <p className="text-xs font-semibold text-red-800 mb-1">Error Message</p>
-                          <p className="text-sm text-red-700">{pdfResponseJson.error.message}</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* PDF File Ready Indicator */}
-                {pdfFile && (
-                  <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-green-900">PDF File Ready for Download</p>
-                        <p className="text-xs text-green-700 mt-1">
-                          {pdfFile.name} ({(pdfFile.size / 1024).toFixed(2)} KB)
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Convert JSON to PDF Buttons */}
-                <div className="bg-purple-50 rounded-lg p-4 border border-purple-200">
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        try {
-                          const doc = new jsPDF();
-                          let yPos = 20;
-                          const pageWidth = doc.internal.pageSize.getWidth();
-                          const margin = 20;
-                          const maxWidth = pageWidth - 2 * margin;
-                          
-                          // Title
-                          doc.setFontSize(16);
-                          doc.setFont('helvetica', 'bold');
-                          doc.text('PDF Download API Response', margin, yPos);
-                          yPos += 15;
-                          
-                          // Status Information
-                          doc.setFontSize(12);
-                          doc.setFont('helvetica', 'bold');
-                          doc.text('Status Information', margin, yPos);
-                          yPos += 8;
-                          
-                          doc.setFontSize(10);
-                          doc.setFont('helvetica', 'normal');
-                          doc.text(`Status Code: ${pdfResponseJson.code || 'N/A'}`, margin, yPos);
-                          yPos += 6;
-                          
-                          if (pdfResponseJson.transactionTimestamp) {
-                            const date = new Date(pdfResponseJson.transactionTimestamp).toLocaleString();
-                            doc.text(`Transaction Timestamp: ${date}`, margin, yPos);
-                            yPos += 6;
-                          }
-                          
-                          if (pdfResponseJson.shippingCompanyName) {
-                            doc.text(`Shipping Company: ${pdfResponseJson.shippingCompanyName.toUpperCase()}`, margin, yPos);
-                            yPos += 10;
-                          }
-                          
-                          // PDF Information
-                          if (pdfResponseJson.data?.bolpdf) {
-                            doc.setFontSize(12);
-                            doc.setFont('helvetica', 'bold');
-                            doc.text('PDF Information', margin, yPos);
-                            yPos += 8;
-                            
-                            doc.setFontSize(10);
-                            doc.setFont('helvetica', 'normal');
-                            doc.text(`File Name: ${pdfResponseJson.data.bolpdf.fileName || 'N/A'}`, margin, yPos);
-                            yPos += 6;
-                            
-                            if (pdfFile) {
-                              doc.text(`File Size: ${(pdfFile.size / 1024).toFixed(2)} KB`, margin, yPos);
-                              yPos += 6;
-                            }
-                            yPos += 5;
-                          }
-                          
-                          // Error Information (if any)
-                          if (pdfResponseJson.error) {
-                            doc.setFontSize(12);
-                            doc.setFont('helvetica', 'bold');
-                            doc.text('Error Information', margin, yPos);
-                            yPos += 8;
-                            
-                            doc.setFontSize(10);
-                            doc.setFont('helvetica', 'normal');
-                            if (pdfResponseJson.error.errorCode) {
-                              doc.text(`Error Code: ${pdfResponseJson.error.errorCode}`, margin, yPos);
-                              yPos += 6;
-                            }
-                            if (pdfResponseJson.error.message) {
-                              const errorMsg = doc.splitTextToSize(`Error Message: ${pdfResponseJson.error.message}`, maxWidth);
-                              doc.text(errorMsg, margin, yPos);
-                              yPos += errorMsg.length * 6;
-                            }
-                            yPos += 5;
-                          }
-                          
-                          // Full JSON Response
-                          yPos += 5;
-                          doc.setFontSize(12);
-                          doc.setFont('helvetica', 'bold');
-                          doc.text('Full JSON Response', margin, yPos);
-                          yPos += 8;
-                          
-                          doc.setFontSize(8);
-                          doc.setFont('courier', 'normal');
-                          const jsonString = JSON.stringify(pdfResponseJson, null, 2);
-                          const jsonLines = doc.splitTextToSize(jsonString, maxWidth);
-                          
-                          jsonLines.forEach((line: string) => {
-                            if (yPos > doc.internal.pageSize.getHeight() - 20) {
-                              doc.addPage();
-                              yPos = 20;
-                            }
-                            doc.text(line, margin, yPos);
-                            yPos += 5;
-                          });
-                          
-                          // Generate PDF blob URL for viewing
-                          const pdfBlob = doc.output('blob');
-                          const pdfUrl = URL.createObjectURL(pdfBlob);
-                          setJsonPdfUrl(pdfUrl);
-                          setShowJsonPdfViewer(true);
-                        } catch (error) {
-                          console.error('Error generating PDF:', error);
-                          alert('Failed to generate PDF. Please try again.');
-                        }
-                      }}
-                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
-                    >
-                      <Eye size={16} />
-                      View JSON as PDF
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        try {
-                          const doc = new jsPDF();
-                          let yPos = 20;
-                          const pageWidth = doc.internal.pageSize.getWidth();
-                          const margin = 20;
-                          const maxWidth = pageWidth - 2 * margin;
-                          
-                          // Title
-                          doc.setFontSize(16);
-                          doc.setFont('helvetica', 'bold');
-                          doc.text('PDF Download API Response', margin, yPos);
-                          yPos += 15;
-                          
-                          // Status Information
-                          doc.setFontSize(12);
-                          doc.setFont('helvetica', 'bold');
-                          doc.text('Status Information', margin, yPos);
-                          yPos += 8;
-                          
-                          doc.setFontSize(10);
-                          doc.setFont('helvetica', 'normal');
-                          doc.text(`Status Code: ${pdfResponseJson.code || 'N/A'}`, margin, yPos);
-                          yPos += 6;
-                          
-                          if (pdfResponseJson.transactionTimestamp) {
-                            const date = new Date(pdfResponseJson.transactionTimestamp).toLocaleString();
-                            doc.text(`Transaction Timestamp: ${date}`, margin, yPos);
-                            yPos += 6;
-                          }
-                          
-                          if (pdfResponseJson.shippingCompanyName) {
-                            doc.text(`Shipping Company: ${pdfResponseJson.shippingCompanyName.toUpperCase()}`, margin, yPos);
-                            yPos += 10;
-                          }
-                          
-                          // PDF Information
-                          if (pdfResponseJson.data?.bolpdf) {
-                            doc.setFontSize(12);
-                            doc.setFont('helvetica', 'bold');
-                            doc.text('PDF Information', margin, yPos);
-                            yPos += 8;
-                            
-                            doc.setFontSize(10);
-                            doc.setFont('helvetica', 'normal');
-                            doc.text(`File Name: ${pdfResponseJson.data.bolpdf.fileName || 'N/A'}`, margin, yPos);
-                            yPos += 6;
-                            
-                            if (pdfFile) {
-                              doc.text(`File Size: ${(pdfFile.size / 1024).toFixed(2)} KB`, margin, yPos);
-                              yPos += 6;
-                            }
-                            yPos += 5;
-                          }
-                          
-                          // Error Information (if any)
-                          if (pdfResponseJson.error) {
-                            doc.setFontSize(12);
-                            doc.setFont('helvetica', 'bold');
-                            doc.text('Error Information', margin, yPos);
-                            yPos += 8;
-                            
-                            doc.setFontSize(10);
-                            doc.setFont('helvetica', 'normal');
-                            if (pdfResponseJson.error.errorCode) {
-                              doc.text(`Error Code: ${pdfResponseJson.error.errorCode}`, margin, yPos);
-                              yPos += 6;
-                            }
-                            if (pdfResponseJson.error.message) {
-                              const errorMsg = doc.splitTextToSize(`Error Message: ${pdfResponseJson.error.message}`, maxWidth);
-                              doc.text(errorMsg, margin, yPos);
-                              yPos += errorMsg.length * 6;
-                            }
-                            yPos += 5;
-                          }
-                          
-                          // Full JSON Response
-                          yPos += 5;
-                          doc.setFontSize(12);
-                          doc.setFont('helvetica', 'bold');
-                          doc.text('Full JSON Response', margin, yPos);
-                          yPos += 8;
-                          
-                          doc.setFontSize(8);
-                          doc.setFont('courier', 'normal');
-                          const jsonString = JSON.stringify(pdfResponseJson, null, 2);
-                          const jsonLines = doc.splitTextToSize(jsonString, maxWidth);
-                          
-                          jsonLines.forEach((line: string) => {
-                            if (yPos > doc.internal.pageSize.getHeight() - 20) {
-                              doc.addPage();
-                              yPos = 20;
-                            }
-                            doc.text(line, margin, yPos);
-                            yPos += 5;
-                          });
-                          
-                          // Save PDF
-                          const fileName = `PDF_Download_Response_${new Date().toISOString().split('T')[0]}.pdf`;
-                          doc.save(fileName);
-                        } catch (error) {
-                          console.error('Error generating PDF:', error);
-                          alert('Failed to generate PDF. Please try again.');
-                        }
-                      }}
-                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors text-sm font-medium"
-                    >
-                      <Download size={16} />
-                      Download PDF
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Raw JSON (Collapsible) */}
-              {showPdfResponseJson && (
-                <div className="mt-4">
-                  <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
-                    <p className="text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">Raw JSON Response</p>
-                    <pre className="text-xs text-slate-700 overflow-auto max-h-96 whitespace-pre-wrap break-words font-mono">
-                      {JSON.stringify(pdfResponseJson, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -1948,100 +1495,6 @@ export const BOLForm = ({
             </div>
           )}
         </form>
-
-        {/* PDF Preview Modal - PDF Download Response */}
-        {showJsonPdfViewer && jsonPdfUrl && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4">
-            <div className="relative w-full h-full max-w-6xl max-h-[90vh] bg-white rounded-lg shadow-xl flex flex-col">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between p-4 border-b border-slate-200">
-                <h3 className="text-lg font-semibold text-slate-900">PDF Download Response - PDF Preview</h3>
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Revoke the object URL when closing the modal
-                    if (jsonPdfUrl) {
-                      URL.revokeObjectURL(jsonPdfUrl);
-                    }
-                    setShowJsonPdfViewer(false);
-                    setJsonPdfUrl(null);
-                  }}
-                  className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                  title="Close"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              
-              {/* PDF Preview */}
-              <div className="flex-1 overflow-hidden">
-                {jsonPdfUrl ? (
-                  <iframe
-                    src={`${jsonPdfUrl}#view=FitH&zoom=page-width&toolbar=1&navpanes=1&scrollbar=1`}
-                    className="w-full h-full border-0"
-                    title="PDF Preview - PDF Download Response"
-                    onError={() => {
-                      if (process.env.NODE_ENV === 'development') {
-                        console.error('Failed to load PDF in iframe');
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-slate-500">Failed to load PDF preview</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* PDF Preview Modal - BOL Response */}
-        {showBolJsonPdfViewer && bolJsonPdfUrl && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4">
-            <div className="relative w-full h-full max-w-6xl max-h-[90vh] bg-white rounded-lg shadow-xl flex flex-col">
-              {/* Modal Header */}
-              <div className="flex items-center justify-between p-4 border-b border-slate-200">
-                <h3 className="text-lg font-semibold text-slate-900">BOL Response - PDF Preview</h3>
-                <button
-                  type="button"
-                  onClick={() => {
-                    // Revoke the object URL when closing the modal
-                    if (bolJsonPdfUrl) {
-                      URL.revokeObjectURL(bolJsonPdfUrl);
-                    }
-                    setShowBolJsonPdfViewer(false);
-                    setBolJsonPdfUrl(null);
-                  }}
-                  className="p-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                  title="Close"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-              
-              {/* PDF Preview */}
-              <div className="flex-1 overflow-hidden">
-                {bolJsonPdfUrl ? (
-                  <iframe
-                    src={`${bolJsonPdfUrl}#view=FitH&zoom=page-width&toolbar=1&navpanes=1&scrollbar=1`}
-                    className="w-full h-full border-0"
-                    title="PDF Preview - BOL Response"
-                    onError={() => {
-                      if (process.env.NODE_ENV === 'development') {
-                        console.error('Failed to load PDF in iframe');
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-slate-500">Failed to load PDF preview</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
