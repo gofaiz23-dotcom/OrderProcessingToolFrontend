@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { usePathname } from 'next/navigation';
 import { X, Loader2, Eye, EyeOff } from 'lucide-react';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { buildApiUrl } from '../../../../BaseUrl';
@@ -13,12 +14,13 @@ type LogisticsAuthModalProps = {
 };
 
 export const LogisticsAuthModal = ({ isOpen, onClose, carrier }: LogisticsAuthModalProps) => {
+  const pathname = usePathname();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const { setToken, getToken } = useLogisticsStore();
+  const { setToken, getToken, setCredentials } = useLogisticsStore();
 
   // Reset form when modal opens/closes
   useEffect(() => {
@@ -106,6 +108,10 @@ export const LogisticsAuthModal = ({ isOpen, onClose, carrier }: LogisticsAuthMo
         const normalizedCarrier = carrier.toLowerCase();
         setToken(normalizedCarrier, token, shippingCompanyName);
         
+        // Store credentials in sessionStorage for auto-refresh
+        const { setCredentials } = useLogisticsStore.getState();
+        setCredentials(normalizedCarrier, username, password);
+        
         // Verify token is stored in Zustand
         const storedToken = getToken(normalizedCarrier);
         if (storedToken) {
@@ -118,7 +124,8 @@ export const LogisticsAuthModal = ({ isOpen, onClose, carrier }: LogisticsAuthMo
         // Close modal first
         onClose();
         
-        // Navigate to the correct carrier page based on carrier name
+        // Only navigate if we're not already on the correct page
+        // This prevents losing form data when user is already on the rate quote page
         if (carrier) {
           // Map carrier names to route paths
           const carrierRoutes: Record<string, string> = {
@@ -129,22 +136,30 @@ export const LogisticsAuthModal = ({ isOpen, onClose, carrier }: LogisticsAuthMo
           
           const normalizedCarrierName = carrier.toLowerCase();
           const routePath = carrierRoutes[normalizedCarrierName] || normalizedCarrierName;
+          const expectedPath = `/logistics/${routePath}`;
           
-          // Check if there's order information in sessionStorage (from order selection)
-          let logisticsUrl = `/logistics/${routePath}?carrier=${encodeURIComponent(carrier)}`;
-          try {
-            const orderDataStr = sessionStorage.getItem('selectedOrderForLogistics');
-            if (orderDataStr) {
-              const orderData = JSON.parse(orderDataStr);
-              if (orderData.id) {
-                logisticsUrl += `&orderId=${orderData.id}`;
+          // Check if we're already on the correct page
+          const isAlreadyOnPage = pathname?.startsWith(expectedPath);
+          
+          if (!isAlreadyOnPage) {
+            // Only navigate if we're not already on the rate quote page
+            // Check if there's order information in sessionStorage (from order selection)
+            let logisticsUrl = `${expectedPath}?carrier=${encodeURIComponent(carrier)}`;
+            try {
+              const orderDataStr = sessionStorage.getItem('selectedOrderForLogistics');
+              if (orderDataStr) {
+                const orderData = JSON.parse(orderDataStr);
+                if (orderData.id) {
+                  logisticsUrl += `&orderId=${orderData.id}`;
+                }
               }
+            } catch (err) {
+              // Ignore errors parsing sessionStorage
+              console.warn('Could not parse order data from sessionStorage:', err);
             }
-          } catch (err) {
-            // Ignore errors parsing sessionStorage
-            console.warn('Could not parse order data from sessionStorage:', err);
+            window.location.href = logisticsUrl;
           }
-          window.location.href = logisticsUrl;
+          // If already on the page, just close the modal - form data will be restored via onClose callback
         }
       } else {
         throw new Error('Invalid response: token or shipping company name missing');

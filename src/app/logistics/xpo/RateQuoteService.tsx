@@ -21,6 +21,7 @@ import { getLogisticsShippedOrderById, getAllLogisticsShippedOrders } from '@/ap
 import { deleteOrder } from '@/app/api/OrderApi';
 import { ToastContainer } from '@/app/components/shared/Toast';
 import { XPO_SHIPPER_ADDRESS_BOOK, XPO_CONSIGNEE_ADDRESS_BOOK, US_STATES_OPTIONS, FREIGHT_CLASS_OPTIONS, ADDITIONAL_COMMODITY_OPTIONS, EXCESSIVE_LENGTH_OPTIONS, XPO_DEFAULT_DELIVERY_SERVICES, XPO_RATE_QUOTE_DEFAULTS, getAllCommodityOptions, addCustomCommodity, getCustomCommodityByValue, updateCustomCommodity, type CustomCommodity } from '@/Shared/constant';
+import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 
 type XPORateQuoteServiceProps = {
   carrier: string;
@@ -2063,65 +2064,58 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
               <h2 className="text-lg font-bold text-slate-900 mb-4">From (Pickup Location)</h2>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-slate-900">
-                    Pickup Location <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={pickupLocation}
-                      onChange={(e) => {
-                        setPickupLocation(e.target.value);
-                        if (e.target.value) {
-                          const address = XPO_SHIPPER_ADDRESS_BOOK.find(opt => opt.value === e.target.value);
-                          if (address) {
-                            setPickupCompany(address.company || address.label.split(' - ')[0]);
-                            setPickupStreetAddress(address.streetAddress || '');
-                            setPickupAddressLine2(address.addressLine2 || '');
-                            setPickupCity(address.city);
-                            setPickupState(address.state);
-                            setPickupPostalCode(address.zip);
-                            setPickupCountry(address.country || 'United States');
-                            setPickupPhone(address.phone || '');
-                            setPickupExtension(address.extension || '');
-                            setPickupContactName(address.contactName || '');
-                          }
-                        }
-                      }}
-                      className="w-full px-4 py-3 pl-10 pr-10 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none cursor-pointer hover:border-slate-400 transition-colors"
-                      required
-                    >
-                      <option value="" disabled style={{ color: '#94a3b8', backgroundColor: '#f8fafc' }}>
-                        Select Pickup Location
-                      </option>
-                      {XPO_SHIPPER_ADDRESS_BOOK.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <MapPin className="w-5 h-5 text-slate-400" />
-                    </div>
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                      <ChevronDown className="w-5 h-5 text-slate-400" />
-                    </div>
-                    {pickupLocation && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPickupLocation('');
-                          setPickupCompany('');
-                          setPickupCity('');
-                          setPickupState('');
-                          setPickupPostalCode('');
-                        }}
-                        className="absolute right-10 top-1/2 -translate-y-1/2 hover:bg-slate-100 rounded p-1 transition-colors z-10"
-                      >
-                        <X size={16} className="text-slate-400 hover:text-slate-600" />
-                      </button>
-                    )}
-                  </div>
+                  <SearchableDropdown
+                    options={XPO_SHIPPER_ADDRESS_BOOK.map(addr => ({
+                      value: addr.value,
+                      label: addr.label,
+                      company: addr.company,
+                      streetAddress: addr.streetAddress,
+                      addressLine2: addr.addressLine2,
+                      city: addr.city,
+                      state: addr.state,
+                      zip: addr.zip,
+                      country: addr.country,
+                      phone: addr.phone,
+                      extension: addr.extension,
+                      contactName: addr.contactName,
+                    })) as SearchableDropdownOption[]}
+                    value={pickupLocation}
+                    onChange={(value) => {
+                      setPickupLocation(value);
+                      if (!value) {
+                        // Clear fields when selection is cleared
+                        setPickupCompany('');
+                        setPickupStreetAddress('');
+                        setPickupAddressLine2('');
+                        setPickupCity('');
+                        setPickupState('');
+                        setPickupPostalCode('');
+                        setPickupCountry('United States');
+                        setPickupPhone('');
+                        setPickupExtension('');
+                        setPickupContactName('');
+                      }
+                    }}
+                    onSelect={(option) => {
+                      const address = XPO_SHIPPER_ADDRESS_BOOK.find(opt => opt.value === option.value);
+                      if (address) {
+                        setPickupCompany(address.company || address.label.split(' - ')[0]);
+                        setPickupStreetAddress(address.streetAddress || '');
+                        setPickupAddressLine2(address.addressLine2 || '');
+                        setPickupCity(address.city);
+                        setPickupState(address.state);
+                        setPickupPostalCode(address.zip);
+                        setPickupCountry(address.country || 'United States');
+                        setPickupPhone(address.phone || '');
+                        setPickupExtension(address.extension || '');
+                        setPickupContactName(address.contactName || '');
+                      }
+                    }}
+                    label="Pickup Location"
+                    placeholder="Search or select pickup location..."
+                    required
+                    filterKeys={['label', 'company', 'city', 'state', 'zip']}
+                  />
                 </div>
                 <button
                   type="button"

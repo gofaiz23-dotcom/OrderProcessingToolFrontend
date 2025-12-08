@@ -15,6 +15,22 @@ export const MARKETPLACES = [
 
 export type Marketplace = typeof MARKETPLACES[number];
 
+// Marketplace abbreviation mapping (2 letters)
+export const MARKETPLACE_ABBREVIATIONS: Record<string, string> = {
+  'Walmart': 'WM',
+  'Amazon': 'AZ',
+  'eBay': 'EB',
+  'Shopify': 'SF',
+  'Overstock': 'OS',
+  'Wayfair': 'WF',
+  'Sears': 'SR',
+  'Target': 'TG',
+  'HomeDepot': 'HD',
+  'NewEgg': 'NE',
+  'Rakuten': 'RT',
+  'GigaB2B': 'GB',
+} as const;
+
 export const LOGISTICS_CARRIERS = [
   // 'FedEx',
   'XPO',
@@ -27,6 +43,8 @@ export type LogisticsCarrier = typeof LOGISTICS_CARRIERS[number];
 // Default values for Rate Quote form
 export const ESTES_RATE_QUOTE_DEFAULTS = {
   requestorEmail: "gofaiz23@gmail.com",
+  requestorName: "Decora2z exit crownmark NC",
+  requestorPhone: "3368046700",
   role: "Third-Party"
 };
 
@@ -42,6 +60,20 @@ export const ESTES_BILL_TO_DEFAULTS = {
   zipCode: "91789",
   country: "USA",
   phone: "(626) 715-0682"
+};
+
+// Default values for Shipper Information in Bill of Lading
+export const ESTES_SHIPPER_DEFAULTS = {
+  companyName: "Decora2z exit crownmark NC",
+  email: "gofaiz23@gmail.com",
+  contactName: "Lynn/Andrea",
+  address1: "728 gallimore Dairy Rd",
+  address2: "",
+  zipCode: "27265",
+  city: "High Point",
+  state: "NC",
+  country: "USA",
+  phone: "3368046700"
 };
 
 
@@ -167,7 +199,7 @@ export const ESTES_BOL_AUTOFILL_DATA = {
     "email": "SHAMYASLI@YAHOO.COM"
   },
   "accessorials": {
-    "liftGateService": true,
+    "liftGateService": false,
     "residentialDelivery": true,
     "appointmentRequest": false
   },
@@ -430,6 +462,20 @@ export const ESTES_SHIPPER_ADDRESSES: ShipperAddressOption[] = [
     email: 'gofaiz23@gmail.com',
     account: '0216496',
   },
+  {
+    value: 'Decora2z exit crownmark NC',
+    label: 'Decora2z exit crownmark NC - NC - 728 gallimore Dairy Rd, High Point, NC 27265',
+    name: 'Decora2z exit crownmark NC',
+    address1: '728 gallimore Dairy Rd',
+    address2: '',
+    city: 'High Point',
+    state: 'NC',
+    zip: '27265',
+    country: 'USA',
+    contactName: 'Lynn/Andrea',
+    phone: '3368046700',
+    email: 'gofaiz23@gmail.com',
+  },
 ] as const;
 
 // Default values for Rate Quote form
@@ -440,7 +486,7 @@ export const ESTES_RATE_QUOTE_FORM_DEFAULTS = {
   
   // Accessorials defaults
   defaultLiftGateService: true,
-  defaultResidentialDelivery: false,
+  defaultResidentialDelivery: true,
   defaultAppointmentRequest: false,
   
   // Handling Unit defaults

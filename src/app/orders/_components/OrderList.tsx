@@ -66,7 +66,7 @@ export const OrderList = ({
   onBulkDelete,
 }: OrderListProps) => {
   const router = useRouter();
-  const { getToken } = useLogisticsStore();
+  const { getToken, isTokenExpired, isSessionActive } = useLogisticsStore();
   // Use prop searchQuery if provided, otherwise use local state
   const searchQuery = searchQueryProp !== undefined ? searchQueryProp : '';
   const setSearchQuery = onSearchChange || (() => {});
@@ -439,11 +439,15 @@ export const OrderList = ({
                               jsonb: selectedOrder.jsonb,
                             }));
                             
-                            // Check if logistics token exists for this carrier
-                            const logisticsToken = getToken(carrier);
+                            // Check if logistics token exists and is valid for this carrier
+                            const normalizedCarrier = carrier.toLowerCase();
+                            const logisticsToken = getToken(normalizedCarrier);
+                            const tokenExpired = logisticsToken ? isTokenExpired(normalizedCarrier, 10) : true;
+                            const sessionActive = isSessionActive();
                             
-                            if (!logisticsToken) {
-                              // Token doesn't exist, show logistics login popup and preserve the action
+                            // If no token, or token expired and session not active, show login popup
+                            if (!logisticsToken || (tokenExpired && !sessionActive)) {
+                              // Token doesn't exist or expired with no active session, show logistics login popup and preserve the action
                               setPendingLogisticsAction({ carrier, order: selectedOrder });
                               setSelectedCarrier(carrier);
                               setShowLogisticsAuthModal(true);

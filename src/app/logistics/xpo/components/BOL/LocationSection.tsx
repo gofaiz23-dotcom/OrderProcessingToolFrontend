@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { XPO_BOL_COUNTRY_OPTIONS } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
 import { US_STATES } from './constants';
 import { formatPhoneInput, handlePhoneInputChange, handlePhoneInputFocus, handlePhoneInputBlur } from '../../utils/phoneFormatter';
+import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 
 type LocationData = {
   searchValue: string;
@@ -181,80 +182,79 @@ export const LocationSection = ({
     }
   };
 
+  // Convert addressBookOptions to SearchableDropdown format
+  const searchableOptions: SearchableDropdownOption[] = addressBookOptions
+    ? addressBookOptions.map(opt => ({
+        value: opt.value,
+        label: opt.label,
+        ...opt, // Spread other properties for filtering
+      }))
+    : [];
+
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
       
       {/* Location Search */}
       <div className="space-y-2">
-        <label className="block text-sm font-semibold text-slate-900">
-          {title} {required && <span className="text-red-500">*</span>}
-        </label>
         {addressBookOptions && addressBookOptions.length > 0 ? (
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 z-10" size={18} />
-            <select
-              value={data.searchValue || ''}
-              onChange={(e) => {
-                handleAddressBookSelect(e.target.value);
-              }}
-              className={`w-full pl-10 pr-10 px-4 py-2 border bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 appearance-none ${
-                required && !data.searchValue
-                  ? 'border-red-500 focus:ring-red-500'
-                  : 'border-slate-300 focus:ring-blue-500'
-              }`}
-              required={required}
-            >
-              <option value="">Select {title}</option>
-              {addressBookOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
-            {data.searchValue && (
-              <button
-                type="button"
-                onClick={clearSearch}
-                className="absolute right-10 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 z-10"
-              >
-                <X size={18} />
-              </button>
-            )}
-          </div>
+          <SearchableDropdown
+            options={searchableOptions}
+            value={data.searchValue || ''}
+            onChange={(value) => {
+              // onChange is called when value changes, but we handle selection via onSelect
+              // If value is cleared, clear the search
+              if (!value || value === '') {
+                clearSearch();
+              }
+            }}
+            onSelect={(option) => {
+              if (option) {
+                handleAddressBookSelect(option.value);
+              }
+            }}
+            label={title}
+            placeholder={`Select ${title}`}
+            required={required}
+            filterKeys={['label', 'company', 'city', 'state', 'zip']}
+          />
         ) : (
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input
-              type="text"
-              value={data.searchValue}
-              onChange={(e) => handleFieldChange('searchValue', e.target.value)}
-              placeholder={`Search ${title}`}
-              className={`w-full pl-10 pr-10 px-4 py-2 border bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 ${
-                required && !data.searchValue
-                  ? 'border-red-500 focus:ring-red-500'
-                  : 'border-slate-300 focus:ring-blue-500'
-              }`}
-              required={required}
-            />
-            {data.searchValue && (
-              <button
-                type="button"
-                onClick={clearSearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-              >
-                <X size={18} />
-              </button>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-slate-900">
+              {title} {required && <span className="text-red-500">*</span>}
+            </label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+              <input
+                type="text"
+                value={data.searchValue}
+                onChange={(e) => handleFieldChange('searchValue', e.target.value)}
+                placeholder={`Search ${title}`}
+                className={`w-full pl-10 pr-10 px-4 py-2 border bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 ${
+                  required && !data.searchValue
+                    ? 'border-red-500 focus:ring-red-500'
+                    : 'border-slate-300 focus:ring-blue-500'
+                }`}
+                required={required}
+              />
+              {data.searchValue && (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X size={18} />
+                </button>
+              )}
+            </div>
+            {required && !data.searchValue && (
+              <div className="flex items-center gap-1 text-red-500 text-xs">
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+                <span>This field is required</span>
+              </div>
             )}
-          </div>
-        )}
-        {required && !data.searchValue && (
-          <div className="flex items-center gap-1 text-red-500 text-xs">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            <span>This field is required</span>
           </div>
         )}
       </div>
