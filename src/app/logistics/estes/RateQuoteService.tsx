@@ -2,13 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Loader2, Calendar, Info, X, Plus, Save, HelpCircle, CheckCircle2, Clock, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { Loader2, Info, X, Plus, Save, HelpCircle, CheckCircle2, Clock, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { buildApiUrl } from '../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
 import { buildEstesRequestBody } from './utils/requestBuilder';
 import { EstesQuoteCard } from './components/EstesQuoteCard';
 import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
+import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 import { ESTES_AUTOFILL_DATA, ESTES_ACCOUNTS, ESTES_RATE_QUOTE_DEFAULTS, ESTES_ADDRESS_BOOK, ESTES_RATE_QUOTE_FORM_DEFAULTS } from '@/Shared/constant';
 import { StepIndicator } from './components/StepIndicator';
 import { BillOfLanding } from './BillOfLanding';
@@ -52,7 +53,7 @@ type RateQuoteServiceProps = {
 
 export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderData }: RateQuoteServiceProps) => {
   const searchParams = useSearchParams();
-  const { getToken } = useLogisticsStore();
+  const { getToken, isTokenExpired, refreshToken, isSessionActive } = useLogisticsStore();
   const [storedToken, setStoredToken] = useState<string>('');
   const [isMounted, setIsMounted] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
@@ -77,6 +78,228 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     setStoredToken(tokenFromStore);
   }, [carrier, getToken]);
 
+  // Helper function to save form data to localStorage (more reliable than sessionStorage in normal Chrome)
+  const saveFormDataToStorage = () => {
+    try {
+      const formData = {
+        myAccount,
+        role,
+        term,
+        shipDate,
+        shipTime,
+        requestorName,
+        requestorPhone,
+        requestorEmail,
+        originAddressBook,
+        originAddress1,
+        originAddress2,
+        originZipCode,
+        originCity,
+        originState,
+        originCountry,
+        originAddressSearch,
+        destinationAddressBook,
+        destinationAddress1,
+        destinationAddress2,
+        destinationZipCode,
+        destinationCity,
+        destinationState,
+        destinationCountry,
+        destinationAddressSearch,
+        liftGateService,
+        residentialDelivery,
+        appointmentRequest,
+        selectedAccessorials,
+        handlingUnits,
+        linearFeet,
+        fullValueCoverage,
+        fullValueCoverageAmount,
+        warehouseDistributionCenter,
+        savedAt: Date.now(), // Add timestamp to track when data was saved
+      };
+      
+      // Try localStorage first (more persistent in normal Chrome)
+      try {
+        localStorage.setItem('estesRateQuoteFormData', JSON.stringify(formData));
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Form data saved to localStorage', formData);
+        }
+      } catch (localStorageError) {
+        // Fallback to sessionStorage if localStorage fails (e.g., quota exceeded)
+        sessionStorage.setItem('estesRateQuoteFormData', JSON.stringify(formData));
+        if (process.env.NODE_ENV === 'development') {
+          console.log('⚠️ localStorage failed, saved to sessionStorage instead', localStorageError);
+        }
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to save form data:', error);
+      }
+    }
+  };
+
+  // Helper function to restore form data from localStorage (with sessionStorage fallback)
+  const restoreFormDataFromStorage = () => {
+    try {
+      // Try localStorage first, then fallback to sessionStorage
+      let savedData = localStorage.getItem('estesRateQuoteFormData');
+      let storageType = 'localStorage';
+      
+      if (!savedData) {
+        savedData = sessionStorage.getItem('estesRateQuoteFormData');
+        storageType = 'sessionStorage';
+      }
+      
+      if (savedData) {
+        const formData = JSON.parse(savedData);
+        
+        // Check if data is too old (more than 1 hour) - optional cleanup
+        if (formData.savedAt && Date.now() - formData.savedAt > 3600000) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('⚠️ Saved form data is older than 1 hour, clearing it');
+          }
+          localStorage.removeItem('estesRateQuoteFormData');
+          sessionStorage.removeItem('estesRateQuoteFormData');
+          return;
+        }
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔄 Restoring form data from ${storageType}`, formData);
+        }
+        
+        setMyAccount(formData.myAccount || ESTES_ACCOUNTS[0]?.accountNumber || '');
+        setRole(formData.role || ESTES_RATE_QUOTE_DEFAULTS.role);
+        setTerm(formData.term || 'Prepaid');
+        setShipDate(formData.shipDate || getTodayDate());
+        setShipTime(formData.shipTime || ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultShipTime);
+        setRequestorName(formData.requestorName || ESTES_RATE_QUOTE_DEFAULTS.requestorName);
+        setRequestorPhone(formData.requestorPhone || ESTES_RATE_QUOTE_DEFAULTS.requestorPhone);
+        setRequestorEmail(formData.requestorEmail || ESTES_RATE_QUOTE_DEFAULTS.requestorEmail);
+        setOriginAddressBook(formData.originAddressBook || '');
+        setOriginAddress1(formData.originAddress1 || '');
+        setOriginAddress2(formData.originAddress2 || '');
+        setOriginZipCode(formData.originZipCode || '');
+        setOriginCity(formData.originCity || '');
+        setOriginState(formData.originState || '');
+        setOriginCountry(formData.originCountry || '');
+        setOriginAddressSearch(formData.originAddressSearch || '');
+        setDestinationAddressBook(formData.destinationAddressBook || '');
+        setDestinationAddress1(formData.destinationAddress1 || '');
+        setDestinationAddress2(formData.destinationAddress2 || '');
+        setDestinationZipCode(formData.destinationZipCode || '');
+        setDestinationCity(formData.destinationCity || '');
+        setDestinationState(formData.destinationState || '');
+        setDestinationCountry(formData.destinationCountry || '');
+        setDestinationAddressSearch(formData.destinationAddressSearch || '');
+        setLiftGateService(formData.liftGateService ?? ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultLiftGateService);
+        setResidentialDelivery(formData.residentialDelivery ?? ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultResidentialDelivery);
+        setAppointmentRequest(formData.appointmentRequest ?? ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultAppointmentRequest);
+        setSelectedAccessorials(formData.selectedAccessorials || []);
+        if (formData.handlingUnits && Array.isArray(formData.handlingUnits)) {
+          setHandlingUnits(formData.handlingUnits);
+        }
+        setLinearFeet(formData.linearFeet || '');
+        setFullValueCoverage(formData.fullValueCoverage || false);
+        setFullValueCoverageAmount(formData.fullValueCoverageAmount || '');
+        setWarehouseDistributionCenter(formData.warehouseDistributionCenter || '');
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`✅ Form data restored successfully from ${storageType}`);
+        }
+        
+        // Clear saved data after restoring (from both storages to be safe)
+        localStorage.removeItem('estesRateQuoteFormData');
+        sessionStorage.removeItem('estesRateQuoteFormData');
+      } else {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('ℹ️ No saved form data found in localStorage or sessionStorage');
+        }
+      }
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Failed to restore form data:', error);
+      }
+      // Clear potentially corrupted data
+      try {
+        localStorage.removeItem('estesRateQuoteFormData');
+        sessionStorage.removeItem('estesRateQuoteFormData');
+      } catch (clearError) {
+        // Ignore clear errors
+      }
+    }
+  };
+
+  // Restore form data on mount if available
+  useEffect(() => {
+    if (isMounted) {
+      // Small delay to ensure component is fully mounted
+      const timer = setTimeout(() => {
+        restoreFormDataFromStorage();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMounted]);
+  
+  // Also restore when auth modal closes (in case login happened without navigation)
+  useEffect(() => {
+    if (!isAuthModalOpen && isMounted) {
+      // Check if we have a token now (user just logged in)
+      const normalizedCarrier = carrier.toLowerCase();
+      const currentToken = getToken(normalizedCarrier);
+      if (currentToken) {
+        // Small delay to ensure state is updated
+        const timer = setTimeout(() => {
+          restoreFormDataFromStorage();
+        }, 200);
+        return () => clearTimeout(timer);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthModalOpen, isMounted]);
+
+  // Check token expiration and auto-refresh if session is active
+  useEffect(() => {
+    const checkTokenAndRefresh = async () => {
+      const normalizedCarrier = carrier.toLowerCase();
+      const currentToken = getToken(normalizedCarrier) || token;
+      
+      // If no token and session is not active (browser was closed), show login
+      if (!currentToken && !isSessionActive()) {
+        setIsAuthModalOpen(true);
+        return;
+      }
+      
+      // If token exists but expired and session is active, try to refresh
+      if (currentToken && isTokenExpired(normalizedCarrier, 10) && isSessionActive()) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`Token expired for ${normalizedCarrier}, attempting auto-refresh...`);
+        }
+        const refreshed = await refreshToken(normalizedCarrier);
+        if (refreshed) {
+          // Token refreshed successfully, update stored token
+          const newToken = getToken(normalizedCarrier);
+          if (newToken) {
+            setStoredToken(newToken);
+          }
+        } else {
+          // Refresh failed, save form data and show login modal
+          saveFormDataToStorage();
+          setIsAuthModalOpen(true);
+        }
+      } else if (!currentToken && isSessionActive()) {
+        // No token but session is active - save form data and show login
+        saveFormDataToStorage();
+        setIsAuthModalOpen(true);
+      }
+    };
+    
+    if (isMounted) {
+      checkTokenAndRefresh();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMounted, carrier, isSessionActive, isTokenExpired, refreshToken]);
+
   // Get today's date in YYYY-MM-DD format
   const getTodayDate = () => {
     const today = new Date();
@@ -94,8 +317,8 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   const [shipTime, setShipTime] = useState<string>(ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultShipTime); // 11AM
   
   // Requestor Information
-  const [requestorName, setRequestorName] = useState('');
-  const [requestorPhone, setRequestorPhone] = useState('');
+  const [requestorName, setRequestorName] = useState(ESTES_RATE_QUOTE_DEFAULTS.requestorName);
+  const [requestorPhone, setRequestorPhone] = useState(ESTES_RATE_QUOTE_DEFAULTS.requestorPhone);
   const [requestorEmail, setRequestorEmail] = useState<string>(ESTES_RATE_QUOTE_DEFAULTS.requestorEmail);
 
   // Address book data from constants
@@ -111,6 +334,10 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   const [originCountry, setOriginCountry] = useState('');
   const [customOriginCountries, setCustomOriginCountries] = useState<string[]>([]);
   const [originLoadingZip, setOriginLoadingZip] = useState(false);
+  
+  // Searchable Address Book state for Origin
+  const [originAddressSearch, setOriginAddressSearch] = useState('');
+  const [showOriginAddressDropdown, setShowOriginAddressDropdown] = useState(false);
 
   // Routing Information - Destination (empty by default, user selects or enters)
   const [destinationAddressBook, setDestinationAddressBook] = useState<string>('');
@@ -122,6 +349,10 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   const [destinationCountry, setDestinationCountry] = useState('');
   const [customDestinationCountries, setCustomDestinationCountries] = useState<string[]>([]);
   const [destinationLoadingZip, setDestinationLoadingZip] = useState(false);
+  
+  // Searchable Address Book state for Destination
+  const [destinationAddressSearch, setDestinationAddressSearch] = useState('');
+  const [showDestinationAddressDropdown, setShowDestinationAddressDropdown] = useState(false);
 
   // ZIP code lookup function using a free API
   const lookupZipCode = async (zipCode: string, type: 'origin' | 'destination') => {
@@ -183,9 +414,16 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         setOriginState(address.state);
         setOriginZipCode(address.zip);
         setOriginCountry(address.country);
+        // Set search input to the selected label
+        setOriginAddressSearch(address.label);
       }
+    } else {
+      // Clear search when clearing selection
+      setOriginAddressSearch('');
     }
+    setShowOriginAddressDropdown(false);
   };
+
 
   // Handle address book selection for destination
   const handleDestinationAddressBookChange = (value: string) => {
@@ -197,9 +435,51 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         setDestinationState(address.state);
         setDestinationZipCode(address.zip);
         setDestinationCountry(address.country);
+        // Set search input to the selected label
+        setDestinationAddressSearch(address.label);
+      }
+    } else {
+      // Clear search when clearing selection
+      setDestinationAddressSearch('');
+    }
+    setShowDestinationAddressDropdown(false);
+  };
+
+  // Filter addresses based on search for Destination
+  const filteredDestinationAddresses = addressBookOptions.filter((address) =>
+    address.label.toLowerCase().includes(destinationAddressSearch.toLowerCase()) ||
+    address.city.toLowerCase().includes(destinationAddressSearch.toLowerCase()) ||
+    address.state.toLowerCase().includes(destinationAddressSearch.toLowerCase()) ||
+    address.zip.includes(destinationAddressSearch)
+  );
+
+  // Handle click outside to close dropdown for Destination
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('[data-destination-address-book-dropdown]')) {
+        setShowDestinationAddressDropdown(false);
+      }
+    };
+
+    if (showDestinationAddressDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showDestinationAddressDropdown]);
+
+  // Initialize search input with selected address label if address is already selected for Destination
+  useEffect(() => {
+    if (destinationAddressBook && !destinationAddressSearch) {
+      const address = addressBookOptions.find(opt => opt.value === destinationAddressBook);
+      if (address) {
+        setDestinationAddressSearch(address.label);
       }
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [destinationAddressBook]);
 
   // Handle ZIP code change with auto-lookup - using useEffect for debouncing
   useEffect(() => {
@@ -226,9 +506,16 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   const [liftGateService, setLiftGateService] = useState<boolean>(ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultLiftGateService);
   const [residentialDelivery, setResidentialDelivery] = useState<boolean>(ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultResidentialDelivery);
   const [appointmentRequest, setAppointmentRequest] = useState<boolean>(ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultAppointmentRequest);
-  const [selectedAccessorials, setSelectedAccessorials] = useState<string[]>(
-    ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultLiftGateService ? ['Lift-Gate Service (Delivery)'] : []
-  );
+  const [selectedAccessorials, setSelectedAccessorials] = useState<string[]>(() => {
+    const accessorials: string[] = [];
+    if (ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultLiftGateService) {
+      accessorials.push('Lift-Gate Service (Delivery)');
+    }
+    if (ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultResidentialDelivery) {
+      accessorials.push('Residential Delivery');
+    }
+    return accessorials;
+  });
 
   // Commodities (with default handling unit)
   const defaultHandlingUnit: HandlingUnit = {
@@ -960,10 +1247,36 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     // Check if token exists
     // Normalize carrier name to match how it's stored in Zustand (lowercase)
     const normalizedCarrier = carrier.toLowerCase();
-    const currentToken = getToken(normalizedCarrier) || storedToken;
+    let currentToken = getToken(normalizedCarrier) || storedToken;
+    
+    // If no token or token expired, try to refresh if session is active
+    if (!currentToken || isTokenExpired(normalizedCarrier, 10)) {
+      if (isSessionActive()) {
+        // Session is active, try to refresh token automatically
+        const refreshed = await refreshToken(normalizedCarrier);
+        if (refreshed) {
+          const refreshedToken = getToken(normalizedCarrier);
+          if (refreshedToken) {
+            currentToken = refreshedToken;
+            setStoredToken(refreshedToken);
+          }
+        } else {
+          // Refresh failed, save form data and show login modal
+          saveFormDataToStorage();
+          setIsAuthModalOpen(true);
+          return;
+        }
+      } else {
+        // No token and session not active (browser was closed), save form data and show login modal
+        saveFormDataToStorage();
+        setIsAuthModalOpen(true);
+        return;
+      }
+    }
+    
     if (!currentToken) {
-      // No token, show login modal
-      // IMPORTANT: Form data is preserved - all state variables remain unchanged
+      // Still no token after refresh attempt, save form data and show login modal
+      saveFormDataToStorage();
       setIsAuthModalOpen(true);
       return;
     }
@@ -1033,8 +1346,8 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       if (!res.ok) {
         // Check if token is expired (401 Unauthorized)
         if (res.status === 401) {
-          // Token expired, show login modal
-          // IMPORTANT: Form data is preserved - all state variables remain unchanged
+          // Token expired, save form data and show login modal
+          saveFormDataToStorage();
           setIsAuthModalOpen(true);
           setError(new Error('Your session has expired. Please login again.'));
           setLoading(false); // Reset loading state since we're not proceeding
@@ -1097,7 +1410,8 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         err.message.includes('expired') ||
         err.message.includes('invalid token')
       )) {
-        // IMPORTANT: Form data is preserved - all state variables remain unchanged
+        // Token error, save form data and show login modal
+        saveFormDataToStorage();
         setIsAuthModalOpen(true);
       }
       setError(err);
@@ -1364,21 +1678,19 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
               <h3 className="text-base sm:text-lg font-semibold text-slate-900 mb-3 sm:mb-4">Account Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-semibold text-slate-900">
-                My Accounts <span className="text-red-500">*</span>
-              </label>
-              <select
+              <SearchableDropdown
+                options={ESTES_ACCOUNTS.map(account => ({
+                  value: account.accountNumber,
+                  label: `${account.accountNumber} - ${account.type} - ${account.companyName} - ${account.address}`,
+                })) as SearchableDropdownOption[]}
                 value={myAccount}
-                onChange={(e) => setMyAccount(e.target.value)}
-                className="w-full px-4 py-3 border border-blue-500 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="">Select an account</option>
-                {ESTES_ACCOUNTS.map((account) => (
-                  <option key={account.accountNumber} value={account.accountNumber}>
-                    {account.accountNumber} - {account.type} - {account.companyName} - {account.address}
-                  </option>
-                ))}
-              </select>
+                onChange={setMyAccount}
+                label="My Accounts"
+                placeholder="Search or select account..."
+                required
+                filterKeys={['label', 'value']}
+                className="[&_input]:border-blue-500"
+              />
             </div>
 
             <div className="space-y-2">
@@ -1437,9 +1749,8 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                   type="date"
                   value={shipDate}
                   onChange={(e) => setShipDate(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 pr-10"
+                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
-                <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
               </div>
             </div>
 
@@ -1500,22 +1811,24 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
             <div className="space-y-3 sm:space-y-4">
               <h3 className="text-base sm:text-lg font-semibold text-slate-900">Origin</h3>
               <div className="space-y-3">
-                {/* Address Book Dropdown */}
-                <div className="space-y-1">
-                  <label className="block text-sm font-semibold text-slate-900">Address Book (Optional)</label>
-                  <select
-                    value={originAddressBook}
-                    onChange={(e) => handleOriginAddressBookChange(e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select Address</option>
-                    {addressBookOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* Address Book Dropdown - Searchable */}
+                <SearchableDropdown
+                  options={addressBookOptions as SearchableDropdownOption[]}
+                  value={originAddressBook}
+                  onChange={handleOriginAddressBookChange}
+                  label="Address Book (Optional)"
+                  placeholder="Search or select address..."
+                  filterKeys={['label', 'city', 'state', 'zip']}
+                  onSelect={(option) => {
+                    const address = addressBookOptions.find(opt => opt.value === option.value);
+                    if (address) {
+                      setOriginCity(address.city);
+                      setOriginState(address.state);
+                      setOriginZipCode(address.zip);
+                      setOriginCountry(address.country);
+                    }
+                  }}
+                />
 
                 {/* Separator with "or" */}
                 <div className="relative py-2">
@@ -1621,22 +1934,24 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
             <div className="space-y-3 sm:space-y-4">
               <h3 className="text-base sm:text-lg font-semibold text-slate-900">Destination</h3>
               <div className="space-y-3">
-                {/* Address Book Dropdown */}
-                <div className="space-y-1">
-                  <label className="block text-sm font-semibold text-slate-900">Address Book (Optional)</label>
-                  <select
-                    value={destinationAddressBook}
-                    onChange={(e) => handleDestinationAddressBookChange(e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select Address</option>
-                    {addressBookOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {/* Address Book Dropdown - Searchable */}
+                <SearchableDropdown
+                  options={addressBookOptions as SearchableDropdownOption[]}
+                  value={destinationAddressBook}
+                  onChange={handleDestinationAddressBookChange}
+                  label="Address Book (Optional)"
+                  placeholder="Search or select address..."
+                  filterKeys={['label', 'city', 'state', 'zip']}
+                  onSelect={(option) => {
+                    const address = addressBookOptions.find(opt => opt.value === option.value);
+                    if (address) {
+                      setDestinationCity(address.city);
+                      setDestinationState(address.state);
+                      setDestinationZipCode(address.zip);
+                      setDestinationCountry(address.country);
+                    }
+                  }}
+                />
 
                 {/* Separator with "or" */}
                 <div className="relative py-2">
@@ -2098,7 +2413,8 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           if (updatedToken) {
             setStoredToken(updatedToken);
             setError(null);
-            // Form data is preserved - user can now click "GET QUOTE" again
+            // Restore form data after login
+            restoreFormDataFromStorage();
           }
         }}
         carrier={carrier}

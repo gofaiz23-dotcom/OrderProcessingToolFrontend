@@ -1,12 +1,14 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Calendar, Clock, CheckCircle2, Plus, X, HelpCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeft, Calendar, Clock, CheckCircle2, Plus, X, HelpCircle, ChevronDown, ChevronUp, Copy } from 'lucide-react';
 import { buildApiUrl } from '../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
 import { Toast } from '@/app/orders/_components/Toast';
 import { deleteOrder } from '@/app/api/OrderApi';
 import { useRouter } from 'next/navigation';
+import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
+import { ESTES_ACCOUNTS, ESTES_ADDRESS_BOOK } from '@/Shared/constant';
 
 type PickupRequestProps = {
   onPrevious: () => void;
@@ -106,6 +108,9 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
   const [error, setError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const [requestPayload, setRequestPayload] = useState<any>(null);
+  const [responsePayload, setResponsePayload] = useState<any>(null);
+  const [showPayloads, setShowPayloads] = useState(true);
   const [showSections, setShowSections] = useState<Record<string, boolean>>({
     accountInfo: true,
     requesterInfo: true,
@@ -193,6 +198,39 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
       });
     }
   }, [bolFormData, bolResponseData]);
+
+  // Update request payload when form data changes
+  useEffect(() => {
+    try {
+      const normalizedCarrier = carrier.toLowerCase();
+      const requestBody = buildRequestBody();
+      const shippingCompany = normalizedCarrier === 'estes' ? 'estes' : normalizedCarrier;
+      
+      const payload = {
+        shippingCompany: shippingCompany,
+        ...requestBody,
+      };
+      
+      setRequestPayload(payload);
+    } catch (err) {
+      // Ignore errors during payload building (form might be incomplete)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Error building request payload:', err);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    myAccount, role,
+    requesterContactName, requesterEmail, requesterPhone, requesterExtension,
+    pickupCompanyName, pickupAddress1, pickupAddress2, pickupZipCode, pickupCountry,
+    dockContactName, dockEmail, dockPhone, dockExtension, useRequesterInfo,
+    pickupDate, pickupStartTime, pickupEndTime, loadType,
+    shipments,
+    hazmat, protectFromFreezing, food, poison, overlength, liftgate, doNotStack,
+    guaranteedShipment, pickupInstructions,
+    emailRejected, emailAccepted, emailCompleted, additionalContacts,
+    bolFormData
+  ]);
 
   // Preserve scroll position after state updates (for add/remove operations)
   // Only preserve scroll if it was explicitly set (not on initial mount)
@@ -668,6 +706,9 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
         ...requestBody,
       };
       
+      // Store request payload
+      setRequestPayload(payload);
+      
       const apiUrl = buildApiUrl(`/Logistics/create-pickup-request`);
       const res = await fetch(apiUrl, {
         method: 'POST',
@@ -680,6 +721,16 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ message: res.statusText }));
+        
+        // Store error response as response payload
+        setResponsePayload({
+          success: false,
+          error: errorData.message || errorData.error?.message || `Pickup request failed: ${res.statusText}`,
+          data: errorData,
+          timestamp: new Date().toISOString(),
+        });
+        setShowPayloads(true);
+        
         // Log error only in development
         if (process.env.NODE_ENV === 'development') {
           console.error('API Error Response:', errorData);
@@ -689,6 +740,9 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
 
       const data = await res.json();
       
+      // Store request payload
+      setRequestPayload(payload);
+      
       // Create JSON response
       const responseData = {
         success: true,
@@ -696,6 +750,10 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
         data: data,
         timestamp: new Date().toISOString(),
       };
+
+      // Store response payload
+      setResponsePayload(responseData);
+      setShowPayloads(true);
 
       // Delete order if orderId is provided
       if (orderId) {
@@ -796,16 +854,18 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
             {showSections.accountInfo && (
               <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
                 <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-slate-900">
-                    My Accounts <span className="text-red-500">*</span>
-                  </label>
-                  <select
+                  <SearchableDropdown
+                    options={ESTES_ACCOUNTS.map(account => ({
+                      value: account.accountNumber,
+                      label: `${account.accountNumber} - ${account.type} - ${account.companyName} - ${account.address}`,
+                    })) as SearchableDropdownOption[]}
                     value={myAccount}
-                    onChange={(e) => setMyAccount(e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="0216496">0216496 - Regular - Decora2z - 19150 Summit Ridge, Walnut, CA 91789</option>
-                  </select>
+                    onChange={setMyAccount}
+                    label="My Accounts"
+                    placeholder="Search or select account..."
+                    required
+                    filterKeys={['label', 'value']}
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-slate-900">Role</label>
@@ -885,16 +945,14 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
               {showSections.requesterInfo && (
                 <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-slate-900">
-                      Address Book (Optional)
-                    </label>
-                    <select
+                    <SearchableDropdown
+                      options={ESTES_ADDRESS_BOOK as SearchableDropdownOption[]}
                       value={requesterAddressBook}
-                      onChange={(e) => setRequesterAddressBook(e.target.value)}
-                      className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select Address</option>
-                    </select>
+                      onChange={setRequesterAddressBook}
+                      label="Address Book (Optional)"
+                      placeholder="Search or select address..."
+                      filterKeys={['label', 'city', 'state', 'zip']}
+                    />
                     <a href="#" className="text-blue-600 text-sm hover:underline">
                       Manage My Address Book
                     </a>
@@ -971,16 +1029,14 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
               {showSections.pickupLocation && (
                 <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-slate-900">
-                      Address Book (Optional)
-                    </label>
-                    <select
+                    <SearchableDropdown
+                      options={ESTES_ADDRESS_BOOK as SearchableDropdownOption[]}
                       value={pickupAddressBook}
-                      onChange={(e) => setPickupAddressBook(e.target.value)}
-                      className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">Select Address</option>
-                    </select>
+                      onChange={setPickupAddressBook}
+                      label="Address Book (Optional)"
+                      placeholder="Search or select address..."
+                      filterKeys={['label', 'city', 'state', 'zip']}
+                    />
                   </div>
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-slate-900">
@@ -1075,16 +1131,14 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
                   <span className="text-slate-900">Use Requester Information</span>
                 </label>
                 <div className="space-y-2">
-                  <label className="block text-sm font-semibold text-slate-900">
-                    Address Book (Optional)
-                  </label>
-                  <select
+                  <SearchableDropdown
+                    options={ESTES_ADDRESS_BOOK as SearchableDropdownOption[]}
                     value={dockAddressBook}
-                    onChange={(e) => setDockAddressBook(e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select Address</option>
-                  </select>
+                    onChange={setDockAddressBook}
+                    label="Address Book (Optional)"
+                    placeholder="Search or select address..."
+                    filterKeys={['label', 'city', 'state', 'zip']}
+                  />
                 </div>
                 <div className="space-y-2">
                   <label className="block text-sm font-semibold text-slate-900">Contact Name</label>
@@ -1627,6 +1681,121 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
               </div>
             )}
           </div>
+
+          {/* Request Payload Preview - Always visible before submission */}
+          {showPayloads && requestPayload && !responsePayload && (
+            <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+              <div className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 border-b border-slate-200">
+                <h3 className="text-lg font-bold text-slate-900">Request Payload (Live Preview)</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(JSON.stringify(requestPayload, null, 2));
+                    }}
+                    className="px-3 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-2 text-sm"
+                    title="Copy Payload"
+                  >
+                    <Copy size={16} />
+                    Copy
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPayloads(false)}
+                    className="text-slate-600 hover:text-slate-800 flex-shrink-0"
+                  >
+                    <ChevronUp size={20} className="text-slate-600" />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6">
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 overflow-auto max-h-96">
+                  <pre className="text-sm text-slate-800 whitespace-pre-wrap font-mono">
+                    {JSON.stringify(requestPayload, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Collapsed Payload Section */}
+          {!showPayloads && requestPayload && !responsePayload && (
+            <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+              <button
+                type="button"
+                onClick={() => setShowPayloads(true)}
+                className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+              >
+                <h3 className="text-lg font-bold text-slate-900">Request Payload (Click to expand)</h3>
+                <ChevronDown size={20} className="text-slate-600 flex-shrink-0" />
+              </button>
+            </div>
+          )}
+
+          {/* Request & Response Payloads - After submission */}
+          {responsePayload && (
+            <div className="space-y-4">
+              {/* Request Payload */}
+              <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+                <div className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 border-b border-slate-200">
+                  <h3 className="text-lg font-bold text-slate-900">Request Payload</h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(JSON.stringify(requestPayload, null, 2));
+                      }}
+                      className="px-3 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors flex items-center gap-2 text-sm"
+                      title="Copy Payload"
+                    >
+                      <Copy size={16} />
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 overflow-auto max-h-96">
+                    <pre className="text-sm text-slate-800 whitespace-pre-wrap font-mono">
+                      {JSON.stringify(requestPayload, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+
+              {/* Response Payload */}
+              <div className="border border-slate-200 rounded-lg overflow-hidden bg-white">
+                <div className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 border-b border-slate-200">
+                  <h3 className="text-lg font-bold text-slate-900">
+                    Response Payload {responsePayload?.success === false && <span className="text-red-600">(Error)</span>}
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(JSON.stringify(responsePayload, null, 2));
+                      }}
+                      className={`px-3 py-2 text-white rounded-lg transition-colors flex items-center gap-2 text-sm ${
+                        responsePayload?.success === false
+                          ? 'bg-red-600 hover:bg-red-700'
+                          : 'bg-green-600 hover:bg-green-700'
+                      }`}
+                      title="Copy Response"
+                    >
+                      <Copy size={16} />
+                      Copy
+                    </button>
+                  </div>
+                </div>
+                <div className="p-6">
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 overflow-auto max-h-96">
+                    <pre className="text-sm text-slate-800 whitespace-pre-wrap font-mono">
+                      {JSON.stringify(responsePayload, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Navigation Buttons */}
           <div className="flex items-center justify-between pt-6 border-t border-slate-200">

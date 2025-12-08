@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ArrowLeft, ArrowRight, FileText, Info, HelpCircle, Plus, X, Calendar, ChevronDown, ChevronUp, Sparkles, Copy, Check, Download, Printer, Loader2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, FileText, Info, HelpCircle, Plus, X, ChevronDown, ChevronUp, Sparkles, Copy, Check, Download, Printer, Loader2 } from 'lucide-react';
 import { buildApiUrl } from '../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
-import { ESTES_BOL_AUTOFILL_DATA, ESTES_RATE_QUOTE_DEFAULTS, ESTES_BILL_TO_DEFAULTS, ESTES_RATE_QUOTE_FORM_DEFAULTS, ESTES_SHIPPER_ADDRESSES } from '@/Shared/constant';
+import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
+import { ESTES_BOL_AUTOFILL_DATA, ESTES_RATE_QUOTE_DEFAULTS, ESTES_BILL_TO_DEFAULTS, ESTES_RATE_QUOTE_FORM_DEFAULTS, ESTES_SHIPPER_ADDRESSES, ESTES_SHIPPER_DEFAULTS, ESTES_ADDRESS_BOOK, ESTES_ACCOUNTS, MARKETPLACE_ABBREVIATIONS } from '@/Shared/constant';
 import { useSearchParams } from 'next/navigation';
 
 type BillOfLandingProps = {
@@ -60,7 +61,7 @@ export const BillOfLanding = ({
   onFormDataChange,
   onResponseDataChange
 }: BillOfLandingProps) => {
-  const { getToken } = useLogisticsStore();
+  const { getToken, isTokenExpired, refreshToken, isSessionActive } = useLogisticsStore();
   const carrier = 'estes';
   const searchParams = useSearchParams();
 
@@ -166,7 +167,47 @@ export const BillOfLanding = ({
   const [quoteId, setQuoteId] = useState('');
   const [autoAssignPro, setAutoAssignPro] = useState(true);
   
-  // Routing Information - Origin (Shipper) - empty by default, user fills manually
+  // Function to generate Master BOL Number
+  const generateMasterBolNumber = () => {
+    if (!orderData?.ordersJsonb || !orderData?.orderOnMarketPlace) {
+      return '';
+    }
+    
+    // Get current month first letter
+    const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+    const currentMonth = new Date().getMonth(); // 0-11
+    const monthLetter = months[currentMonth];
+    
+    // Get marketplace
+    const marketplace = orderData.orderOnMarketPlace || '';
+    const marketplaceFirstLetter = marketplace.charAt(0).toUpperCase();
+    
+    // Get marketplace abbreviation from mapping (2 letters)
+    const marketplaceAbbrev = MARKETPLACE_ABBREVIATIONS[marketplace] || marketplace.substring(0, 2).toUpperCase();
+    
+    // Get customer name from ordersJsonb
+    const customerName = getJsonbValue(orderData.ordersJsonb, 'Customer Name');
+    
+    if (!customerName) {
+      return '';
+    }
+    
+    // Format: {monthLetter}{marketplaceFirstLetter}-{Customer Name} {marketplaceAbbrev}
+    return `${monthLetter}${marketplaceFirstLetter}-${customerName} ${marketplaceAbbrev}`;
+  };
+  
+  // Auto-fill Master BOL Number when orderData is available
+  useEffect(() => {
+    if (orderData && !masterBol) {
+      const generatedBol = generateMasterBolNumber();
+      if (generatedBol) {
+        setMasterBol(generatedBol);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderData]);
+  
+  // Routing Information - Origin (Shipper) - empty by default, user selects from dropdown or fills manually
   const [originAddressBook, setOriginAddressBook] = useState('');
   const [originAccount, setOriginAccount] = useState('');
   const [originName, setOriginName] = useState('');
@@ -180,6 +221,12 @@ export const BillOfLanding = ({
   const [originPhone, setOriginPhone] = useState('');
   const [originEmail, setOriginEmail] = useState('');
   const [originLoadingZip, setOriginLoadingZip] = useState(false);
+  
+  // Consignee (Destination) Address Book
+  const [destinationAddressBook, setDestinationAddressBook] = useState('');
+  
+  // Bill To Address Book
+  const [billToAddressBook, setBillToAddressBook] = useState('');
 
   // ZIP code lookup function for Shipper (Origin)
   const lookupOriginZipCode = async (zipCode: string) => {
@@ -237,21 +284,19 @@ export const BillOfLanding = ({
   // Handle shipper address book selection
   const handleOriginAddressBookChange = (value: string) => {
     setOriginAddressBook(value);
-    if (value) {
-      const address = ESTES_SHIPPER_ADDRESSES.find(opt => opt.value === value);
-      if (address) {
-        setOriginName(address.name);
-        setOriginAddress1(address.address1);
-        setOriginAddress2(address.address2 || '');
-        setOriginCity(address.city);
-        setOriginState(address.state);
-        setOriginZipCode(address.zip);
-        setOriginCountry(address.country);
-        if (address.contactName) setOriginContactName(address.contactName);
-        if (address.phone) setOriginPhone(address.phone);
-        if (address.email) setOriginEmail(address.email);
-        if (address.account) setOriginAccount(address.account);
-      }
+    if (!value) {
+      // Clear fields when selection is cleared
+      setOriginName('');
+      setOriginAddress1('');
+      setOriginAddress2('');
+      setOriginCity('');
+      setOriginState('');
+      setOriginZipCode('');
+      setOriginCountry('');
+      setOriginContactName('');
+      setOriginPhone('');
+      setOriginEmail('');
+      setOriginAccount('');
     }
   };
   
@@ -433,6 +478,7 @@ export const BillOfLanding = ({
   const [responseData, setResponseData] = useState<any>(initialResponseData || null);
   const [showResponsePreview, setShowResponsePreview] = useState(!!initialResponseData);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [requestPayload, setRequestPayload] = useState<any>(null);
   const [showSections, setShowSections] = useState<Record<string, boolean>>({
     accountInfo: true,
     billingInfo: true,
@@ -1123,17 +1169,14 @@ export const BillOfLanding = ({
   };
 
   const buildRequestBody = () => {
-    // Map accessorials to codes
+    // Map accessorials to codes (only service accessorials, not special handling)
     const accessorialCodesList = selectedAccessorials
       .map((acc) => accessorialCodes[acc])
       .filter(Boolean);
     
-    // Add special handling codes
-    const specialHandlingCodesList = specialHandlingRequests
-      .map((req) => specialHandlingCodes[req])
-      .filter(Boolean);
-    
-    const allAccessorialCodes = [...accessorialCodesList, ...specialHandlingCodesList];
+    // Special handling requests are sent separately in specialInstructions field
+    // Do NOT add them to accessorial codes to avoid duplication
+    const allAccessorialCodes = accessorialCodesList;
 
     // Build handling units - ensure each has at least one lineItem
     const handlingUnitsData = handlingUnits.map((unit) => {
@@ -1346,7 +1389,19 @@ export const BillOfLanding = ({
     
     // Normalize carrier name to match how it's stored in Zustand (lowercase)
     const normalizedCarrier = carrier.toLowerCase();
-    const token = getToken(normalizedCarrier);
+    let token = getToken(normalizedCarrier);
+    
+    // If no token or token expired, try to refresh if session is active
+    if (!token || isTokenExpired(normalizedCarrier, 10)) {
+      if (isSessionActive()) {
+        // Session is active, try to refresh token automatically
+        const refreshed = await refreshToken(normalizedCarrier);
+        if (refreshed) {
+          token = getToken(normalizedCarrier);
+        }
+      }
+    }
+    
     if (!token) {
       setError('Authentication required. Please login.');
       return;
@@ -1449,6 +1504,9 @@ export const BillOfLanding = ({
         ...requestBody,
       };
 
+      // Store request payload for display
+      setRequestPayload(payload);
+
       const res = await fetch(buildApiUrl('/Logistics/create-bill-of-lading'), {
         method: 'POST',
         headers: {
@@ -1461,60 +1519,195 @@ export const BillOfLanding = ({
       if (!res.ok) {
         // Try to parse error response to show specific error messages
         let errorMessage = 'Please check your form data and try again.';
+        let specificErrors: string[] = [];
+        
         try {
           const errorData = await res.json();
           
-          // Check for description-related errors
+          // Helper function to map field names to user-friendly messages
+          const mapFieldToMessage = (field: string): string => {
+            const fieldLower = field.toLowerCase();
+            
+            // Phone number errors
+            if (fieldLower.includes('phone') || fieldLower.includes('contact.phone') || fieldLower.includes('origin.phone') || fieldLower.includes('destination.phone') || fieldLower.includes('billto.phone')) {
+              if (fieldLower.includes('origin')) return 'Origin Phone Number is required';
+              if (fieldLower.includes('destination')) return 'Destination Phone Number is required';
+              if (fieldLower.includes('billto') || fieldLower.includes('bill')) return 'Bill To Phone Number is required';
+              return 'Phone Number is required';
+            }
+            
+            // Address errors
+            if (fieldLower.includes('address')) {
+              if (fieldLower.includes('origin') || fieldLower.includes('shipper')) return 'Origin Address is required';
+              if (fieldLower.includes('destination') || fieldLower.includes('consignee')) return 'Destination Address is required';
+              if (fieldLower.includes('billto') || fieldLower.includes('bill')) return 'Bill To Address is required';
+              return 'Address is required';
+            }
+            
+            // Name errors
+            if (fieldLower.includes('name')) {
+              if (fieldLower.includes('origin') || fieldLower.includes('shipper')) return 'Origin Company Name is required';
+              if (fieldLower.includes('destination') || fieldLower.includes('consignee')) return 'Destination Company Name is required';
+              if (fieldLower.includes('billto') || fieldLower.includes('bill')) return 'Bill To Company Name is required';
+              return 'Company Name is required';
+            }
+            
+            // City errors
+            if (fieldLower.includes('city')) {
+              if (fieldLower.includes('origin') || fieldLower.includes('shipper')) return 'Origin City is required';
+              if (fieldLower.includes('destination') || fieldLower.includes('consignee')) return 'Destination City is required';
+              if (fieldLower.includes('billto') || fieldLower.includes('bill')) return 'Bill To City is required';
+              return 'City is required';
+            }
+            
+            // State errors
+            if (fieldLower.includes('state') || fieldLower.includes('stateprovince')) {
+              if (fieldLower.includes('origin') || fieldLower.includes('shipper')) return 'Origin State is required';
+              if (fieldLower.includes('destination') || fieldLower.includes('consignee')) return 'Destination State is required';
+              if (fieldLower.includes('billto') || fieldLower.includes('bill')) return 'Bill To State is required';
+              return 'State is required';
+            }
+            
+            // ZIP code errors
+            if (fieldLower.includes('zip') || fieldLower.includes('postal')) {
+              if (fieldLower.includes('origin') || fieldLower.includes('shipper')) return 'Origin ZIP Code is required';
+              if (fieldLower.includes('destination') || fieldLower.includes('consignee')) return 'Destination ZIP Code is required';
+              if (fieldLower.includes('billto') || fieldLower.includes('bill')) return 'Bill To ZIP Code is required';
+              return 'ZIP Code is required';
+            }
+            
+            // Description errors
+            if (fieldLower.includes('description') || fieldLower.includes('desc')) {
+              return 'Description is missing. Please fill in the description field for all items in your handling units.';
+            }
+            
+            // Ship date errors
+            if (fieldLower.includes('shipdate') || fieldLower.includes('ship_date') || fieldLower.includes('pickup')) {
+              return 'Ship Date is required';
+            }
+            
+            // Return the field name as-is if no mapping found
+            return field;
+          };
+          
+          // Check for messageStatus structure (Estes API format)
+          if (errorData.messageStatus) {
+            const msgStatus = errorData.messageStatus;
+            
+            // Check for messageList array with detailed errors
+            if (errorData.messageList && Array.isArray(errorData.messageList)) {
+              specificErrors = errorData.messageList.map((msg: any) => {
+                const messageText = msg.message || msg.text || msg.error || String(msg);
+                const field = msg.field || msg.path || msg.property || '';
+                
+                if (field) {
+                  return mapFieldToMessage(field);
+                }
+                
+                // Check message text for field names
+                const msgLower = messageText.toLowerCase();
+                if (msgLower.includes('phone')) {
+                  if (msgLower.includes('origin') || msgLower.includes('shipper')) return 'Origin Phone Number is required';
+                  if (msgLower.includes('destination') || msgLower.includes('consignee')) return 'Destination Phone Number is required';
+                  if (msgLower.includes('bill') || msgLower.includes('billto')) return 'Bill To Phone Number is required';
+                  return 'Phone Number is required';
+                }
+                
+                return messageText;
+              });
+            }
+            
+            // Also check the main messageStatus message
+            if (msgStatus.message && !msgStatus.message.toLowerCase().includes('transaction id')) {
+              specificErrors.push(msgStatus.message);
+            }
+            
+            // Check resolution field
+            if (msgStatus.resolution) {
+              specificErrors.push(msgStatus.resolution);
+            }
+          }
+          
+          // Check for standard error fields
           if (errorData.message) {
             const message = errorData.message.toLowerCase();
-            if (message.includes('description') || message.includes('desc')) {
-              errorMessage = 'Description is missing. Please fill in the description field for all items in your handling units.';
-            } else {
-              errorMessage = errorData.message;
+            if (!message.includes('transaction id')) {
+              if (message.includes('description') || message.includes('desc')) {
+                specificErrors.push('Description is missing. Please fill in the description field for all items in your handling units.');
+              } else {
+                specificErrors.push(errorData.message);
+              }
             }
-          } else if (errorData.error) {
+          }
+          
+          if (errorData.error) {
             const error = typeof errorData.error === 'string' ? errorData.error : errorData.error.message || '';
             const errorLower = error.toLowerCase();
-            if (errorLower.includes('description') || errorLower.includes('desc')) {
-              errorMessage = 'Description is missing. Please fill in the description field for all items in your handling units.';
-            } else {
-              errorMessage = error;
+            if (!errorLower.includes('transaction id')) {
+              if (errorLower.includes('description') || errorLower.includes('desc')) {
+                specificErrors.push('Description is missing. Please fill in the description field for all items in your handling units.');
+              } else {
+                specificErrors.push(error);
+              }
             }
-          } else if (errorData.data?.message) {
+          }
+          
+          if (errorData.data?.message) {
             const message = errorData.data.message.toLowerCase();
-            if (message.includes('description') || message.includes('desc')) {
-              errorMessage = 'Description is missing. Please fill in the description field for all items in your handling units.';
-            } else {
-              errorMessage = errorData.data.message;
+            if (!message.includes('transaction id')) {
+              if (message.includes('description') || message.includes('desc')) {
+                specificErrors.push('Description is missing. Please fill in the description field for all items in your handling units.');
+              } else {
+                specificErrors.push(errorData.data.message);
+              }
             }
           }
           
           // Check for validation errors array
           if (errorData.errors && Array.isArray(errorData.errors)) {
-            const descriptionErrors = errorData.errors.filter((err: string) => 
-              err.toLowerCase().includes('description') || err.toLowerCase().includes('desc')
-            );
-            if (descriptionErrors.length > 0) {
-              errorMessage = 'Description is missing. Please fill in the description field for all items in your handling units.';
-            } else {
-              errorMessage = errorData.errors.join('\n');
-            }
-          } else if (errorData.errors && typeof errorData.errors === 'object') {
-            const errorKeys = Object.keys(errorData.errors);
-            const descriptionKeys = errorKeys.filter(key => 
-              key.toLowerCase().includes('description') || key.toLowerCase().includes('desc')
-            );
-            if (descriptionKeys.length > 0) {
-              errorMessage = 'Description is missing. Please fill in the description field for all items in your handling units.';
-            } else {
-              const validationErrors = Object.entries(errorData.errors)
-                .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
-                .join('\n');
-              if (validationErrors) {
-                errorMessage = validationErrors;
+            errorData.errors.forEach((err: any) => {
+              const errStr = typeof err === 'string' ? err : err.message || err.field || String(err);
+              const errLower = errStr.toLowerCase();
+              
+              if (err.field) {
+                specificErrors.push(mapFieldToMessage(err.field));
+              } else if (errLower.includes('phone')) {
+                if (errLower.includes('origin')) {
+                  specificErrors.push('Origin Phone Number is required');
+                } else if (errLower.includes('destination')) {
+                  specificErrors.push('Destination Phone Number is required');
+                } else if (errLower.includes('bill')) {
+                  specificErrors.push('Bill To Phone Number is required');
+                } else {
+                  specificErrors.push('Phone Number is required');
+                }
+              } else if (!errLower.includes('description') && !errLower.includes('desc')) {
+                specificErrors.push(errStr);
               }
+            });
+          } else if (errorData.errors && typeof errorData.errors === 'object') {
+            Object.entries(errorData.errors).forEach(([field, messages]) => {
+              const fieldMessage = mapFieldToMessage(field);
+              const messageArray = Array.isArray(messages) ? messages : [messages];
+              messageArray.forEach((msg: any) => {
+                specificErrors.push(`${fieldMessage}: ${msg}`);
+              });
+            });
+          }
+          
+          // Build final error message
+          if (specificErrors.length > 0) {
+            // Remove duplicates and filter out generic transaction messages
+            const uniqueErrors = Array.from(new Set(specificErrors.filter(err => 
+              !err.toLowerCase().includes('transaction id') && 
+              !err.toLowerCase().includes('see message list')
+            )));
+            
+            if (uniqueErrors.length > 0) {
+              errorMessage = uniqueErrors.join('\n');
             }
           }
+          
         } catch (parseError) {
           // If JSON parsing fails, use default message
           if (process.env.NODE_ENV === 'development') {
@@ -1539,15 +1732,30 @@ export const BillOfLanding = ({
         }
       }, 100);
     } catch (err) {
-      // Check if error is related to description
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      const errorLower = errorMessage.toLowerCase();
+      // Extract error message from various error types
+      let errorMessage = 'An error occurred. Please check your form data and try again.';
       
-      if (errorLower.includes('description') || errorLower.includes('desc')) {
-        setError('Description is missing. Please fill in the description field for all items in your handling units.');
-      } else {
-        setError('An error occurred. Please check your form data and try again.');
+      if (err instanceof Error) {
+        const errMsg = err.message.toLowerCase();
+        if (errMsg.includes('phone')) {
+          errorMessage = 'Phone Number is required. Please fill in all required phone number fields.';
+        } else if (errMsg.includes('description') || errMsg.includes('desc')) {
+          errorMessage = 'Description is missing. Please fill in the description field for all items in your handling units.';
+        } else if (errMsg.includes('address')) {
+          errorMessage = 'Address is required. Please fill in all required address fields.';
+        } else {
+          errorMessage = err.message || errorMessage;
+        }
+      } else if (typeof err === 'string') {
+        const errLower = err.toLowerCase();
+        if (errLower.includes('phone')) {
+          errorMessage = 'Phone Number is required. Please fill in all required phone number fields.';
+        } else {
+          errorMessage = err;
+        }
       }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -1695,7 +1903,7 @@ export const BillOfLanding = ({
 
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {/* Account Information */}
-          <div className="border border-slate-200 rounded-lg overflow-hidden">
+          <div className="border border-slate-200 rounded-lg overflow-visible">
             <div className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
               <div className="flex items-center gap-2 flex-1">
                 <button
@@ -1731,16 +1939,18 @@ export const BillOfLanding = ({
               <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                   <div className="space-y-2">
-                    <label className="block text-sm font-semibold text-slate-900">
-                      My Accounts <span className="text-red-500">*</span>
-                    </label>
-                    <select
+                    <SearchableDropdown
+                      options={ESTES_ACCOUNTS.map(account => ({
+                        value: account.accountNumber,
+                        label: `${account.accountNumber} - ${account.type} - ${account.companyName} - ${account.address}`,
+                      })) as SearchableDropdownOption[]}
                       value={myAccount}
-                      onChange={(e) => setMyAccount(e.target.value)}
-                      className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="0216496">0216496 - Regular - Decora2z - 19150 Summit Ridge, Walnut, CA 91789</option>
-                    </select>
+                      onChange={setMyAccount}
+                      label="My Accounts"
+                      placeholder="Search or select account..."
+                      required
+                      filterKeys={['label', 'value']}
+                    />
                   </div>
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-slate-900">Your Role:</label>
@@ -1905,9 +2115,8 @@ export const BillOfLanding = ({
                         type="date"
                         value={shipDate}
                         onChange={(e) => setShipDate(e.target.value)}
-                        className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                        className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
-                      <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                     </div>
                   </div>
                 </div>
@@ -1974,21 +2183,37 @@ export const BillOfLanding = ({
                   {/* Shipper Information */}
                   <div className="space-y-4">
                     <h4 className="text-md font-semibold text-slate-900">Shipper Information</h4>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-semibold text-slate-900">Address Book (Optional)</label>
-                      <select
-                        value={originAddressBook}
-                        onChange={(e) => handleOriginAddressBookChange(e.target.value)}
-                        className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Select Address</option>
-                        {ESTES_SHIPPER_ADDRESSES.map((address) => (
-                          <option key={address.value} value={address.value}>
-                            {address.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <SearchableDropdown
+                      options={ESTES_SHIPPER_ADDRESSES.map(addr => ({
+                        value: addr.value,
+                        label: addr.label,
+                        name: addr.name,
+                        city: addr.city,
+                        state: addr.state,
+                        zip: addr.zip,
+                      })) as SearchableDropdownOption[]}
+                      value={originAddressBook}
+                      onChange={handleOriginAddressBookChange}
+                      label="Address Book (Optional)"
+                      placeholder="Search or select address..."
+                      filterKeys={['label', 'name', 'city', 'state', 'zip']}
+                      onSelect={(option) => {
+                        const address = ESTES_SHIPPER_ADDRESSES.find(opt => opt.value === option.value);
+                        if (address) {
+                          setOriginName(address.name);
+                          setOriginAddress1(address.address1);
+                          setOriginAddress2(address.address2 || '');
+                          setOriginCity(address.city);
+                          setOriginState(address.state);
+                          setOriginZipCode(address.zip);
+                          setOriginCountry(address.country);
+                          if (address.contactName) setOriginContactName(address.contactName);
+                          if (address.phone) setOriginPhone(address.phone);
+                          if (address.email) setOriginEmail(address.email);
+                          if (address.account) setOriginAccount(address.account);
+                        }
+                      }}
+                    />
                     <div className="space-y-2">
                       <label className="block text-sm font-semibold text-slate-900">Company Name <span className="text-red-500">*</span></label>
                       <input
@@ -2115,12 +2340,27 @@ export const BillOfLanding = ({
                   {/* Consignee Information */}
                   <div className="space-y-4">
                     <h4 className="text-md font-semibold text-slate-900">Consignee Information</h4>
-                    <div className="space-y-2">
-                      <label className="block text-sm font-semibold text-slate-900">Address Book (Optional)</label>
-                      <select className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg">
-                        <option>Select Address</option>
-                      </select>
-                    </div>
+                    <SearchableDropdown
+                      options={ESTES_ADDRESS_BOOK as SearchableDropdownOption[]}
+                      value={destinationAddressBook || ''}
+                      onChange={(value) => {
+                        setDestinationAddressBook(value);
+                        if (value) {
+                          const address = ESTES_ADDRESS_BOOK.find(opt => opt.value === value);
+                          if (address) {
+                            setDestinationName(address.label.split(' - ')[0] || '');
+                            setDestinationAddress1(address.label.split(' - ')[2] || '');
+                            setDestinationCity(address.city);
+                            setDestinationState(address.state);
+                            setDestinationZipCode(address.zip);
+                            setDestinationCountry(address.country);
+                          }
+                        }
+                      }}
+                      label="Address Book (Optional)"
+                      placeholder="Search or select address..."
+                      filterKeys={['label', 'city', 'state', 'zip']}
+                    />
                     <div className="space-y-2">
                       <label className="block text-sm font-semibold text-slate-900">Company Name <span className="text-red-500">*</span></label>
                       <input
@@ -2279,12 +2519,28 @@ export const BillOfLanding = ({
                 {/* Bill To Information */}
                 <div className="border-t border-slate-200 pt-6">
                   <h4 className="text-md font-semibold text-slate-900 mb-4">Bill To Information</h4>
-                  <div className="space-y-2 mb-4">
-                    <label className="block text-sm font-semibold text-slate-900">Address Book (Optional)</label>
-                    <select className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg">
-                      <option>DECORA2Z - 19150 Summit Ridge, Walnut, CA 91789</option>
-                    </select>
-                  </div>
+                  <SearchableDropdown
+                    options={ESTES_ADDRESS_BOOK as SearchableDropdownOption[]}
+                    value={billToAddressBook || ''}
+                    onChange={(value) => {
+                      setBillToAddressBook(value);
+                      if (value) {
+                        const address = ESTES_ADDRESS_BOOK.find(opt => opt.value === value);
+                        if (address) {
+                          setBillToName(address.label.split(' - ')[0] || '');
+                          setBillToAddress1(address.label.split(' - ')[2] || '');
+                          setBillToCity(address.city);
+                          setBillToState(address.state);
+                          setBillToZipCode(address.zip);
+                          setBillToCountry(address.country);
+                        }
+                      }
+                    }}
+                    label="Address Book (Optional)"
+                    placeholder="Search or select address..."
+                    filterKeys={['label', 'city', 'state', 'zip']}
+                    className="mb-4"
+                  />
                   <div className="flex items-center gap-4 my-4">
                     <div className="flex-1 border-t border-slate-300"></div>
                     <span className="text-sm text-slate-600">or</span>
@@ -2726,9 +2982,22 @@ export const BillOfLanding = ({
                     </div>
                     <div className="mt-4 space-y-2">
                       <h5 className="text-sm font-semibold text-slate-900">Pallet Details</h5>
-                      {unit.items.map((item) => (
-                        <div key={item.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {unit.items.map((item, itemIndex) => (
+                        <div key={item.id} className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-4">
+                          <div className="flex items-center justify-between mb-2">
+                            <h6 className="text-xs font-semibold text-slate-700">Item {itemIndex + 1}</h6>
+                            {unit.items.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeItemFromUnit(unit.id, item.id)}
+                                className="text-red-600 hover:text-red-700 text-sm flex items-center gap-1"
+                              > 
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                          {/* Pieces and Piece Type on one line */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div className="space-y-2">
                               <label className="block text-xs font-semibold text-slate-900">Pieces</label>
                               <input
@@ -2760,22 +3029,23 @@ export const BillOfLanding = ({
                                 <option value="PALLET">PALLET</option>
                               </select>
                             </div>
-                            <div className="space-y-2">
-                              <label className="block text-xs font-semibold text-slate-900">Description</label>
-                              <input
-                                type="text"
-                                value={item.description}
-                                onChange={(e) => {
-                                  const updatedItems = unit.items.map((i) =>
-                                    i.id === item.id ? { ...i, description: e.target.value } : i
-                                  );
-                                  updateHandlingUnit(unit.id, 'items', updatedItems);
-                                }}
-                                className="w-full px-3 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                              />
-                            </div>
                           </div>
-                        
+                          {/* Description below - resizable textarea */}
+                          <div className="space-y-2">
+                            <label className="block text-xs font-semibold text-slate-900">Description</label>
+                            <textarea
+                              value={item.description}
+                              onChange={(e) => {
+                                const updatedItems = unit.items.map((i) =>
+                                  i.id === item.id ? { ...i, description: e.target.value } : i
+                                );
+                                updateHandlingUnit(unit.id, 'items', updatedItems);
+                              }}
+                              rows={3}
+                              className="w-full px-3 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-y min-h-[80px]"
+                              placeholder="Enter description..."
+                            />
+                          </div>
                         </div>
                       ))}
                       <button
@@ -3292,6 +3562,7 @@ export const BillOfLanding = ({
                         onClick={() => {
                           setShowResponsePreview(false);
                           setResponseData(null);
+                          setRequestPayload(null);
                         }}
                         className="px-3 py-2 bg-slate-500 text-white rounded-lg hover:bg-slate-600 transition-colors flex items-center gap-2 text-sm"
                       >
@@ -3306,6 +3577,33 @@ export const BillOfLanding = ({
                       className="w-full h-[600px] border-0 rounded-lg"
                       title="PDF Preview"
                     />
+                  </div>
+                </div>
+              )}
+              
+              {/* Request Payload Preview Section */}
+              {requestPayload && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-bold text-slate-900">Request Payload</h3>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(JSON.stringify(requestPayload, null, 2));
+                        }}
+                        className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 text-sm"
+                        title="Copy Payload"
+                      >
+                        <Copy size={16} />
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                  <div className="bg-white border border-slate-200 rounded-lg p-4 overflow-auto max-h-96">
+                    <pre className="text-sm text-slate-800 whitespace-pre-wrap font-mono">
+                      {JSON.stringify(requestPayload, null, 2)}
+                    </pre>
                   </div>
                 </div>
               )}
