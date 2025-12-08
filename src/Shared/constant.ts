@@ -199,7 +199,7 @@ export const ESTES_BOL_AUTOFILL_DATA = {
     "email": "SHAMYASLI@YAHOO.COM"
   },
   "accessorials": {
-    "liftGateService": false,
+    "liftGateService": true,
     "residentialDelivery": true,
     "appointmentRequest": false
   },
