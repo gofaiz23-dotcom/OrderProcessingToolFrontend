@@ -38,6 +38,7 @@ export interface XPORateQuoteCommodity {
     height: number;
     dimensionsUom: string; // e.g., "INCH"
   };
+  desc?: string; // Optional commodity description
 }
 
 export const XPO_RATE_QUOTE_FIELD_DEFAULTS: Partial<XPORateQuoteFields> = {
@@ -61,9 +62,9 @@ export const XPO_RATE_QUOTE_COMMODITY_DEFAULTS: XPORateQuoteCommodity = {
   nmfcClass: '',
   hazmatInd: false,
   dimensions: {
-    length: 0,
-    width: 0,
-    height: 0,
+    length: 1,
+    width: 1,
+    height: 1,
     dimensionsUom: 'INCH',
   },
 };

@@ -35,6 +35,7 @@ export interface XPOBillOfLadingFields {
 }
 
 export interface XPOBillOfLadingAddress {
+  acctInstId?: string; // Account instance ID (optional, used when selecting from address book)
   address: {
     addressLine1: string;
     cityName: string;
@@ -168,8 +169,8 @@ export const XPO_BOL_COMMODITY_DEFAULTS: XPOBillOfLadingCommodity = {
   },
   desc: '',
   nmfcClass: '',
-  nmfcItemCd: '',
-  sub: '',
+  nmfcItemCd: '079300', // Default NMFC Code (editable)
+  sub: '03', // Default Sub (editable)
   hazmatInd: false,
 };
 

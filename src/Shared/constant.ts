@@ -498,11 +498,16 @@ export const ESTES_RATE_QUOTE_FORM_DEFAULTS = {
 
 // XPO Address Book Options
 export type XPOAddressBookOption = {
-  value: string;
-  label: string;
-  city: string;
-  state: string;
-  zip: string;
+  id?: number;
+  name?: string;
+  address?: string;
+  deliveryType?: string;
+  // Legacy fields for backward compatibility (used in consignee address book)
+  value?: string;
+  label?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
   country?: string;
   company?: string;
   streetAddress?: string;
@@ -515,18 +520,280 @@ export type XPOAddressBookOption = {
 // XPO Shipper Address Book
 export const XPO_SHIPPER_ADDRESS_BOOK: XPOAddressBookOption[] = [
   {
-    value: 'ammana',
-    label: 'AMMANA - CA - 10506 SHOEMAKER AVE, SANTA FE SPRINGS, CA 90670',
-    company: 'AMMANA',
-    streetAddress: '10506 SHOEMAKER AVE',
-    addressLine2: '',
-    city: 'SANTA FE SPRINGS',
-    state: 'CA',
-    zip: '90670',
-    country: 'US',
-    phone: '+1 (626) 715-0682',
-    extension: '',
-    contactName: 'Tarif Hawasly',
+    id: 2534663,
+    name: 'AMMANA',
+    address: '8350 PARDEE DR STE 200 OAKLAND CA 94621',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 10164998,
+    name: 'AMMANA',
+    address: '11591 ETIWANDA AVE FONTANA CA 92337',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 16360894,
+    name: 'AMMANA',
+    address: '2601 W AIRPORT FWY STE 300 DFW AIRPORT TX US 75261',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 44160022,
+    name: 'AMMANA',
+    address: '7510 ARDMORE ST HOUSTON TX 77054',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 62894381,
+    name: 'AMMANA',
+    address: '13770 NORTON AVE CHINO CA 91710',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 65098061,
+    name: 'AMMANA',
+    address: '1212 TREND DR CARROLLTON TX US 75006',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 68500516,
+    name: 'AMMANA',
+    address: '1300 LAKES PKWY # 100 LAWRENCEVILLE GA 30043',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 98186409,
+    name: 'AMMANA',
+    address: '2125 EXCHANGE DR ARLINGTON TX 76011',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 101013170,
+    name: 'AMMANA',
+    address: '7351 MCGUIRE AVE FONTANA CA 92336',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 118364408,
+    name: 'AMMANA',
+    address: '21490 BAKER PKWY CITY OF INDUSTRY CA 91789',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 133115897,
+    name: 'AMMANA',
+    address: '10881 S SAM HOUSTON PKWY W HOUSTON TX US 77031',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 139285067,
+    name: 'AMMANA',
+    address: '3375 DE FOREST CIR JURUPA VALLEY CA 91752',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 149428788,
+    name: 'AMMANA',
+    address: '21490 BAKER PKWY CITY OF INDUSTRY CA 91789',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 173403861,
+    name: 'AMMANA',
+    address: '5383 TRUMAN DR DECATUR GA 30035',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 196899443,
+    name: 'AMMANA',
+    address: '2090 S BAKER AVE ONTARIO CA 91761',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 204673487,
+    name: 'AMMANA',
+    address: '247 POWER CT SANFORD FL 32771',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 245266454,
+    name: 'AMMANA',
+    address: '7400 S LOOMIS BLVD CHICAGO IL US 60636',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 276851796,
+    name: 'AMMANA',
+    address: '10700 ENTERPRISE WAY MIRAMAR FL 33025',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 370277115,
+    name: 'AMMANA',
+    address: '1330 W HOLT AVE POMONA CA 91768',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 404476595,
+    name: 'AMMANA',
+    address: '127 FIELDCREST AVE EDISON NJ 08837',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 445319330,
+    name: 'AMMANA',
+    address: '1208 COMMERCIAL BLVD N ARLINGTON TX 76001',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 446428167,
+    name: 'AMMANA',
+    address: '15101 SANTA ANA AVE # 102 FONTANA CA 92337',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 456792683,
+    name: 'AMMANA',
+    address: '15124 GRAND RIVER RD STE 100 FORT WORTH TX 76155',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 473508218,
+    name: 'AMMANA',
+    address: '9500 W SAM HOUSTON PKWY S HOUSTON TX 77099',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 490616957,
+    name: 'AMMANA',
+    address: '728 GALLIMORE DAIRY RD HIGH POINT NC US 27265',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 531230732,
+    name: 'AMMANA',
+    address: '10506 SHOEMAKER AVE SANTA FE SPRINGS CA 90670',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 553331869,
+    name: 'AMMANA',
+    address: '45 STULTS RD STE 2 DAYTON NJ 08810',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 578853268,
+    name: 'AMMANA',
+    address: '2137 E 55TH ST VERNON CA 90058',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 591972061,
+    name: 'AMMANA',
+    address: '20002 BUSINESS PKWY CITY OF INDUSTRY CA 91789',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 595607021,
+    name: 'AMMANA',
+    address: '6301 BEST FRIEND RD NORCROSS GA 30071',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 639358563,
+    name: 'AMMANA',
+    address: '80 STULTS RD DAYTON NJ 08810',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 660872094,
+    name: 'AMMANA',
+    address: '50 ENTERPRISE AVE N SECAUCUS NJ 07094',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 667231703,
+    name: 'AMMANA',
+    address: '9641 PREMIER PKWY MIRAMAR FL 33025',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 682167922,
+    name: 'AMMANA',
+    address: '3695 S WILLOW AVE FRESNO CA 93725',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 742062949,
+    name: 'AMMANA',
+    address: '343 BALDWIN PARK BLVD CITY OF INDUSTRY CA 91746',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 754841239,
+    name: 'AMMANA',
+    address: '4850 EUCALYPTUS AVE CHINO CA 91710',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 786700162,
+    name: 'AMMANA',
+    address: '4300B S FULTON PKWY COLLEGE PARK GA 30349',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 808842770,
+    name: 'AMMANA',
+    address: '14901 GRAND RIVER RD FORT WORTH TX 76155',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 837256005,
+    name: 'AMMANA',
+    address: '31918 HAYMAN ST HAYWARD CA 94544',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 875178338,
+    name: 'AMMANA',
+    address: '255 WILLE RD DES PLAINES IL 60018',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 878622937,
+    name: 'AMMANA',
+    address: '6557 FLOTILLA ST COMMERCE CA 90040',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 887672543,
+    name: 'AMMANA',
+    address: '19605 E WALNUT DR N CITY OF INDUSTRY CA 91789',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 950832236,
+    name: 'AMMANA',
+    address: '32 PLUM ST TRENTON NJ 08638',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 969216112,
+    name: 'AMMANA',
+    address: '4816 N W 159TH STREET MIAMI GARDENS FL 33014',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 974740656,
+    name: 'AMMANA',
+    address: '311 HALF ACRE RD CRANBURY NJ US 08512',
+    deliveryType: 'Pickup/Delivery',
+  },
+  {
+    id: 976058734,
+    name: 'AMMANA',
+    address: '6546 PETROPARK DR # BHOUSTON TX 77041',
+    deliveryType: 'Pickup/Delivery',
   },
 ] as const;
 
@@ -762,16 +1029,16 @@ export const XPO_BOL_DEFAULTS = {
   requesterRole: 'S', // Shipper
   paymentTerms: 'P', // Prepaid
   
-  // Pickup Location (default values from form)
+  // Pickup Location (default values - will be populated from rate quote response)
   pickupLocation: {
-    searchValue: 'AMMANA',
-    company: 'AMMANA',
+    searchValue: '',
+    company: '',
     careOf: '',
-    streetAddress: '8350 PARDEE DR STE 200',
+    streetAddress: '',
     addressLine2: '',
-    city: 'OAKLAND',
-    state: 'CA',
-    postalCode: '94621',
+    city: '',
+    state: '',
+    postalCode: '',
     country: 'US',
     phone: '',
     extension: '',
@@ -795,18 +1062,20 @@ export const XPO_BOL_DEFAULTS = {
   },
   
   // Commodity Defaults
+  // Note: grossWeight.weight and nmfcClass will be populated from rate quote response
+  // nmfcItemCd and sub have default values '079300' and '03' respectively (editable)
   commodity: {
-    desc: 'Items #CM-BK458Q-EXP-1 & #CM-BK458Q-EXP-2. one s',
+    desc: 'KD Furniture',
     grossWeight: {
-      weight: 350,
+      weight: 0, // Will be populated from rate quote response
     },
-    nmfcClass: '125',
+    nmfcClass: '', // Will be populated from rate quote response
     pieceCnt: 1,
     packaging: {
       packageCd: 'PLT', // Pallet
     },
-    nmfcItemCd: '',
-    sub: '',
+    nmfcItemCd: '079300', // Default NMFC Code (editable)
+    sub: '03', // Default Sub (editable)
     hazmatInd: false,
     freezableProtection: false,
   },
@@ -822,9 +1091,16 @@ export const XPO_BOL_DEFAULTS = {
   
   // Pickup Request
   schedulePickup: true,
-  pickupDate: '2025-12-04', // 12/4/2025
-  pickupReadyTime: '09:00', // 9:00 AM
-  dockCloseTime: '16:00', // 4:00 PM
+  pickupDate: (() => {
+    // Get today's date in YYYY-MM-DD format
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  })(), // Today's date
+  pickupReadyTime: '11:00', // 11:00 AM
+  dockCloseTime: '16:30', // 4:30 PM
   contactCompanyName: 'Ammana',
   contactName: 'Warehouse person',
   contactPhone: '+1 (123) 456-7890',
@@ -835,15 +1111,8 @@ export const XPO_BOL_DEFAULTS = {
   proNumberOption: 'auto' as 'none' | 'auto' | 'preassigned',
   preAssignedProNumber: '',
   
-  // Reference Numbers
-  referenceNumbers: [
-    {
-      referenceTypeCd: 'Other',
-      reference: '10000270714370',
-      referenceCode: 'RQ#',
-      referenceDescr: 'Rate Quote Number',
-    },
-  ] as Array<{
+  // Reference Numbers - will be populated from rate quote response
+  referenceNumbers: [] as Array<{
     referenceTypeCd: string;
     reference: string;
     referenceCode: string;

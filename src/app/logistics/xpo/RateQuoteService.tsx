@@ -94,6 +94,95 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
     return '';
   };
 
+  // Helper function to parse address string into components
+  const parseAddressString = (addressStr: string): { streetAddress: string; addressLine2: string; city: string; state: string; zip: string } => {
+    if (!addressStr || addressStr.trim() === '') {
+      return { streetAddress: '', addressLine2: '', city: '', state: '', zip: '' };
+    }
+
+    // Remove "US" if present before zip
+    let cleaned = addressStr.trim().replace(/\s+US\s+(\d{5})$/, ' $1');
+    
+    // Extract zip (5 digits at the end)
+    const zipMatch = cleaned.match(/(\d{5})$/);
+    const zip = zipMatch ? zipMatch[1] : '';
+    
+    // Remove zip from string
+    let withoutZip = cleaned.replace(/\s+\d{5}$/, '').trim();
+    
+    // Extract state (2 uppercase letters before zip/at end)
+    const stateMatch = withoutZip.match(/\s+([A-Z]{2})\s*$/);
+    const state = stateMatch ? stateMatch[1] : '';
+    
+    // Remove state from string
+    let withoutStateZip = withoutZip.replace(/\s+[A-Z]{2}\s*$/, '').trim();
+    
+    // Handle special case: "# BHOUSTON" -> "# B" + "HOUSTON"
+    withoutStateZip = withoutStateZip.replace(/#\s*B([A-Z])/gi, '# B $1');
+    
+    // Split by spaces to analyze components
+    const parts = withoutStateZip.split(/\s+/);
+    
+    // Find where city starts (usually last 1-4 words before state)
+    const streetAbbrevs = ['ST', 'AVE', 'DR', 'RD', 'PKWY', 'BLVD', 'CIR', 'CT', 'FWY', 'HWY', 'LN', 'PL', 'WAY', 'STREET'];
+    const addressIndicators = ['STE', 'SUITE', '#', 'UNIT', 'APT', 'FLOOR', 'FL'];
+    
+    let cityStartIndex = parts.length;
+    
+    // Find the last street indicator or address indicator
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const word = parts[i].toUpperCase();
+      if (streetAbbrevs.includes(word) || addressIndicators.includes(word)) {
+        cityStartIndex = i + 1;
+        break;
+      }
+      // City names typically don't have numbers and are 1-3 words
+      if (cityStartIndex === parts.length && i < parts.length - 1 && /^[A-Z]+$/.test(word) && i > 0) {
+        const prevWord = parts[i - 1].toUpperCase();
+        if (streetAbbrevs.includes(prevWord) || addressIndicators.includes(prevWord)) {
+          cityStartIndex = i;
+          break;
+        }
+      }
+    }
+    
+    // If we didn't find a clear break, assume last 1-3 words are city
+    if (cityStartIndex === parts.length) {
+      cityStartIndex = Math.max(1, parts.length - 2);
+    }
+    
+    const streetParts = parts.slice(0, cityStartIndex);
+    const cityParts = parts.slice(cityStartIndex);
+    
+    const city = cityParts.join(' ').toUpperCase();
+    let streetAddressFull = streetParts.join(' ');
+    
+    // Extract addressLine2 if it contains STE, SUITE, #, etc.
+    let streetAddress = streetAddressFull;
+    let addressLine2 = '';
+    
+    const steMatch = streetAddressFull.match(/^(.+?)\s+(STE|SUITE|#|UNIT|APT|FLOOR|FL\.?)\s*(.+)$/i);
+    if (steMatch) {
+      streetAddress = steMatch[1].trim();
+      addressLine2 = `${steMatch[2].toUpperCase()} ${steMatch[3].trim()}`.trim();
+    } else {
+      // Check for standalone # pattern
+      const hashMatch = streetAddressFull.match(/^(.+?)\s+(#\s*.+)$/i);
+      if (hashMatch) {
+        streetAddress = hashMatch[1].trim();
+        addressLine2 = hashMatch[2].trim();
+      }
+    }
+    
+    return {
+      streetAddress: streetAddress || '',
+      addressLine2: addressLine2 || '',
+      city: city || '',
+      state: state || '',
+      zip: zip || '',
+    };
+  };
+
   // Form state - Requester
   const [requesterRole, setRequesterRole] = useState<string>('S');
   const [pickupDate, setPickupDate] = useState<string>(() => {
@@ -155,6 +244,8 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
   const [pickupPhone, setPickupPhone] = useState<string>('');
   const [pickupExtension, setPickupExtension] = useState<string>('');
   const [pickupContactName, setPickupContactName] = useState<string>('');
+  const [manualAccountId, setManualAccountId] = useState<string>('');
+  const [useManualAccountId, setUseManualAccountId] = useState<boolean>(false);
 
   // Form state - Delivery Location
   const [deliveryLocation, setDeliveryLocation] = useState<string>('');
@@ -305,9 +396,9 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
     if (value) {
       const address = XPO_SHIPPER_ADDRESS_BOOK.find(opt => opt.value === value);
       if (address) {
-        setShipperCity(address.city);
-        setShipperState(address.state);
-        setShipperPostalCd(address.zip);
+        setShipperCity(address.city || '');
+        setShipperState(address.state || '');
+        setShipperPostalCd(address.zip || '');
       }
     }
   };
@@ -318,9 +409,9 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
     if (value) {
       const address = XPO_CONSIGNEE_ADDRESS_BOOK.find(opt => opt.value === value);
       if (address) {
-        setConsigneeCity(address.city);
-        setConsigneeState(address.state);
-        setConsigneePostalCd(address.zip);
+        setConsigneeCity(address.city || '');
+        setConsigneeState(address.state || '');
+        setConsigneePostalCd(address.zip || '');
       }
     }
   };
@@ -843,16 +934,26 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
         
         // Update dimensions if available
         if (length || width || height) {
-          const lengthNum = length ? parseFloat(length) : 0;
-          const widthNum = width ? parseFloat(width) : 0;
-          const heightNum = height ? parseFloat(height) : 0;
+          const lengthNum = length ? parseFloat(length) : (firstCommodity.dimensions?.length || 1);
+          const widthNum = width ? parseFloat(width) : (firstCommodity.dimensions?.width || 1);
+          const heightNum = height ? parseFloat(height) : (firstCommodity.dimensions?.height || 1);
           
           if (lengthNum > 0 || widthNum > 0 || heightNum > 0) {
             firstCommodity.dimensions = {
-              length: lengthNum || 0,
-              width: widthNum || 0,
-              height: heightNum || 0,
+              length: lengthNum || 1,
+              width: widthNum || 1,
+              height: heightNum || 1,
               dimensionsUom: firstCommodity.dimensions?.dimensionsUom || 'INCH',
+            };
+          }
+        } else {
+          // Ensure dimensions are set to defaults (1,1,1) if not provided
+          if (!firstCommodity.dimensions) {
+            firstCommodity.dimensions = {
+              length: 1,
+              width: 1,
+              height: 1,
+              dimensionsUom: 'INCH',
             };
           }
         }
@@ -1141,27 +1242,117 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
     const consigneeZip = deliveryPostalCode || consigneePostalCd;
     
     // Combine all services into accessorials
+    // This includes: delivery services, pickup services, premium services, and any additional accessorials
     const allAccessorials = [
       ...(accessorials || []),
       ...pickupServices,
-      ...deliveryServices,
+      ...deliveryServices, // Delivery Services from checkbox selections
       ...premiumServices,
     ].filter((value, index, self) => self.indexOf(value) === index); // Remove duplicates
     
-    // TODO: Verify XPO accessorial codes are valid for rate quotes
-    // Some codes like "LIFT", "NOTIFY", "RESI" might not be valid for rate quotes
-    // Temporarily, we'll send accessorials only if they exist
-    // If the API continues to reject, try sending without accessorials
+    // Accessorials (including delivery services) are included in the payload
+    if (process.env.NODE_ENV === 'development' && allAccessorials.length > 0) {
+      console.log('Accessorials being sent:', allAccessorials);
+      console.log('Delivery Services:', deliveryServices);
+      console.log('Pickup Services:', pickupServices);
+      console.log('Premium Services:', premiumServices);
+    }
+    
+    // Get shipper account ID - priority: manual account ID > pickup location > shipper address book
+    let shipperAcctInstId: string | undefined = undefined;
+    
+    if (useManualAccountId && manualAccountId && manualAccountId.trim() !== '') {
+      // Priority 1: Manual account ID if provided
+      shipperAcctInstId = manualAccountId.trim();
+    } else if (pickupLocation) {
+      // Priority 2: Extract ID from "From (Pickup Location)" selection
+      // The value format is "ammana-{id}"
+      let selectedShipper = null;
+      
+      // Extract ID from format "ammana-{id}"
+      if (pickupLocation.startsWith('ammana-')) {
+        const idStr = pickupLocation.replace('ammana-', '');
+        const idNum = parseInt(idStr, 10);
+        if (!isNaN(idNum)) {
+          selectedShipper = XPO_SHIPPER_ADDRESS_BOOK.find(s => s.id === idNum);
+        }
+      }
+      
+      // If not found, try direct ID match
+      if (!selectedShipper) {
+        const idNum = parseInt(pickupLocation, 10);
+        if (!isNaN(idNum)) {
+          selectedShipper = XPO_SHIPPER_ADDRESS_BOOK.find(s => s.id === idNum);
+        }
+      }
+      
+      // If still not found, try name match
+      if (!selectedShipper) {
+        selectedShipper = XPO_SHIPPER_ADDRESS_BOOK.find(s => s.name === pickupLocation);
+      }
+      
+      if (selectedShipper?.id) {
+        shipperAcctInstId = selectedShipper.id.toString();
+      }
+    } else if (shipperAddressBook) {
+      // Priority 3: Fallback to shipper address book (legacy support)
+      // The value format is "ammana-{id}" or could be just the id or name
+      let selectedShipper = null;
+      
+      // First, try to extract ID from format "ammana-{id}"
+      if (shipperAddressBook.startsWith('ammana-')) {
+        const idStr = shipperAddressBook.replace('ammana-', '');
+        const idNum = parseInt(idStr, 10);
+        if (!isNaN(idNum)) {
+          selectedShipper = XPO_SHIPPER_ADDRESS_BOOK.find(s => s.id === idNum);
+        }
+      }
+      
+      // If not found, try direct ID match
+      if (!selectedShipper) {
+        const idNum = parseInt(shipperAddressBook, 10);
+        if (!isNaN(idNum)) {
+          selectedShipper = XPO_SHIPPER_ADDRESS_BOOK.find(s => s.id === idNum);
+        }
+      }
+      
+      // If still not found, try name match
+      if (!selectedShipper) {
+        selectedShipper = XPO_SHIPPER_ADDRESS_BOOK.find(s => s.name === shipperAddressBook);
+      }
+      
+      if (selectedShipper?.id) {
+        shipperAcctInstId = selectedShipper.id.toString();
+      }
+    }
+    
+    // Get consignee country code - convert from full name to country code
+    let consigneeCountryCd: string | undefined = undefined;
+    if (deliveryCountry) {
+      const countryMap: Record<string, string> = {
+        'United States': 'US',
+        'Canada': 'CA',
+        'Mexico': 'MX',
+      };
+      consigneeCountryCd = countryMap[deliveryCountry] || deliveryCountry.toUpperCase().substring(0, 2);
+    }
     
     return buildXPORateQuoteRequestBody({
       paymentTermCd,
       shipmentDate: shipmentDateISO,
       accessorials: allAccessorials.length > 0 ? allAccessorials : undefined,
-      shipperPostalCd: shipperZip,
+      // Only pass shipperPostalCd if we don't have acctInstId
+      shipperPostalCd: shipperAcctInstId ? undefined : (shipperZip || undefined),
+      shipperAcctInstId: shipperAcctInstId,
       consigneePostalCd: consigneeZip,
+      consigneeCountryCd: consigneeCountryCd || 'US',
       commodity: commodities,
-      palletCnt: palletCnt > 0 ? palletCnt : undefined,
-      linealFt: linealFt > 0 ? linealFt : undefined,
+      commodityDescriptions: commodityDescriptions,
+      palletCnt: palletCnt || 0, // Always include, default to 0
+      linealFt: linealFt || 0, // Always include, default to 0
+      freezableInd: freezableProtection,
+      hazmatInd: hazmatItem,
+      bill2PartyUsZip4: '', // Always empty string as per backend payload
     });
   };
 
@@ -1172,10 +1363,16 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
       const normalizedCarrier = carrier.toLowerCase();
       const shippingCompany = normalizedCarrier === 'expo' ? 'xpo' : normalizedCarrier;
       
-      const payload = {
+      const payload: any = {
         shippingCompany: shippingCompany,
         ...requestBody,
       };
+      
+      // Note: accountId is now handled in buildRequestBody via shipperAcctInstId
+      // Keep this for backward compatibility if needed
+      if (useManualAccountId && manualAccountId && manualAccountId.trim() !== '') {
+        payload.accountId = manualAccountId.trim();
+      }
       
       setRequestPayload(payload);
     } catch (error) {
@@ -1201,6 +1398,14 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
     palletCnt,
     linealFt,
     carrier,
+    useManualAccountId,
+    manualAccountId,
+    pickupLocation,
+    shipperAddressBook,
+    deliveryCountry,
+    freezableProtection,
+    hazmatItem,
+    commodityDescriptions,
   ]);
 
   // Commodity management
@@ -1276,14 +1481,37 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
       const shipperZip = pickupPostalCode || shipperPostalCd;
       const consigneeZip = deliveryPostalCode || consigneePostalCd;
       
-      if (!pickupLocation && !shipperZip) {
-        const errorMsg = 'Pickup location is required';
-        setError(new Error(errorMsg));
-        setLoading(false);
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Validation error:', errorMsg);
+      // Validate pickup location: either from dropdown OR manual account ID
+      if (useManualAccountId) {
+        if (!manualAccountId || manualAccountId.trim() === '') {
+          const errorMsg = 'Account ID is required when using manual account ID';
+          setError(new Error(errorMsg));
+          setLoading(false);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Validation error:', errorMsg);
+          }
+          return;
         }
-        return;
+        // If using manual account ID, we still need a postal code for the rate quote
+        if (!shipperZip) {
+          const errorMsg = 'Postal code is required. Please enter a pickup postal code in the details section.';
+          setError(new Error(errorMsg));
+          setLoading(false);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Validation error:', errorMsg);
+          }
+          return;
+        }
+      } else {
+        if (!pickupLocation && !shipperZip) {
+          const errorMsg = 'Pickup location is required';
+          setError(new Error(errorMsg));
+          setLoading(false);
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Validation error:', errorMsg);
+          }
+          return;
+        }
       }
       if (!consigneeZip) {
         const errorMsg = 'Delivery postal code is required';
@@ -1373,10 +1601,16 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
       const shippingCompany = normalizedCarrier === 'expo' ? 'xpo' : normalizedCarrier;
       
       // Ensure shippingCompany is at the top level
-      const payload = {
+      const payload: any = {
         shippingCompany: shippingCompany,
         ...requestBody,
       };
+      
+      // Note: accountId is now handled in buildRequestBody via shipperAcctInstId
+      // Keep this for backward compatibility if needed
+      if (useManualAccountId && manualAccountId && manualAccountId.trim() !== '') {
+        payload.accountId = manualAccountId.trim();
+      }
       
       // Payload is already updated by useEffect, just ensure it's visible
       setShowPayloadJson(true);
@@ -1392,16 +1626,24 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
         console.log('Shipment Date:', payload.shipmentInfo?.shipmentDate);
         console.log('Payment Term:', payload.shipmentInfo?.paymentTermCd);
         console.log('Accessorials:', payload.shipmentInfo?.accessorials);
+        if (useManualAccountId && manualAccountId) {
+          console.log('Manual Account ID:', manualAccountId);
+        }
       }
       
-      // Validate that we have required postal codes in the payload
-      if (!payload.shipmentInfo?.shipper?.address?.postalCd) {
-        const errorMsg = 'Shipper postal code is required in request';
+      // Validate that we have either shipper acctInstId OR postal code in the payload
+      const hasShipperAcctInstId = payload.shipmentInfo?.shipper?.acctInstId && payload.shipmentInfo.shipper.acctInstId.trim() !== '';
+      const hasShipperPostalCd = payload.shipmentInfo?.shipper?.address?.postalCd && payload.shipmentInfo.shipper.address.postalCd.trim() !== '';
+      
+      if (!hasShipperAcctInstId && !hasShipperPostalCd) {
+        const errorMsg = 'Shipper account ID or postal code is required in request';
         setError(new Error(errorMsg));
         setLoading(false);
         if (process.env.NODE_ENV === 'development') {
           console.error('Validation error:', errorMsg);
           console.error('Payload shipmentInfo:', payload.shipmentInfo);
+          console.error('Shipper acctInstId:', payload.shipmentInfo?.shipper?.acctInstId);
+          console.error('Shipper postalCd:', payload.shipmentInfo?.shipper?.address?.postalCd);
         }
         return;
       }
@@ -2065,20 +2307,54 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
               <div className="space-y-4">
                 <div className="space-y-2">
                   <SearchableDropdown
-                    options={XPO_SHIPPER_ADDRESS_BOOK.map(addr => ({
-                      value: addr.value,
-                      label: addr.label,
-                      company: addr.company,
-                      streetAddress: addr.streetAddress,
-                      addressLine2: addr.addressLine2,
-                      city: addr.city,
-                      state: addr.state,
-                      zip: addr.zip,
-                      country: addr.country,
-                      phone: addr.phone,
-                      extension: addr.extension,
-                      contactName: addr.contactName,
-                    })) as SearchableDropdownOption[]}
+                    options={XPO_SHIPPER_ADDRESS_BOOK.map(addr => {
+                      // Handle simplified format (id, name, address, deliveryType)
+                      if (addr.id && addr.name && addr.address) {
+                        const parsed = parseAddressString(addr.address);
+                        // Extract state for label
+                        const state = parsed.state || '';
+                        // Create formatted address for label
+                        const addressParts = [parsed.streetAddress, parsed.addressLine2, parsed.city, parsed.state, parsed.zip].filter(Boolean);
+                        const formattedAddress = addressParts.join(', ');
+                        return {
+                          value: `ammana-${addr.id}`,
+                          label: `${addr.name} - ${state} - ${formattedAddress}`,
+                          id: addr.id,
+                          name: addr.name,
+                          address: addr.address,
+                          deliveryType: addr.deliveryType,
+                          company: addr.name,
+                          streetAddress: parsed.streetAddress,
+                          addressLine2: parsed.addressLine2,
+                          city: parsed.city,
+                          state: parsed.state,
+                          zip: parsed.zip,
+                          country: 'US',
+                          phone: addr.phone || '',
+                          extension: addr.extension || '',
+                          contactName: addr.contactName || '',
+                        };
+                      }
+                      // Legacy format (for backward compatibility)
+                      return {
+                        value: addr.value || '',
+                        label: addr.label || '',
+                        id: addr.id,
+                        company: addr.company,
+                        streetAddress: addr.streetAddress,
+                        addressLine2: addr.addressLine2,
+                        city: addr.city,
+                        state: addr.state,
+                        zip: addr.zip,
+                        country: addr.country,
+                        phone: addr.phone,
+                        extension: addr.extension,
+                        contactName: addr.contactName,
+                        deliveryType: addr.deliveryType,
+                        address: addr.address,
+                        name: addr.name,
+                      };
+                    }) as SearchableDropdownOption[]}
                     value={pickupLocation}
                     onChange={(value) => {
                       setPickupLocation(value);
@@ -2097,26 +2373,101 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                       }
                     }}
                     onSelect={(option) => {
-                      const address = XPO_SHIPPER_ADDRESS_BOOK.find(opt => opt.value === option.value);
+                      // Find address by value (ammana-id format) or by legacy value
+                      const addressId = option.value?.replace('ammana-', '');
+                      const address = XPO_SHIPPER_ADDRESS_BOOK.find(opt => 
+                        (opt.id && addressId && opt.id.toString() === addressId) || 
+                        opt.value === option.value
+                      );
+                      
                       if (address) {
-                        setPickupCompany(address.company || address.label.split(' - ')[0]);
-                        setPickupStreetAddress(address.streetAddress || '');
-                        setPickupAddressLine2(address.addressLine2 || '');
-                        setPickupCity(address.city);
-                        setPickupState(address.state);
-                        setPickupPostalCode(address.zip);
-                        setPickupCountry(address.country || 'United States');
-                        setPickupPhone(address.phone || '');
-                        setPickupExtension(address.extension || '');
-                        setPickupContactName(address.contactName || '');
+                        // Handle simplified format
+                        if (address.id && address.name && address.address) {
+                          const parsed = parseAddressString(address.address);
+                          setPickupCompany(address.name);
+                          setPickupStreetAddress(parsed.streetAddress);
+                          setPickupAddressLine2(parsed.addressLine2);
+                          setPickupCity(parsed.city);
+                          setPickupState(parsed.state);
+                          setPickupPostalCode(parsed.zip);
+                          setPickupCountry('United States');
+                          setPickupPhone(address.phone || '');
+                          setPickupExtension(address.extension || '');
+                          setPickupContactName(address.contactName || '');
+                        } else {
+                          // Legacy format
+                          setPickupCompany(address.company || address.label?.split(' - ')[0] || '');
+                          setPickupStreetAddress(address.streetAddress || '');
+                          setPickupAddressLine2(address.addressLine2 || '');
+                          setPickupCity(address.city || '');
+                          setPickupState(address.state || '');
+                          setPickupPostalCode(address.zip || '');
+                          setPickupCountry(address.country || 'United States');
+                          setPickupPhone(address.phone || '');
+                          setPickupExtension(address.extension || '');
+                          setPickupContactName(address.contactName || '');
+                        }
                       }
                     }}
                     label="Pickup Location"
                     placeholder="Search or select pickup location..."
-                    required
-                    filterKeys={['label', 'company', 'city', 'state', 'zip']}
+                    required={!useManualAccountId}
+                    disabled={useManualAccountId}
+                    filterKeys={['label', 'company', 'city', 'state', 'zip', 'id', 'address']}
                   />
                 </div>
+                
+                {/* Manual Account ID Option */}
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={useManualAccountId}
+                      onChange={(e) => {
+                        setUseManualAccountId(e.target.checked);
+                        if (e.target.checked) {
+                          // Clear dropdown selection when enabling manual entry
+                          setPickupLocation('');
+                          setPickupCompany('');
+                          setPickupStreetAddress('');
+                          setPickupAddressLine2('');
+                          setPickupCity('');
+                          setPickupState('');
+                          setPickupPostalCode('');
+                        } else {
+                          // Clear manual account ID when disabling
+                          setManualAccountId('');
+                        }
+                      }}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    <span className="text-sm font-semibold text-slate-900">
+                      Use Manual Account Type (Not in address book)
+                    </span>
+                  </label>
+                  
+                  {useManualAccountId && (
+                    <div className="space-y-2 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <label className="block text-sm font-semibold text-slate-900">
+                        Account Type <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={manualAccountId}
+                        onChange={(e) => {
+                          // Allow only numbers
+                          const value = e.target.value.replace(/\D/g, '');
+                          setManualAccountId(value);
+
+                        }}
+                        placeholder="Enter your XPO account Type (numbers only)"
+                        className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required={useManualAccountId}
+                      />
+                    </div>
+                  )}
+                </div>
+                
                 <button
                   type="button"
                   onClick={() => setShowPickupDetails(!showPickupDetails)}
@@ -2394,9 +2745,9 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                       <input
                         type="number"
                         value={commodity.dimensions?.length || ''}
-                        onChange={(e) => updateCommodity(index, 'dimensions', { ...commodity.dimensions, length: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => updateCommodity(index, 'dimensions', { ...commodity.dimensions, length: parseFloat(e.target.value) || 1 })}
                         className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        min="0"
+                        min="1"
                       />
                     </div>
                     <div className="space-y-2">
@@ -2406,9 +2757,9 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                       <input
                         type="number"
                         value={commodity.dimensions?.width || ''}
-                        onChange={(e) => updateCommodity(index, 'dimensions', { ...commodity.dimensions, width: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => updateCommodity(index, 'dimensions', { ...commodity.dimensions, width: parseFloat(e.target.value) || 1 })}
                         className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        min="0"
+                        min="1"
                       />
                     </div>
                     <div className="space-y-2">
@@ -2418,9 +2769,9 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                       <input
                         type="number"
                         value={commodity.dimensions?.height || ''}
-                        onChange={(e) => updateCommodity(index, 'dimensions', { ...commodity.dimensions, height: parseFloat(e.target.value) || 0 })}
+                        onChange={(e) => updateCommodity(index, 'dimensions', { ...commodity.dimensions, height: parseFloat(e.target.value) || 1 })}
                         className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        min="0"
+                        min="1"
                       />
                     </div>
                     <div className="space-y-2">
@@ -2608,9 +2959,9 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                         <input
                           type="number"
                           value={commodities[0].dimensions?.length || ''}
-                          onChange={(e) => updateCommodity(0, 'dimensions', { ...commodities[0].dimensions, length: parseFloat(e.target.value) || 0 })}
+                          onChange={(e) => updateCommodity(0, 'dimensions', { ...commodities[0].dimensions, length: parseFloat(e.target.value) || 1 })}
                           className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          min="0"
+                          min="1"
                         />
                       </div>
                       <div className="space-y-2">
@@ -2620,9 +2971,9 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                         <input
                           type="number"
                           value={commodities[0].dimensions?.width || ''}
-                          onChange={(e) => updateCommodity(0, 'dimensions', { ...commodities[0].dimensions, width: parseFloat(e.target.value) || 0 })}
+                          onChange={(e) => updateCommodity(0, 'dimensions', { ...commodities[0].dimensions, width: parseFloat(e.target.value) || 1 })}
                           className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          min="0"
+                          min="1"
                         />
                       </div>
                       <div className="space-y-2">
@@ -2632,9 +2983,9 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                         <input
                           type="number"
                           value={commodities[0].dimensions?.height || ''}
-                          onChange={(e) => updateCommodity(0, 'dimensions', { ...commodities[0].dimensions, height: parseFloat(e.target.value) || 0 })}
+                          onChange={(e) => updateCommodity(0, 'dimensions', { ...commodities[0].dimensions, height: parseFloat(e.target.value) || 1 })}
                           className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          min="0"
+                          min="1"
                         />
                       </div>
                       <div className="space-y-2">

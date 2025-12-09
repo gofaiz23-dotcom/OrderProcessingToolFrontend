@@ -7,15 +7,57 @@ import type { XPORateQuoteCommodity } from '@/app/api/ShippingUtil/xpo/RateQuote
 import type { XPOBillOfLadingFields, XPOBillOfLadingCommodity } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
 import type { XPOPickupRequestFields } from '@/app/api/ShippingUtil/xpo/PickupRequestField';
 
+// Mapping for accessorial codes to their descriptions and types
+// Maps frontend service codes to backend accessorial codes
+const ACCESSORIAL_MAPPING: Record<string, { code: string; desc: string; type: 'Origin' | 'Destination' }> = {
+  // Delivery Services - map frontend codes to backend codes
+  'LIFT': { code: 'DLG', desc: 'DLG DEST LIFTGATE SERVICE', type: 'Destination' },
+  'DLG': { code: 'DLG', desc: 'DLG DEST LIFTGATE SERVICE', type: 'Destination' },
+  'RESI': { code: 'RSD', desc: 'RSD DEST RESIDENTIAL DELIVERY', type: 'Destination' },
+  'RSD': { code: 'RSD', desc: 'RSD DEST RESIDENTIAL DELIVERY', type: 'Destination' },
+  'NOTIFY': { code: 'DNC', desc: 'DNC DEST NOTIFICATION', type: 'Destination' },
+  'DNC': { code: 'DNC', desc: 'DNC DEST NOTIFICATION', type: 'Destination' },
+  'AFTER_HOURS': { code: 'AFTER_HOURS', desc: 'After Business hours Delivery', type: 'Destination' },
+  'APPT': { code: 'APPT', desc: 'Appointment', type: 'Destination' },
+  'CONST': { code: 'CONST', desc: 'Construction/Utility', type: 'Destination' },
+  'CONTAINER': { code: 'CONTAINER', desc: 'Container Station', type: 'Destination' },
+  'DEST_LIMITED': { code: 'DEST_LIMITED', desc: 'Destination Limited Access', type: 'Destination' },
+  'EXHIBIT': { code: 'EXHIBIT', desc: 'Exhibition/Trade Show', type: 'Destination' },
+  'GROCERY': { code: 'GROCERY', desc: 'Grocery Consolidation Delivery', type: 'Destination' },
+  'HOLIDAY': { code: 'HOLIDAY', desc: 'Holiday/Weekend', type: 'Destination' },
+  'INBOND': { code: 'INBOND', desc: 'In Bond Freight', type: 'Destination' },
+  'INBOND_TIR': { code: 'INBOND_TIR', desc: 'In Bond TIR Carnet', type: 'Destination' },
+  'INSIDE': { code: 'INSIDE', desc: 'Inside Delivery', type: 'Destination' },
+  'MINE': { code: 'MINE', desc: 'Mine/Govt/Airport', type: 'Destination' },
+  'PIERS': { code: 'PIERS', desc: 'Piers/Wharves Loading', type: 'Destination' },
+  'REMOVE': { code: 'REMOVE', desc: 'Removal of Pallet / Debris', type: 'Destination' },
+  'SORT': { code: 'SORT', desc: 'Sorting/Segregation', type: 'Destination' },
+  // Pickup Services
+  'BLIND': { code: 'BLIND', desc: 'Blind Shipment', type: 'Origin' },
+  'ORIGIN_LIMITED': { code: 'ORIGIN_LIMITED', desc: 'Origin Limited Access', type: 'Origin' },
+  'SINGLE': { code: 'SINGLE', desc: 'Single Shipment', type: 'Origin' },
+  // Premium Services
+  'FREEZABLE': { code: 'FREEZABLE', desc: 'Freezable Protection', type: 'Destination' },
+  'GUARANTEED': { code: 'GUARANTEED', desc: 'Guaranteed (G!)', type: 'Destination' },
+  'GUARANTEED_NOON': { code: 'GUARANTEED_NOON', desc: 'Guaranteed by Noon (G!12)', type: 'Destination' },
+  'MABD': { code: 'MABD', desc: 'MABD', type: 'Destination' },
+};
+
 type BuildXPORateQuoteParams = {
   paymentTermCd: string;
   shipmentDate: string;
   accessorials?: string[];
-  shipperPostalCd: string;
+  shipperPostalCd?: string; // Optional when shipperAcctInstId is provided
+  shipperAcctInstId?: string;
   consigneePostalCd: string;
+  consigneeCountryCd?: string;
   commodity: XPORateQuoteCommodity[];
+  commodityDescriptions?: Record<number, string>;
   palletCnt?: number;
   linealFt?: number;
+  freezableInd?: boolean;
+  hazmatInd?: boolean;
+  bill2PartyUsZip4?: string;
 };
 
 export const buildXPORateQuoteRequestBody = (params: BuildXPORateQuoteParams) => {
@@ -23,25 +65,46 @@ export const buildXPORateQuoteRequestBody = (params: BuildXPORateQuoteParams) =>
     paymentTermCd,
     shipmentDate,
     shipperPostalCd,
+    shipperAcctInstId,
     consigneePostalCd,
+    consigneeCountryCd,
     commodity,
+    commodityDescriptions,
     palletCnt,
     linealFt,
-    // Note: accessorials are not included in rate quote requests as XPO rate quote API does not support them
+    freezableInd,
+    hazmatInd,
+    bill2PartyUsZip4,
+    accessorials,
   } = params;
+
+  type AccessorialType = {
+    accessorialCd: string;
+    accessorialDesc: string;
+    accessorialType: 'Origin' | 'Destination';
+  };
 
   type ShipmentInfoType = {
     paymentTermCd: string;
     shipmentDate?: string;
-    accessorials?: string[];
+    accessorials?: AccessorialType[];
+    freezableInd?: boolean;
+    hazmatInd?: boolean;
     shipper?: {
-      address: {
+      acctInstId?: string;
+      address?: {
         postalCd: string;
       };
     };
     consignee?: {
       address: {
         postalCd: string;
+        countryCd?: string;
+      };
+    };
+    bill2Party?: {
+      address: {
+        usZip4?: string;
       };
     };
     commodity?: Array<{
@@ -51,8 +114,10 @@ export const buildXPORateQuoteRequestBody = (params: BuildXPORateQuoteParams) =>
         weight: number;
         weightUom: string;
       };
-      hazmatInd: boolean;
+      desc?: string;
       nmfcClass?: string;
+      nmfcItemCd?: string;
+      hazmatInd: boolean;
       dimensions?: {
         length: number;
         width: number;
@@ -67,6 +132,34 @@ export const buildXPORateQuoteRequestBody = (params: BuildXPORateQuoteParams) =>
   const shipmentInfo: ShipmentInfoType = {
       paymentTermCd: paymentTermCd || 'P',
   };
+  
+  // Convert accessorials from string array to array of objects
+  if (accessorials && accessorials.length > 0) {
+    shipmentInfo.accessorials = accessorials.map(code => {
+      const mapping = ACCESSORIAL_MAPPING[code];
+      if (mapping) {
+        return {
+          accessorialCd: mapping.code, // Use backend code (e.g., DLG instead of LIFT)
+          accessorialDesc: mapping.desc,
+          accessorialType: mapping.type,
+        };
+      }
+      // Fallback for unknown codes
+      return {
+        accessorialCd: code,
+        accessorialDesc: code,
+        accessorialType: 'Destination' as const,
+      };
+    });
+  }
+  
+  // Add freezableInd and hazmatInd at shipmentInfo level
+  if (freezableInd !== undefined) {
+    shipmentInfo.freezableInd = freezableInd;
+  }
+  if (hazmatInd !== undefined) {
+    shipmentInfo.hazmatInd = hazmatInd;
+  }
   
   // Only add shipmentDate if it exists and is valid
   // XPO API requires shipmentDate to be a valid ISO 8601 date string
@@ -97,29 +190,40 @@ export const buildXPORateQuoteRequestBody = (params: BuildXPORateQuoteParams) =>
     shipmentInfo.shipmentDate = new Date().toISOString();
   }
   
-  // Accessorials: XPO rate quote API does not accept accessorials
-  // Exclude accessorials from rate quote requests to avoid 400 errors
-  // Accessorials should only be included in BOL creation, not rate quotes
-  // Do not include accessorials in rate quote requests
+  // Accessorials: Include delivery services, pickup services, and premium services
+  // These services are included in the rate quote request payload
   
-  // Shipper address - ensure postal code is valid (5 digits minimum)
-  if (!shipperPostalCd || shipperPostalCd.trim() === '') {
-    throw new Error('Shipper postal code is required');
-  }
-  shipmentInfo.shipper = {
-        address: {
+  // Shipper - use acctInstId if provided, otherwise use address
+  shipmentInfo.shipper = {};
+  if (shipperAcctInstId && shipperAcctInstId.trim() !== '') {
+    // When acctInstId is provided, use ONLY acctInstId (no address)
+    shipmentInfo.shipper.acctInstId = shipperAcctInstId.trim();
+  } else {
+    // When acctInstId is not provided, use address with postalCd
+    if (!shipperPostalCd || shipperPostalCd.trim() === '') {
+      throw new Error('Shipper postal code is required when account ID is not provided');
+    }
+    shipmentInfo.shipper.address = {
       postalCd: shipperPostalCd.trim(),
-        },
-  };
+    };
+  }
   
   // Consignee address - ensure postal code is valid (5 digits minimum)
   if (!consigneePostalCd || consigneePostalCd.trim() === '') {
     throw new Error('Consignee postal code is required');
   }
   shipmentInfo.consignee = {
-        address: {
+    address: {
       postalCd: consigneePostalCd.trim(),
-        },
+      countryCd: (consigneeCountryCd && consigneeCountryCd.trim() !== '') ? consigneeCountryCd.trim() : 'US',
+    },
+  };
+  
+  // Bill2Party - always include (even with empty string, as per correct payload structure)
+  shipmentInfo.bill2Party = {
+    address: {
+      usZip4: bill2PartyUsZip4 !== undefined ? bill2PartyUsZip4.trim() : '',
+    },
   };
   
   // Commodity array - type for the transformed commodity item
@@ -130,8 +234,10 @@ export const buildXPORateQuoteRequestBody = (params: BuildXPORateQuoteParams) =>
       weight: number;
       weightUom: string;
     };
-    hazmatInd: boolean;
+    desc?: string;
     nmfcClass?: string;
+    nmfcItemCd?: string;
+    hazmatInd: boolean;
     dimensions?: {
       length: number;
       width: number;
@@ -142,16 +248,28 @@ export const buildXPORateQuoteRequestBody = (params: BuildXPORateQuoteParams) =>
 
   let calculatedPalletCnt = 0;
   if (commodity && commodity.length > 0) {
-    shipmentInfo.commodity = commodity.map(item => {
+    shipmentInfo.commodity = commodity.map((item, index) => {
         const commodityItem: TransformedCommodityItem = {
           pieceCnt: item.pieceCnt || 0,
           packageCode: item.packageCode || 'BOX',
           grossWeight: {
             weight: item.grossWeight?.weight || 0,
-            weightUom: item.grossWeight?.weightUom || 'LBS',
+            weightUom: (item.grossWeight?.weightUom || 'lbs').toLowerCase(),
           },
           hazmatInd: item.hazmatInd || false,
         };
+        
+        // Add description if available
+        // Priority: 1) commodityDescriptions[index], 2) item.desc
+        if (commodityDescriptions && commodityDescriptions[index] && commodityDescriptions[index].trim() !== '') {
+          commodityItem.desc = commodityDescriptions[index].trim();
+        } else {
+          // Check if item has desc property (may not be in type definition)
+          const itemWithDesc = item as any;
+          if (itemWithDesc.desc && itemWithDesc.desc.trim() !== '') {
+            commodityItem.desc = itemWithDesc.desc.trim();
+          }
+        }
         
         // Calculate pallet count: if packageCode is "PLT" (case-insensitive), add pieceCnt to pallet count
         if (item.packageCode && item.packageCode.toUpperCase() === 'PLT') {
@@ -163,12 +281,14 @@ export const buildXPORateQuoteRequestBody = (params: BuildXPORateQuoteParams) =>
           commodityItem.nmfcClass = item.nmfcClass;
         }
         
-        // Only include dimensions if at least one dimension has a value
-        if (item.dimensions && (
-          (item.dimensions.length && item.dimensions.length > 0) ||
-          (item.dimensions.width && item.dimensions.width > 0) ||
-          (item.dimensions.height && item.dimensions.height > 0)
-        )) {
+        // Add nmfcItemCd if available (checking if it exists in the item, though it's not in the type)
+        const itemWithNmfcItemCd = item as any;
+        if (itemWithNmfcItemCd.nmfcItemCd && itemWithNmfcItemCd.nmfcItemCd.trim() !== '') {
+          commodityItem.nmfcItemCd = itemWithNmfcItemCd.nmfcItemCd.trim();
+        }
+        
+        // Include dimensions if they exist (even if 0, as per correct payload structure)
+        if (item.dimensions) {
           commodityItem.dimensions = {
             length: item.dimensions.length || 0,
             width: item.dimensions.width || 0,
@@ -183,16 +303,12 @@ export const buildXPORateQuoteRequestBody = (params: BuildXPORateQuoteParams) =>
   
   // palletCnt: Use calculated value from commodities if packageCode is "PLT", 
   // otherwise use provided value
-  // Only include palletCnt if it's greater than 0
+  // Always include palletCnt (even if 0, as per correct payload structure)
   const finalPalletCnt = calculatedPalletCnt > 0 ? calculatedPalletCnt : (palletCnt || 0);
-  if (finalPalletCnt > 0) {
-    shipmentInfo.palletCnt = finalPalletCnt;
-  }
+  shipmentInfo.palletCnt = finalPalletCnt;
   
-  // linealFt: Only include if it's greater than 0
-  if (linealFt && linealFt > 0) {
-    shipmentInfo.linealFt = linealFt;
-  }
+  // linealFt: Always include (even if 0, as per correct payload structure)
+  shipmentInfo.linealFt = linealFt || 0;
   
   // Return the shipmentInfo with only included fields
   return {
@@ -354,6 +470,7 @@ export const buildXPOBillOfLadingRequestBody = (params: BuildXPOBillOfLadingPara
         contactInfo: normalizeContactInfo(params.bol.consignee.contactInfo),
       },
       shipper: {
+        ...(params.bol.shipper.acctInstId && { acctInstId: params.bol.shipper.acctInstId }),
         ...params.bol.shipper,
         address: normalizeAddress(params.bol.shipper.address),
         contactInfo: normalizeContactInfo(params.bol.shipper.contactInfo),
@@ -398,6 +515,21 @@ export const buildXPOBillOfLadingRequestBody = (params: BuildXPOBillOfLadingPara
         : [],
       // Include suppRef if provided
       ...(params.bol.suppRef && { suppRef: params.bol.suppRef }),
+      // Include pickupInfo if provided
+      ...(params.bol.pickupInfo && {
+        pickupInfo: {
+          pkupDate: params.bol.pickupInfo.pkupDate,
+          pkupTime: params.bol.pickupInfo.pkupTime,
+          dockCloseTime: params.bol.pickupInfo.dockCloseTime,
+          contact: {
+            companyName: params.bol.pickupInfo.contact.companyName,
+            fullName: params.bol.pickupInfo.contact.fullName,
+            phone: {
+              phoneNbr: params.bol.pickupInfo.contact.phone.phoneNbr,
+            },
+          },
+        },
+      }),
     },
     autoAssignPro: params.autoAssignPro !== undefined ? params.autoAssignPro : true,
   };

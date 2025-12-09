@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Loader2, Plus, X, ChevronDown, ChevronUp, Info } from 'lucide-react';
+import { formatISO } from 'date-fns';
 import { buildApiUrl } from '../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
 import { buildXPOBillOfLadingRequestBody } from './utils/requestBuilder';
@@ -15,6 +16,8 @@ import {
   XPO_BOL_COUNTRY_OPTIONS
 } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
+import { XPO_SHIPPER_ADDRESS_BOOK } from '@/Shared/constant';
+import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 
 type BillOfLandingProps = {
   onNext: () => void;
@@ -73,6 +76,7 @@ export const XPOBillOfLading = ({
     billTo: true,
     commodities: true,
     optional: false,
+    pickupRequest: false,
   });
 
   // Requester
@@ -90,6 +94,9 @@ export const XPOBillOfLading = ({
   const [consigneeLoadingZip, setConsigneeLoadingZip] = useState(false);
 
   // Shipper
+  const [pickupLocation, setPickupLocation] = useState<string>('');
+  const [shipperAcctInstId, setShipperAcctInstId] = useState<string>('');
+  const [shipperAcctMadCd, setShipperAcctMadCd] = useState<string>('');
   const [shipperAddressLine1, setShipperAddressLine1] = useState<string>('');
   const [shipperCity, setShipperCity] = useState<string>('');
   const [shipperState, setShipperState] = useState<string>('');
@@ -111,9 +118,13 @@ export const XPOBillOfLading = ({
   const [billToPhone, setBillToPhone] = useState<string>('');
   const [billToLoadingZip, setBillToLoadingZip] = useState(false);
 
-  // Commodities
+  // Commodities - Initialize with defaults (will be populated from quoteData)
   const [commodities, setCommodities] = useState<XPOBillOfLadingCommodity[]>([
-    { ...XPO_BOL_COMMODITY_DEFAULTS }
+    { 
+      ...XPO_BOL_COMMODITY_DEFAULTS,
+      nmfcItemCd: '079300', // Default NMFC Code
+      sub: '03', // Default Sub
+    }
   ]);
 
   // Optional fields
@@ -123,6 +134,24 @@ export const XPOBillOfLading = ({
   const [emergencyContactPhone, setEmergencyContactPhone] = useState<string>('');
   const [additionalService, setAdditionalService] = useState<string[]>([]);
   const [autoAssignPro, setAutoAssignPro] = useState<boolean>(true);
+
+  // Helper function to get today's date in YYYY-MM-DD format
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Pickup Request fields
+  const [schedulePickup, setSchedulePickup] = useState<boolean>(false);
+  const [pickupDate, setPickupDate] = useState<string>(getTodayDate());
+  const [pickupTime, setPickupTime] = useState<string>('11:00');
+  const [dockCloseTime, setDockCloseTime] = useState<string>('16:30');
+  const [pickupContactCompanyName, setPickupContactCompanyName] = useState<string>('XPO LOGISTICS FREIGHT, INC.');
+  const [pickupContactFullName, setPickupContactFullName] = useState<string>('XPO Driver');
+  const [pickupContactPhone, setPickupContactPhone] = useState<string>('562-9468331');
 
   // Ref to track previous form data to prevent infinite loops
   const prevFormDataRef = useRef<any>(null);
@@ -188,6 +217,67 @@ export const XPOBillOfLading = ({
       if (initialFormData.chargeToCd) setChargeToCd(initialFormData.chargeToCd);
       if (initialFormData.remarks) setRemarks(initialFormData.remarks);
       if (initialFormData.autoAssignPro !== undefined) setAutoAssignPro(initialFormData.autoAssignPro);
+      
+      // Load pickup request data if available
+      if (initialFormData.pickupInfo) {
+        setSchedulePickup(true);
+        // Parse ISO 8601 date-time strings to extract date and time
+        if (initialFormData.pickupInfo.pkupDate) {
+          const pkupDateObj = new Date(initialFormData.pickupInfo.pkupDate);
+          if (!isNaN(pkupDateObj.getTime())) {
+            const dateStr = pkupDateObj.toISOString().split('T')[0];
+            const timeStr = pkupDateObj.toTimeString().split(' ')[0].substring(0, 5);
+            setPickupDate(dateStr);
+            setPickupTime(timeStr);
+          } else {
+            // If parsing fails, use defaults
+            setPickupDate(getTodayDate());
+            setPickupTime('11:00');
+          }
+        } else {
+          // If no date provided, use defaults
+          setPickupDate(getTodayDate());
+          setPickupTime('11:00');
+        }
+        if (initialFormData.pickupInfo.dockCloseTime) {
+          const dockCloseDateObj = new Date(initialFormData.pickupInfo.dockCloseTime);
+          if (!isNaN(dockCloseDateObj.getTime())) {
+            const timeStr = dockCloseDateObj.toTimeString().split(' ')[0].substring(0, 5);
+            setDockCloseTime(timeStr);
+          } else {
+            // If parsing fails, use default
+            setDockCloseTime('16:30');
+          }
+        } else {
+          // If no dock close time provided, use default
+          setDockCloseTime('16:30');
+        }
+        if (initialFormData.pickupInfo.contact) {
+          if (initialFormData.pickupInfo.contact.companyName) {
+            setPickupContactCompanyName(initialFormData.pickupInfo.contact.companyName);
+          }
+          if (initialFormData.pickupInfo.contact.fullName) {
+            setPickupContactFullName(initialFormData.pickupInfo.contact.fullName);
+          }
+          if (initialFormData.pickupInfo.contact.phone?.phoneNbr) {
+            setPickupContactPhone(initialFormData.pickupInfo.contact.phone.phoneNbr);
+          }
+        }
+      } else if (initialFormData.schedulePickup !== undefined) {
+        setSchedulePickup(initialFormData.schedulePickup);
+        // If schedulePickup is enabled but no pickupInfo, ensure defaults are set
+        if (initialFormData.schedulePickup) {
+          if (!pickupDate) {
+            setPickupDate(getTodayDate());
+          }
+          if (!pickupTime) {
+            setPickupTime('11:00');
+          }
+          if (!dockCloseTime) {
+            setDockCloseTime('16:30');
+          }
+        }
+      }
       
       // Reset flag after a short delay to allow all state updates to complete
       setTimeout(() => {
@@ -259,6 +349,13 @@ export const XPOBillOfLading = ({
       chargeToCd,
       remarks,
       autoAssignPro,
+      schedulePickup,
+      pickupDate,
+      pickupTime,
+      dockCloseTime,
+      pickupContactCompanyName,
+      pickupContactFullName,
+      pickupContactPhone,
     };
 
     // Only call onFormDataChange if data actually changed
@@ -280,6 +377,8 @@ export const XPOBillOfLading = ({
     billToAddressLine1, billToCity, billToState, billToCountry, billToPostalCd,
     billToCompanyName, billToEmail, billToPhone,
     commodities, chargeToCd, remarks, autoAssignPro,
+    schedulePickup, pickupDate, pickupTime, dockCloseTime,
+    pickupContactCompanyName, pickupContactFullName, pickupContactPhone,
   ]);
 
   // Load response data if provided
@@ -288,6 +387,121 @@ export const XPOBillOfLading = ({
       onResponseDataChange(initialResponseData);
     }
   }, [initialResponseData, onResponseDataChange]);
+
+  // Populate from quoteData (rate quote response)
+  useEffect(() => {
+    if (quoteData && !initialFormData) {
+      isLoadingFromInitialDataRef.current = true;
+      // Extract data from various possible quoteData structures
+      let rateQuote: any = null;
+      
+      // Check if quoteData has data.data.rateQuote (full response structure)
+      // Structure: { data: { data: { rateQuote: { shipmentInfo: {...} } } } }
+      if ((quoteData as any)?.data?.data?.rateQuote) {
+        rateQuote = (quoteData as any).data.data.rateQuote;
+      }
+      // Check if quoteData has a quote object with shipmentInfo
+      else if ((quoteData as any)?.quote?.shipmentInfo) {
+        rateQuote = (quoteData as any).quote;
+      }
+      // Check if quoteData is the rateQuote object directly
+      else if ((quoteData as any)?.shipmentInfo) {
+        rateQuote = quoteData;
+      }
+
+      if (rateQuote?.shipmentInfo) {
+        const shipmentInfo = rateQuote.shipmentInfo;
+
+        // Populate shipper information
+        if (shipmentInfo.shipper) {
+          const shipper = shipmentInfo.shipper;
+          
+          if (shipper.acctInstId) {
+            setShipperAcctInstId(shipper.acctInstId);
+          }
+          if (shipper.acctMadCd) {
+            setShipperAcctMadCd(shipper.acctMadCd);
+          }
+          if (shipper.address) {
+            if (shipper.address.name) {
+              setShipperCompanyName(shipper.address.name);
+            }
+            if (shipper.address.addressLine1) {
+              setShipperAddressLine1(shipper.address.addressLine1);
+            }
+            // addressLine2 is optional and may be empty in response
+            if (shipper.address.addressLine2 !== undefined) {
+              // Note: addressLine2 field exists in the response but may be empty string
+              // The UI doesn't have a separate addressLine2 field, it's combined with addressLine1
+            }
+            if (shipper.address.cityName) {
+              setShipperCity(shipper.address.cityName);
+            }
+            if (shipper.address.stateCd) {
+              setShipperState(shipper.address.stateCd);
+            }
+            if (shipper.address.countryCd) {
+              setShipperCountry(shipper.address.countryCd);
+            }
+            if (shipper.address.postalCd) {
+              setShipperPostalCd(shipper.address.postalCd);
+            }
+          }
+        }
+
+        // Populate commodity information (first commodity)
+        if (shipmentInfo.commodity && Array.isArray(shipmentInfo.commodity) && shipmentInfo.commodity.length > 0) {
+          const firstCommodity = shipmentInfo.commodity[0];
+          
+          setCommodities(prev => {
+            const updated = [...prev];
+            if (updated.length > 0) {
+              updated[0] = {
+                ...updated[0],
+                // Update weight from rate quote response
+                ...(firstCommodity.grossWeight?.weight !== undefined && {
+                  grossWeight: {
+                    ...updated[0].grossWeight,
+                    weight: firstCommodity.grossWeight.weight,
+                  }
+                }),
+                // Update freight class (nmfcClass) from rate quote response
+                // Convert "250.0" to "250" if needed
+                ...(firstCommodity.nmfcClass && {
+                  nmfcClass: String(firstCommodity.nmfcClass).replace(/\.0+$/, ''),
+                }),
+                // Set default NMFC Code and Sub (always set these defaults, editable)
+                nmfcItemCd: '079300',
+                sub: '03',
+              };
+            } else {
+              // If no commodity exists, create one with data from quote
+              updated.push({
+                ...XPO_BOL_COMMODITY_DEFAULTS,
+                ...(firstCommodity.grossWeight?.weight !== undefined && {
+                  grossWeight: {
+                    weight: firstCommodity.grossWeight.weight,
+                    weightUom: firstCommodity.grossWeight.weightUom || 'LBS',
+                  }
+                }),
+                ...(firstCommodity.nmfcClass && {
+                  nmfcClass: String(firstCommodity.nmfcClass).replace(/\.0+$/, ''),
+                }),
+                nmfcItemCd: '079300',
+                sub: '03',
+              });
+            }
+            return updated;
+          });
+        }
+      }
+      
+      // Reset flag after a short delay to allow all state updates to complete
+      setTimeout(() => {
+        isLoadingFromInitialDataRef.current = false;
+      }, 0);
+    }
+  }, [quoteData, initialFormData]);
 
   const addCommodity = () => {
     setCommodities([...commodities, { ...XPO_BOL_COMMODITY_DEFAULTS }]);
@@ -407,6 +621,32 @@ export const XPOBillOfLading = ({
   };
 
   const buildRequestBody = (): XPOBillOfLadingFields => {
+    // Use shipperAcctInstId from state if available, otherwise extract from pickup location selection
+    let finalShipperAcctInstId: string | undefined = shipperAcctInstId || undefined;
+    
+    if (!finalShipperAcctInstId && pickupLocation) {
+      // Extract ID from format "ammana-{id}"
+      if (pickupLocation.startsWith('ammana-')) {
+        const idStr = pickupLocation.replace('ammana-', '');
+        const idNum = parseInt(idStr, 10);
+        if (!isNaN(idNum)) {
+          const selectedShipper = XPO_SHIPPER_ADDRESS_BOOK.find(s => s.id === idNum);
+          if (selectedShipper?.id) {
+            finalShipperAcctInstId = selectedShipper.id.toString();
+          }
+        }
+      } else {
+        // Try direct ID match
+        const idNum = parseInt(pickupLocation, 10);
+        if (!isNaN(idNum)) {
+          const selectedShipper = XPO_SHIPPER_ADDRESS_BOOK.find(s => s.id === idNum);
+          if (selectedShipper?.id) {
+            finalShipperAcctInstId = selectedShipper.id.toString();
+          }
+        }
+      }
+    }
+
     return {
       bol: {
         requester: {
@@ -431,6 +671,7 @@ export const XPOBillOfLading = ({
           },
         },
         shipper: {
+          ...(finalShipperAcctInstId && { acctInstId: finalShipperAcctInstId }),
           address: {
             addressLine1: shipperAddressLine1,
             cityName: shipperCity,
@@ -472,9 +713,96 @@ export const XPOBillOfLading = ({
         ...(emergencyContactName && { emergencyContactName }),
         ...(emergencyContactPhone && { emergencyContactPhone: { phoneNbr: emergencyContactPhone } }),
         ...(additionalService.length > 0 && { additionalService }),
+        // Include pickupInfo only if schedulePickup is true and all date/time values are valid
+        ...(schedulePickup && 
+            pickupDate && 
+            pickupTime && 
+            dockCloseTime && 
+            pickupDate.trim() !== '' && 
+            pickupTime.trim() !== '' && 
+            dockCloseTime.trim() !== '' && 
+            (() => {
+              // Format all three fields as ISO 8601 with timezone: "2025-12-15T12:00:00-08:00"
+              // pkupDate and pkupTime use the same date and pickup time
+              // dockCloseTime uses the same date but with dock close time
+              const formattedPkupDate = formatDateTimeWithTimezone(pickupDate, pickupTime);
+              const formattedPkupTime = formatDateTimeWithTimezone(pickupDate, pickupTime);
+              const formattedDockCloseTime = formatDateTimeWithTimezone(pickupDate, dockCloseTime);
+              
+              // Only include pickupInfo if all formatted values are valid (not empty strings)
+              if (formattedPkupDate && formattedPkupTime && formattedDockCloseTime) {
+                return {
+                  pickupInfo: {
+                    pkupDate: formattedPkupDate,
+                    pkupTime: formattedPkupTime,
+                    dockCloseTime: formattedDockCloseTime,
+                    contact: {
+                      companyName: pickupContactCompanyName || 'XPO LOGISTICS FREIGHT, INC.',
+                      fullName: pickupContactFullName || 'XPO Driver',
+                      phone: {
+                        phoneNbr: pickupContactPhone || '562-9468331',
+                      },
+                    },
+                  },
+                };
+              }
+              return null;
+            })()
+        ),
       },
       autoAssignPro,
     };
+  };
+
+  // Helper function to format date and time to ISO 8601 with timezone using date-fns
+  // Returns format: "2025-12-15T12:00:00-08:00"
+  const formatDateTimeWithTimezone = (date: string, time: string): string => {
+    // Validate inputs - must be non-empty strings
+    if (!date || !time || typeof date !== 'string' || typeof time !== 'string') {
+      return '';
+    }
+    
+    // Trim whitespace
+    const trimmedDate = date.trim();
+    const trimmedTime = time.trim();
+    
+    // Check if inputs are empty after trimming
+    if (!trimmedDate || !trimmedTime) {
+      return '';
+    }
+    
+    // Validate date format (should be YYYY-MM-DD for date input)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(trimmedDate)) {
+      return '';
+    }
+    
+    // Validate time format (should be HH:mm for time input)
+    const timeRegex = /^\d{2}:\d{2}$/;
+    if (!timeRegex.test(trimmedTime)) {
+      return '';
+    }
+    
+    // Parse date components
+    const [year, month, day] = trimmedDate.split('-').map(Number);
+    const [hours, minutes] = trimmedTime.split(':').map(Number);
+    
+    // Validate parsed values
+    if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hours) || isNaN(minutes)) {
+      return '';
+    }
+    
+    // Create date object with local time
+    const dateTime = new Date(year, month - 1, day, hours, minutes, 0);
+    
+    // Check if date is valid
+    if (isNaN(dateTime.getTime())) {
+      return '';
+    }
+    
+    // Use date-fns formatISO to format as ISO 8601 with timezone
+    // formatISO returns format like "2025-12-15T12:00:00-08:00"
+    return formatISO(dateTime);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -502,6 +830,19 @@ export const XPOBillOfLading = ({
       setError(new Error('Please add at least one commodity with description and weight'));
       setLoading(false);
       return;
+    }
+    // Validate pickup request fields if schedulePickup is enabled
+    if (schedulePickup) {
+      if (!pickupDate || !pickupTime || !dockCloseTime) {
+        setError(new Error('Please fill in all required Pickup Request fields (Date, Time, Dock Close Time)'));
+        setLoading(false);
+        return;
+      }
+      if (!pickupContactCompanyName || !pickupContactFullName || !pickupContactPhone) {
+        setError(new Error('Please fill in all required Pickup Contact fields'));
+        setLoading(false);
+        return;
+      }
     }
 
     const normalizedCarrier = carrier.toLowerCase();
@@ -661,6 +1002,158 @@ export const XPOBillOfLading = ({
 
   const toggleSection = (section: string) => {
     setShowSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  // Parse address string to extract components
+  const parseAddressString = (addressStr: string): { streetAddress: string; addressLine2: string; city: string; state: string; zip: string } => {
+    if (!addressStr || addressStr.trim() === '') {
+      return { streetAddress: '', addressLine2: '', city: '', state: '', zip: '' };
+    }
+
+    // Remove "US" if present before zip
+    let cleaned = addressStr.trim().replace(/\s+US\s+(\d{5})$/, ' $1');
+    
+    // Extract zip (5 digits at the end)
+    const zipMatch = cleaned.match(/(\d{5})$/);
+    const zip = zipMatch ? zipMatch[1] : '';
+    
+    // Remove zip from string
+    let withoutZip = cleaned.replace(/\s+\d{5}$/, '').trim();
+    
+    // Extract state (2 uppercase letters before zip/at end)
+    const stateMatch = withoutZip.match(/\s+([A-Z]{2})\s*$/);
+    const state = stateMatch ? stateMatch[1] : '';
+    
+    // Remove state from string
+    let withoutStateZip = withoutZip.replace(/\s+[A-Z]{2}\s*$/, '').trim();
+    
+    // Handle special case: "# BHOUSTON" -> "# B" + "HOUSTON"
+    withoutStateZip = withoutStateZip.replace(/#\s*B([A-Z])/gi, '# B $1');
+    
+    // Split by spaces to analyze components
+    const parts = withoutStateZip.split(/\s+/);
+    
+    // Find where city starts (usually last 1-4 words before state)
+    const streetAbbrevs = ['ST', 'AVE', 'DR', 'RD', 'PKWY', 'BLVD', 'CIR', 'CT', 'FWY', 'HWY', 'LN', 'PL', 'WAY', 'STREET'];
+    const addressIndicators = ['STE', 'SUITE', '#', 'UNIT', 'APT', 'FLOOR', 'FL'];
+    
+    let cityStartIndex = parts.length;
+    
+    // Find the last street indicator or address indicator
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const word = parts[i].toUpperCase();
+      if (streetAbbrevs.includes(word) || addressIndicators.includes(word)) {
+        cityStartIndex = i + 1;
+        break;
+      }
+      // City names typically don't have numbers and are 1-3 words
+      if (cityStartIndex === parts.length && i < parts.length - 1 && /^[A-Z]+$/.test(word) && i > 0) {
+        const prevWord = parts[i - 1].toUpperCase();
+        if (streetAbbrevs.includes(prevWord) || addressIndicators.includes(prevWord)) {
+          cityStartIndex = i;
+          break;
+        }
+      }
+    }
+    
+    // If no clear city start found, try to identify city by pattern
+    if (cityStartIndex === parts.length) {
+      // Look for multi-word city names (typically 1-3 words, all caps, no numbers)
+      for (let i = parts.length - 1; i >= Math.max(0, parts.length - 4); i--) {
+        const potentialCity = parts.slice(i).join(' ');
+        if (/^[A-Z\s]+$/.test(potentialCity) && potentialCity.length > 2 && !/\d/.test(potentialCity)) {
+          cityStartIndex = i;
+          break;
+        }
+      }
+    }
+    
+    // Extract city and street address
+    const city = cityStartIndex < parts.length ? parts.slice(cityStartIndex).join(' ') : '';
+    const streetParts = cityStartIndex > 0 ? parts.slice(0, cityStartIndex) : parts;
+    
+    // Separate street address and address line 2
+    let streetAddress = '';
+    let addressLine2 = '';
+    
+    // Look for address line 2 indicators
+    const line2Indicators = ['STE', 'SUITE', '#', 'UNIT', 'APT', 'FLOOR', 'FL'];
+    let line2StartIndex = -1;
+    
+    for (let i = streetParts.length - 1; i >= 0; i--) {
+      const word = streetParts[i].toUpperCase();
+      if (line2Indicators.includes(word) && i > 0) {
+        line2StartIndex = i;
+        break;
+      }
+    }
+    
+    if (line2StartIndex >= 0) {
+      streetAddress = streetParts.slice(0, line2StartIndex).join(' ');
+      addressLine2 = streetParts.slice(line2StartIndex).join(' ');
+    } else {
+      streetAddress = streetParts.join(' ');
+      addressLine2 = '';
+    }
+    
+    return {
+      streetAddress: streetAddress || '',
+      addressLine2: addressLine2 || '',
+      city: city || '',
+      state: state || '',
+      zip: zip || '',
+    };
+  };
+
+  // Handle pickup location selection
+  const handlePickupLocationChange = (value: string) => {
+    setPickupLocation(value);
+    if (!value) {
+      // Clear fields when selection is cleared
+      setShipperCompanyName('');
+      setShipperAddressLine1('');
+      setShipperCity('');
+      setShipperState('');
+      setShipperPostalCd('');
+      setShipperCountry('US');
+      setShipperPhone('');
+      setShipperEmail('');
+      return;
+    }
+  };
+
+  const handlePickupLocationSelect = (option: SearchableDropdownOption) => {
+    // Find address by value (ammana-id format) or by legacy value
+    const addressId = option.value?.replace('ammana-', '');
+    const address = XPO_SHIPPER_ADDRESS_BOOK.find(opt => 
+      (opt.id && addressId && opt.id.toString() === addressId) || 
+      opt.value === option.value
+    );
+    
+    if (address) {
+      // Handle simplified format
+      if (address.id && address.name && address.address) {
+        const parsed = parseAddressString(address.address);
+        setShipperCompanyName(address.name);
+        setShipperAddressLine1(parsed.streetAddress);
+        setShipperCity(parsed.city);
+        setShipperState(parsed.state);
+        setShipperPostalCd(parsed.zip);
+        setShipperCountry('US');
+        setShipperPhone(address.phone || '');
+        setShipperEmail('');
+      } else {
+        // Legacy format
+        setShipperCompanyName(address.company || address.label?.split(' - ')[0] || '');
+        setShipperAddressLine1(address.streetAddress || '');
+        setShipperCity(address.city || '');
+        setShipperState(address.state || '');
+        setShipperPostalCd(address.zip || '');
+        setShipperCountry(address.country || 'US');
+        setShipperPhone(address.phone || '');
+        setShipperEmail('');
+      }
+    }
   };
 
   const renderAddressSection = (
@@ -903,6 +1396,98 @@ export const XPOBillOfLading = ({
           </button>
           {showSections.shipper && (
             <div className="p-4 sm:p-6">
+              {/* Pickup Location Dropdown */}
+              <div className="mb-6 space-y-2">
+                <label className="block text-sm font-semibold text-slate-900">
+                  Pickup Location <span className="text-red-500">*</span>
+                </label>
+                <SearchableDropdown
+                  options={XPO_SHIPPER_ADDRESS_BOOK.map(addr => {
+                    // Handle simplified format (id, name, address, deliveryType)
+                    if (addr.id && addr.name && addr.address) {
+                      const parsed = parseAddressString(addr.address);
+                      // Extract state for label
+                      const state = parsed.state || '';
+                      // Create formatted address for label
+                      const addressParts = [parsed.streetAddress, parsed.addressLine2, parsed.city, parsed.state, parsed.zip].filter(Boolean);
+                      const formattedAddress = addressParts.length > 0 ? addressParts.join(', ') : addr.address;
+                      // Ensure we have a valid label
+                      const label = `${addr.name} - ${state || 'N/A'} - ${formattedAddress}`;
+                      return {
+                        value: `ammana-${addr.id}`,
+                        label: label,
+                        id: addr.id,
+                        name: addr.name,
+                        address: addr.address,
+                        deliveryType: addr.deliveryType,
+                        company: addr.name,
+                        streetAddress: parsed.streetAddress,
+                        addressLine2: parsed.addressLine2,
+                        city: parsed.city,
+                        state: parsed.state,
+                        zip: parsed.zip,
+                        country: 'US',
+                        phone: addr.phone || '',
+                        extension: addr.extension || '',
+                        contactName: addr.contactName || '',
+                      };
+                    }
+                    // Legacy format (for backward compatibility)
+                    const legacyLabel = addr.label || (addr.name ? `${addr.name} - ${addr.state || ''} - ${addr.address || ''}` : 'Unknown Address');
+                    return {
+                      value: addr.value || `ammana-${addr.id || ''}`,
+                      label: legacyLabel,
+                      id: addr.id,
+                      company: addr.company,
+                      streetAddress: addr.streetAddress,
+                      addressLine2: addr.addressLine2,
+                      city: addr.city,
+                      state: addr.state,
+                      zip: addr.zip,
+                      country: addr.country,
+                      phone: addr.phone,
+                      extension: addr.extension,
+                      contactName: addr.contactName,
+                      deliveryType: addr.deliveryType,
+                      address: addr.address,
+                      name: addr.name,
+                    };
+                  }).filter(opt => opt.value && opt.label) as SearchableDropdownOption[]}
+                  value={pickupLocation}
+                  onChange={handlePickupLocationChange}
+                  onSelect={handlePickupLocationSelect}
+                  placeholder="Search and select pickup location..."
+                />
+              </div>
+
+              {/* Pickup Location Input Fields */}
+              <div className="mb-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-slate-900">
+                    Account Instance ID
+                  </label>
+                  <input
+                    type="text"
+                    value={shipperAcctInstId}
+                    onChange={(e) => setShipperAcctInstId(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., 531230732"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-sm font-semibold text-slate-900">
+                    Account MAD Code
+                  </label>
+                  <input
+                    type="text"
+                    value={shipperAcctMadCd}
+                    onChange={(e) => setShipperAcctMadCd(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., AMQKGULA002"
+                  />
+                </div>
+              </div>
+              
               {renderAddressSection(
                 'Shipper',
                 shipperAddressLine1, setShipperAddressLine1,
@@ -1047,7 +1632,7 @@ export const XPOBillOfLading = ({
                     </div>
 
                     <div className="space-y-2">
-                      <label className="block text-sm font-semibold text-slate-900">NMFC Class</label>
+                      <label className="block text-sm font-semibold text-slate-900">Freight Class</label>
                       <input
                         type="text"
                         value={commodity.nmfcClass || ''}
@@ -1178,6 +1763,148 @@ export const XPOBillOfLading = ({
                   <span className="text-sm text-slate-700">Auto Assign PRO</span>
                 </label>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Pickup Request */}
+        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => toggleSection('pickupRequest')}
+            className="w-full px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+          >
+            <h2 className="text-lg sm:text-xl font-bold text-slate-900">Pickup Request</h2>
+            {showSections.pickupRequest ? (
+              <ChevronUp className="text-slate-600" size={20} />
+            ) : (
+              <ChevronDown className="text-slate-600" size={20} />
+            )}
+          </button>
+          {showSections.pickupRequest && (
+            <div className="p-4 sm:p-6 space-y-4">
+              <div className="space-y-2">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={schedulePickup}
+                    onChange={(e) => {
+                      const isEnabled = e.target.checked;
+                      setSchedulePickup(isEnabled);
+                      // When enabling, always set to today's date and defaults
+                      if (isEnabled) {
+                        // Always set pickup date to today's date
+                        setPickupDate(getTodayDate());
+                        if (!pickupTime) {
+                          setPickupTime('11:00');
+                        }
+                        if (!dockCloseTime) {
+                          setDockCloseTime('16:30');
+                        }
+                      }
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm font-semibold text-slate-900">Schedule Pickup</span>
+                </label>
+              </div>
+
+              {schedulePickup && (
+                <div className="space-y-4 border-t border-slate-200 pt-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-slate-900">
+                        Pickup Date <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={pickupDate}
+                        onChange={(e) => {
+                          const selectedDate = e.target.value;
+                          const today = getTodayDate();
+                          // Only allow today or future dates
+                          if (selectedDate >= today) {
+                            setPickupDate(selectedDate);
+                          } else {
+                            // If past date is selected, reset to today
+                            setPickupDate(today);
+                          }
+                        }}
+                        min={getTodayDate()}
+                        className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required={schedulePickup}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-slate-900">
+                        Pickup Time <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="time"
+                        value={pickupTime}
+                        onChange={(e) => setPickupTime(e.target.value)}
+                        className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required={schedulePickup}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-slate-900">
+                        Dock Close Time <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="time"
+                        value={dockCloseTime}
+                        onChange={(e) => setDockCloseTime(e.target.value)}
+                        className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required={schedulePickup}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-slate-900">
+                        Contact Company Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={pickupContactCompanyName}
+                        onChange={(e) => setPickupContactCompanyName(e.target.value)}
+                        className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required={schedulePickup}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-slate-900">
+                        Contact Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={pickupContactFullName}
+                        onChange={(e) => setPickupContactFullName(e.target.value)}
+                        className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required={schedulePickup}
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="block text-sm font-semibold text-slate-900">
+                        Contact Phone <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        value={pickupContactPhone}
+                        onChange={(e) => setPickupContactPhone(e.target.value)}
+                        className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required={schedulePickup}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

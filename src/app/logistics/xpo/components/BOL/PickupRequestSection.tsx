@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { Calendar, Clock } from 'lucide-react';
 
 type PickupRequestSectionProps = {
@@ -23,15 +24,6 @@ type PickupRequestSectionProps = {
   onContactExtensionChange?: (value: string) => void;
 };
 
-const TIME_OPTIONS = [
-  '12:00 AM', '12:30 AM', '1:00 AM', '1:30 AM', '2:00 AM', '2:30 AM', '3:00 AM', '3:30 AM',
-  '4:00 AM', '4:30 AM', '5:00 AM', '5:30 AM', '6:00 AM', '6:30 AM', '7:00 AM', '7:30 AM',
-  '8:00 AM', '8:30 AM', '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
-  '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM', '3:00 PM', '3:30 PM',
-  '4:00 PM', '4:30 PM', '5:00 PM', '5:30 PM', '6:00 PM', '6:30 PM', '7:00 PM', '7:30 PM',
-  '8:00 PM', '8:30 PM', '9:00 PM', '9:30 PM', '10:00 PM', '10:30 PM', '11:00 PM', '11:30 PM',
-];
-
 export const PickupRequestSection = ({
   schedulePickup,
   onSchedulePickupChange,
@@ -52,6 +44,25 @@ export const PickupRequestSection = ({
   contactExtension = '',
   onContactExtensionChange,
 }: PickupRequestSectionProps) => {
+  // Helper function to get today's date in YYYY-MM-DD format
+  const getTodayDate = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Set default to today's date when schedulePickup is enabled and pickupDate is empty
+  useEffect(() => {
+    if (schedulePickup && onPickupDateChange && !pickupDate) {
+      onPickupDateChange(getTodayDate());
+    }
+  }, [schedulePickup, pickupDate, onPickupDateChange]);
+
+  // Use today's date as default if pickupDate is empty
+  const displayDate = pickupDate || getTodayDate();
+
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold text-slate-900">Pickup Request</h2>
@@ -62,7 +73,13 @@ export const PickupRequestSection = ({
             type="radio"
             name="pickupRequest"
             checked={schedulePickup === true}
-            onChange={() => onSchedulePickupChange(true)}
+            onChange={() => {
+              onSchedulePickupChange(true);
+              // Set today's date when enabling schedule pickup if date is empty
+              if (onPickupDateChange && !pickupDate) {
+                onPickupDateChange(getTodayDate());
+              }
+            }}
             className="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />
           <span className="text-sm text-slate-700">Yes, schedule a pickup request</span>
@@ -94,8 +111,19 @@ export const PickupRequestSection = ({
                 <div className="relative">
                   <input
                     type="date"
-                    value={pickupDate}
-                    onChange={(e) => onPickupDateChange(e.target.value)}
+                    value={displayDate}
+                    onChange={(e) => {
+                      const selectedDate = e.target.value;
+                      const today = getTodayDate();
+                      // Only allow today or future dates
+                      if (selectedDate >= today && onPickupDateChange) {
+                        onPickupDateChange(selectedDate);
+                      } else if (onPickupDateChange) {
+                        // If past date is selected, reset to today
+                        onPickupDateChange(today);
+                      }
+                    }}
+                    min={getTodayDate()}
                     className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
                     required
                   />
@@ -110,19 +138,13 @@ export const PickupRequestSection = ({
                   Pickup Ready Time <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <select
+                  <input
+                    type="time"
                     value={pickupReadyTime}
                     onChange={(e) => onPickupReadyTimeChange(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-10"
+                    className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
                     required
-                  >
-                    <option value="">Select Time</option>
-                    {TIME_OPTIONS.map((time) => (
-                      <option key={time} value={time}>
-                        {time}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   <Clock className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
                 </div>
               </div>
@@ -134,19 +156,13 @@ export const PickupRequestSection = ({
                   Dock Close Time <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <select
+                  <input
+                    type="time"
                     value={dockCloseTime}
                     onChange={(e) => onDockCloseTimeChange(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none pr-10"
+                    className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
                     required
-                  >
-                    <option value="">Select Time</option>
-                    {TIME_OPTIONS.map((time) => (
-                      <option key={time} value={time}>
-                        {time}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   <Clock className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
                 </div>
               </div>
