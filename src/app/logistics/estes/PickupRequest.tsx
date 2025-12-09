@@ -99,8 +99,8 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
 
   // Notifications
   const [emailRejected, setEmailRejected] = useState(true);
-  const [emailAccepted, setEmailAccepted] = useState(false);
-  const [emailCompleted, setEmailCompleted] = useState(false);
+  const [emailAccepted, setEmailAccepted] = useState(true);
+  const [emailCompleted, setEmailCompleted] = useState(true);
   const [additionalContacts, setAdditionalContacts] = useState<Contact[]>([]);
 
   // UI State
@@ -168,10 +168,7 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
         ]);
       }
 
-      // Freight Characteristics
-      if (bolFormData.liftGateService) setLiftgate(true);
-      if (bolFormData.specialHandlingRequests?.includes('Do Not Stack')) setDoNotStack(true);
-      if (bolFormData.specialHandlingRequests?.includes('Protect from Freezing')) setProtectFromFreezing(true);
+      // Freight Characteristics - Not auto-filled from BOL data (user wants none selected by default)
 
       // Pickup Instructions
       const instructions: string[] = [];
@@ -556,8 +553,8 @@ export const PickupRequest = ({ onPrevious, onComplete, quoteData, bolFormData, 
       requestAction: 'CREATE',
       paymentTerms: bolFormData?.terms === 'Prepaid' ? 'PREPAID' : 'COLLECT',
       pickupDate: pickupDate || bolFormData?.shipDate || '',
-      pickupStartTime: pickupStartTime.replace(':', ''),
-      pickupEndTime: pickupEndTime.replace(':', ''),
+      pickupStartTime: pickupStartTime,
+      pickupEndTime: pickupEndTime,
       totalPieces: String(totalPieces),
       totalWeight: String(totalWeight),
       totalHandlingUnits: String(totalHandlingUnits),
