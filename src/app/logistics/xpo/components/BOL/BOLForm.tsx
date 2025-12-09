@@ -78,6 +78,7 @@ type BOLFormProps = {
 export const BOLForm = ({
   onNext,
   onPrevious,
+  quoteData,
   initialFormData,
   initialResponseData,
   onFormDataChange,
@@ -145,6 +146,8 @@ export const BOLForm = ({
       nmfcClass: XPO_BOL_DEFAULTS.commodity.nmfcClass,
       pieceCnt: XPO_BOL_DEFAULTS.commodity.pieceCnt,
       packaging: XPO_BOL_DEFAULTS.commodity.packaging,
+      nmfcItemCd: XPO_BOL_DEFAULTS.commodity.nmfcItemCd, // Default: '079300'
+      sub: XPO_BOL_DEFAULTS.commodity.sub, // Default: '03'
     }
   ]);
 
@@ -188,6 +191,149 @@ export const BOLForm = ({
 
   // Reference Numbers
   const [references, setReferences] = useState<XPOBillOfLadingReference[]>([...XPO_BOL_DEFAULTS.referenceNumbers]);
+
+  // Extract confirmationNbr from quoteData and populate references
+  useEffect(() => {
+    if (quoteData) {
+      // Try to extract confirmationNbr from various possible locations in quoteData
+      let confirmationNbr: string | undefined;
+      
+      // Check if quoteData has a quote object with confirmationNbr
+      if ((quoteData as any)?.quote?.confirmationNbr) {
+        confirmationNbr = (quoteData as any).quote.confirmationNbr;
+      }
+      // Check if quoteData has data.data.rateQuote.confirmationNbr (full response structure)
+      else if ((quoteData as any)?.data?.data?.rateQuote?.confirmationNbr) {
+        confirmationNbr = (quoteData as any).data.data.rateQuote.confirmationNbr;
+      }
+      // Check if quoteData is the rateQuote object directly
+      else if ((quoteData as any)?.confirmationNbr) {
+        confirmationNbr = (quoteData as any).confirmationNbr;
+      }
+      
+      // If we found a confirmationNbr, populate the references
+      if (confirmationNbr && confirmationNbr.trim() !== '') {
+        setReferences([
+          {
+            referenceTypeCd: 'Other',
+            reference: confirmationNbr.trim(),
+            referenceCode: 'RQ#',
+            referenceDescr: 'Rate Quote Number',
+          },
+        ]);
+      }
+    }
+  }, [quoteData]);
+
+  // Populate pickup location and commodities from quoteData (rate quote response)
+  useEffect(() => {
+    if (quoteData && !initialFormData) {
+      // Extract data from various possible quoteData structures
+      let rateQuote: any = null;
+      
+      // Check if quoteData has data.data.rateQuote (full response structure)
+      if ((quoteData as any)?.data?.data?.rateQuote) {
+        rateQuote = (quoteData as any).data.data.rateQuote;
+      }
+      // Check if quoteData has a quote object with shipmentInfo
+      else if ((quoteData as any)?.quote?.shipmentInfo) {
+        rateQuote = (quoteData as any).quote;
+      }
+      // Check if quoteData is the rateQuote object directly
+      else if ((quoteData as any)?.shipmentInfo) {
+        rateQuote = quoteData;
+      }
+
+      if (rateQuote?.shipmentInfo) {
+        const shipmentInfo = rateQuote.shipmentInfo;
+
+        // Populate shipper/pickup location
+        if (shipmentInfo.shipper) {
+          const shipper = shipmentInfo.shipper;
+          
+          // Populate pickup location from shipper data
+          if (shipper.address) {
+            const pickupData: LocationData = {
+              searchValue: shipper.address.name || '',
+              company: shipper.address.name || '',
+              careOf: '',
+              streetAddress: shipper.address.addressLine1 || '',
+              addressLine2: shipper.address.addressLine2 || '',
+              city: shipper.address.cityName || '',
+              state: shipper.address.stateCd || '',
+              postalCode: shipper.address.postalCd || '',
+              country: shipper.address.countryCd || 'US',
+              phone: '',
+              extension: '',
+              email: '',
+            };
+            setPickupLocation(pickupData);
+          }
+        }
+
+        // Populate commodity information (weight and freight class)
+        if (shipmentInfo.commodity && Array.isArray(shipmentInfo.commodity) && shipmentInfo.commodity.length > 0) {
+          const firstCommodity = shipmentInfo.commodity[0];
+          
+          setCommodities(prev => {
+            const updated = [...prev];
+            if (updated.length > 0) {
+              updated[0] = {
+                ...updated[0],
+                // Update weight from commodity grossWeight or totCommodityWeight
+                ...(firstCommodity.grossWeight?.weight !== undefined && {
+                  grossWeight: {
+                    ...updated[0].grossWeight,
+                    weight: firstCommodity.grossWeight.weight,
+                  }
+                }),
+                // Update freight class (nmfcClass) from commodity
+                // Convert "250.0" to "250" if needed
+                ...(firstCommodity.nmfcClass && {
+                  nmfcClass: String(firstCommodity.nmfcClass).replace(/\.0+$/, ''),
+                }),
+                // Keep default NMFC Code and Sub (editable)
+                nmfcItemCd: updated[0].nmfcItemCd || XPO_BOL_DEFAULTS.commodity.nmfcItemCd,
+                sub: updated[0].sub || XPO_BOL_DEFAULTS.commodity.sub,
+              };
+            } else {
+              // If no commodity exists, create one with data from quote
+              updated.push({
+                ...XPO_BOL_COMMODITY_DEFAULTS,
+                ...(firstCommodity.grossWeight?.weight !== undefined && {
+                  grossWeight: {
+                    weight: firstCommodity.grossWeight.weight,
+                    weightUom: firstCommodity.grossWeight.weightUom || 'LBS',
+                  }
+                }),
+                ...(firstCommodity.nmfcClass && {
+                  nmfcClass: String(firstCommodity.nmfcClass).replace(/\.0+$/, ''),
+                }),
+                nmfcItemCd: XPO_BOL_DEFAULTS.commodity.nmfcItemCd,
+                sub: XPO_BOL_DEFAULTS.commodity.sub,
+              });
+            }
+            return updated;
+          });
+        } else if (shipmentInfo.totCommodityWeight?.weight !== undefined) {
+          // Fallback: use totCommodityWeight if commodity array is not available
+          setCommodities(prev => {
+            const updated = [...prev];
+            if (updated.length > 0) {
+              updated[0] = {
+                ...updated[0],
+                grossWeight: {
+                  ...updated[0].grossWeight,
+                  weight: shipmentInfo.totCommodityWeight.weight,
+                },
+              };
+            }
+            return updated;
+          });
+        }
+      }
+    }
+  }, [quoteData, initialFormData]);
 
   // Additional Comments
   const [comments, setComments] = useState(XPO_BOL_DEFAULTS.comments);
@@ -403,6 +549,8 @@ export const BOLForm = ({
       nmfcClass: XPO_BOL_DEFAULTS.commodity.nmfcClass,
       pieceCnt: XPO_BOL_DEFAULTS.commodity.pieceCnt,
       packaging: XPO_BOL_DEFAULTS.commodity.packaging,
+      nmfcItemCd: XPO_BOL_DEFAULTS.commodity.nmfcItemCd, // Default: '079300'
+      sub: XPO_BOL_DEFAULTS.commodity.sub, // Default: '03'
     }]);
     setEmergencyContactName(XPO_BOL_DEFAULTS.emergencyContactName);
     setEmergencyContactPhone(XPO_BOL_DEFAULTS.emergencyContactPhone);
@@ -422,7 +570,8 @@ export const BOLForm = ({
     setContactExtension(XPO_BOL_DEFAULTS.contactExtension);
     setProNumberOption(XPO_BOL_DEFAULTS.proNumberOption);
     setPreAssignedProNumber(XPO_BOL_DEFAULTS.preAssignedProNumber);
-    setReferences([...XPO_BOL_DEFAULTS.referenceNumbers]);
+    // Don't reset references - they should come from quoteData
+    // setReferences([...XPO_BOL_DEFAULTS.referenceNumbers]);
     setComments(XPO_BOL_DEFAULTS.comments);
     setSaveAsTemplate(XPO_BOL_DEFAULTS.saveAsTemplate);
     setSignBOLWithRequester(XPO_BOL_DEFAULTS.signBOLWithRequester);
@@ -1101,20 +1250,140 @@ export const BOLForm = ({
               loadingZip={pickupLoadingZip}
               showEmail={true}
               required={true}
-              addressBookOptions={XPO_SHIPPER_ADDRESS_BOOK.map(addr => ({
-                value: addr.value,
-                label: addr.label,
-                company: addr.company,
-                streetAddress: addr.streetAddress,
-                addressLine2: addr.addressLine2,
-                city: addr.city,
-                state: addr.state,
-                zip: addr.zip,
-                country: addr.country,
-                phone: addr.phone,
-                extension: addr.extension,
-                contactName: addr.contactName,
-              }))}
+              addressBookOptions={(() => {
+                // Parse address string to extract components
+                const parseAddressString = (addressStr: string): { streetAddress: string; addressLine2: string; city: string; state: string; zip: string } => {
+                  if (!addressStr || addressStr.trim() === '') {
+                    return { streetAddress: '', addressLine2: '', city: '', state: '', zip: '' };
+                  }
+
+                  // Remove "US" if present before zip
+                  let cleaned = addressStr.trim().replace(/\s+US\s+(\d{5})$/, ' $1');
+                  
+                  // Extract zip (5 digits at the end)
+                  const zipMatch = cleaned.match(/(\d{5})$/);
+                  const zip = zipMatch ? zipMatch[1] : '';
+                  
+                  // Remove zip from string
+                  let withoutZip = cleaned.replace(/\s+\d{5}$/, '').trim();
+                  
+                  // Extract state (2 uppercase letters before zip/at end)
+                  const stateMatch = withoutZip.match(/\s+([A-Z]{2})\s*$/);
+                  const state = stateMatch ? stateMatch[1] : '';
+                  
+                  // Remove state from string
+                  let withoutStateZip = withoutZip.replace(/\s+[A-Z]{2}\s*$/, '').trim();
+                  
+                  // Handle special case: "# BHOUSTON" -> "# B" + "HOUSTON"
+                  withoutStateZip = withoutStateZip.replace(/#\s*B([A-Z])/gi, '# B $1');
+                  
+                  // Split by spaces to analyze components
+                  const parts = withoutStateZip.split(/\s+/);
+                  
+                  // Find where city starts (usually last 1-4 words before state)
+                  const streetAbbrevs = ['ST', 'AVE', 'DR', 'RD', 'PKWY', 'BLVD', 'CIR', 'CT', 'FWY', 'HWY', 'LN', 'PL', 'WAY', 'STREET'];
+                  const addressIndicators = ['STE', 'SUITE', '#', 'UNIT', 'APT', 'FLOOR', 'FL'];
+                  
+                  let cityStartIndex = parts.length;
+                  
+                  // Find the last street indicator or address indicator
+                  for (let i = parts.length - 1; i >= 0; i--) {
+                    const word = parts[i].toUpperCase();
+                    if (streetAbbrevs.includes(word) || addressIndicators.includes(word)) {
+                      cityStartIndex = i + 1;
+                      break;
+                    }
+                    // City names typically don't have numbers and are 1-3 words
+                    if (cityStartIndex === parts.length && i < parts.length - 1 && /^[A-Z]+$/.test(word) && i > 0) {
+                      const prevWord = parts[i - 1].toUpperCase();
+                      if (streetAbbrevs.includes(prevWord) || addressIndicators.includes(prevWord)) {
+                        cityStartIndex = i;
+                        break;
+                      }
+                    }
+                  }
+                  
+                  // If we didn't find a clear break, assume last 1-3 words are city
+                  if (cityStartIndex === parts.length) {
+                    cityStartIndex = Math.max(1, parts.length - 2);
+                  }
+                  
+                  const streetParts = parts.slice(0, cityStartIndex);
+                  const cityParts = parts.slice(cityStartIndex);
+                  
+                  const city = cityParts.join(' ').toUpperCase();
+                  let streetAddressFull = streetParts.join(' ');
+                  
+                  // Extract addressLine2 if it contains STE, SUITE, #, etc.
+                  let streetAddress = streetAddressFull;
+                  let addressLine2 = '';
+                  
+                  const steMatch = streetAddressFull.match(/^(.+?)\s+(STE|SUITE|#|UNIT|APT|FLOOR|FL\.?)\s*(.+)$/i);
+                  if (steMatch) {
+                    streetAddress = steMatch[1].trim();
+                    addressLine2 = `${steMatch[2].toUpperCase()} ${steMatch[3].trim()}`.trim();
+                  } else {
+                    // Check for standalone # pattern
+                    const hashMatch = streetAddressFull.match(/^(.+?)\s+(#\s*.+)$/i);
+                    if (hashMatch) {
+                      streetAddress = hashMatch[1].trim();
+                      addressLine2 = hashMatch[2].trim();
+                    }
+                  }
+                  
+                  return {
+                    streetAddress: streetAddress || '',
+                    addressLine2: addressLine2 || '',
+                    city: city || '',
+                    state: state || '',
+                    zip: zip || '',
+                  };
+                };
+
+                return XPO_SHIPPER_ADDRESS_BOOK.map(addr => {
+                  // Handle simplified format (id, name, address, deliveryType)
+                  if (addr.id && addr.name && addr.address) {
+                    const parsed = parseAddressString(addr.address);
+                    // Extract state for label
+                    const state = parsed.state || '';
+                    // Create formatted address for label
+                    const addressParts = [parsed.streetAddress, parsed.addressLine2, parsed.city, parsed.state, parsed.zip].filter(Boolean);
+                    const formattedAddress = addressParts.length > 0 ? addressParts.join(', ') : addr.address;
+                    // Ensure we have a valid label
+                    const label = `${addr.name} - ${state || 'N/A'} - ${formattedAddress}`;
+                    return {
+                      value: `ammana-${addr.id}`,
+                      label: label,
+                      company: addr.name,
+                      streetAddress: parsed.streetAddress,
+                      addressLine2: parsed.addressLine2,
+                      city: parsed.city,
+                      state: parsed.state,
+                      zip: parsed.zip,
+                      country: 'US',
+                      phone: addr.phone || '',
+                      extension: addr.extension || '',
+                      contactName: addr.contactName || '',
+                    };
+                  }
+                  // Legacy format (for backward compatibility)
+                  const legacyLabel = addr.label || (addr.name ? `${addr.name} - ${addr.state || ''} - ${addr.address || ''}` : 'Unknown Address');
+                  return {
+                    value: addr.value || `ammana-${addr.id || ''}`,
+                    label: legacyLabel,
+                    company: addr.company || addr.name,
+                    streetAddress: addr.streetAddress || '',
+                    addressLine2: addr.addressLine2 || '',
+                    city: addr.city || '',
+                    state: addr.state || '',
+                    zip: addr.zip || '',
+                    country: addr.country || 'US',
+                    phone: addr.phone || '',
+                    extension: addr.extension || '',
+                    contactName: addr.contactName || '',
+                  };
+                }).filter(opt => opt.value && opt.label);
+              })()}
             />
           </div>
 

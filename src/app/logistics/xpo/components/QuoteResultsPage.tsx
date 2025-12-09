@@ -1,6 +1,7 @@
 'use client';
 
-import { ArrowLeft, Info } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { ArrowLeft, Info, X } from 'lucide-react';
 
 type QuoteResultsPageProps = {
   quoteNumber: string;
@@ -37,6 +38,8 @@ export const QuoteResultsPage = ({
   onCreateBOL,
   onSchedulePickup,
 }: QuoteResultsPageProps) => {
+  const [showPriceBreakdown, setShowPriceBreakdown] = useState<number | null>(null);
+  const breakdownRef = useRef<HTMLDivElement>(null);
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
     try {
@@ -106,20 +109,6 @@ export const QuoteResultsPage = ({
   };
 
   const getTotalCharges = (quote: any) => {
-    // Debug logging in development
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Quote object for price extraction:', quote);
-      console.log('Available price fields:', {
-        totChargesAmt: quote.totChargesAmt,
-        netChargesAmt: quote.netChargesAmt,
-        totAccessorialAmt: quote.totAccessorialAmt,
-        quoteRate: quote.quoteRate,
-        totalCharges: quote.totalCharges,
-        chargeAmt: quote.chargeAmt,
-        allKeys: Object.keys(quote),
-      });
-    }
-    
     // Helper function to format amount
     const formatAmount = (value: any): string => {
       if (value === undefined || value === null) return '';
@@ -128,8 +117,13 @@ export const QuoteResultsPage = ({
       return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
     
-    // Try multiple possible paths for total charges
-    // XPO API might return: totChargesAmt.amt, netChargesAmt.amt, chargeAmt.amt, etc.
+    // Check totCharge array (from response.data.data.rateQuote.totCharge[0].amt)
+    if (quote.totCharge && Array.isArray(quote.totCharge) && quote.totCharge.length > 0) {
+      const firstCharge = quote.totCharge[0];
+      if (firstCharge?.amt !== undefined && firstCharge.amt !== null) {
+        return formatAmount(firstCharge.amt);
+      }
+    }
     
     // Check totChargesAmt.amt (most common)
     if (quote.totChargesAmt?.amt !== undefined && quote.totChargesAmt.amt !== null) {
@@ -179,13 +173,93 @@ export const QuoteResultsPage = ({
       }
     }
     
-    // If still not found, return 0.00
-    if (process.env.NODE_ENV === 'development') {
-      console.warn('Could not find price in quote object. Available fields:', Object.keys(quote));
-      console.warn('Full quote object:', JSON.stringify(quote, null, 2));
-    }
     return '0.00';
   };
+
+  // Helper function to format amount
+  const formatAmount = (value: any): string => {
+    if (value === undefined || value === null) return '0.00';
+    const num = typeof value === 'number' ? value : parseFloat(value);
+    if (isNaN(num)) return '0.00';
+    return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // Get price breakdown data from quote
+  const getPriceBreakdown = (quote: any) => {
+    const breakdown: {
+      accessorials: Array<{ code: string; desc: string; amount: number }>;
+      commodityCharge: number;
+      totalDiscount: number;
+      totalCharge: number;
+      basePrice?: number;
+      discountPercent?: number;
+    } = {
+      accessorials: [],
+      commodityCharge: 0,
+      totalDiscount: 0,
+      totalCharge: 0,
+    };
+
+    // Get accessorials from shipmentInfo.accessorials
+    if (quote.shipmentInfo?.accessorials && Array.isArray(quote.shipmentInfo.accessorials)) {
+      breakdown.accessorials = quote.shipmentInfo.accessorials.map((acc: any) => ({
+        code: acc.accessorialCd || '',
+        desc: acc.accessorialDesc || '',
+        amount: acc.chargeAmt?.amt || 0,
+      }));
+    }
+
+    // Get total commodity charge
+    if (quote.shipmentInfo?.totCommodityCharge?.amt !== undefined) {
+      breakdown.commodityCharge = quote.shipmentInfo.totCommodityCharge.amt;
+    } else if (quote.shipmentInfo?.commodity?.[0]?.charge?.chargeAmt?.amt !== undefined) {
+      breakdown.commodityCharge = quote.shipmentInfo.commodity[0].charge.chargeAmt.amt;
+    }
+
+    // Get total discount amount
+    if (quote.totDiscountAmt?.amt !== undefined) {
+      breakdown.totalDiscount = quote.totDiscountAmt.amt;
+    }
+
+    // Get total charge
+    if (quote.totCharge && Array.isArray(quote.totCharge) && quote.totCharge.length > 0) {
+      breakdown.totalCharge = quote.totCharge[0].amt || 0;
+    }
+
+    // Get base price and discount percent for display
+    if (quote.shipmentInfo?.commodity?.[0]?.charge?.calcMethod?.perUnitRate !== undefined) {
+      breakdown.basePrice = quote.shipmentInfo.commodity[0].charge.calcMethod.perUnitRate;
+    }
+    if (quote.actlDiscountPct !== undefined) {
+      breakdown.discountPercent = quote.actlDiscountPct;
+    }
+
+    return breakdown;
+  };
+
+  // Close breakdown modal when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (breakdownRef.current && !breakdownRef.current.contains(event.target as Node)) {
+        setShowPriceBreakdown(null);
+      }
+    };
+
+    const handleEscKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowPriceBreakdown(null);
+      }
+    };
+
+    if (showPriceBreakdown !== null) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscKey);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener('keydown', handleEscKey);
+      };
+    }
+  }, [showPriceBreakdown]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-8 px-4">
@@ -313,6 +387,7 @@ export const QuoteResultsPage = ({
                     </p>
                     <button
                       type="button"
+                      onClick={() => setShowPriceBreakdown(index)}
                       className="text-sm text-blue-600 hover:text-blue-700 underline"
                     >
                       Price break down
@@ -360,6 +435,129 @@ export const QuoteResultsPage = ({
           Close
         </button>
       </div>
+
+      {/* Price Breakdown Modal */}
+      {showPriceBreakdown !== null && quotes[showPriceBreakdown] && (() => {
+        const quote = quotes[showPriceBreakdown];
+        const breakdown = getPriceBreakdown(quote);
+        const totalAccessorialAmount = breakdown.accessorials.reduce((sum, acc) => sum + acc.amount, 0);
+        
+        return (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div
+              ref={breakdownRef}
+              className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
+                <h2 className="text-xl font-bold text-slate-900">Price Breakdown</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowPriceBreakdown(null)}
+                  className="text-slate-400 hover:text-slate-600 transition-colors p-1 hover:bg-slate-100 rounded"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="overflow-y-auto flex-1 p-6">
+                <div className="space-y-4">
+                  {/* Commodity Charge */}
+                  {breakdown.commodityCharge > 0 && (
+                    <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-slate-700">Commodity Charge</span>
+                        <span className="text-base font-bold text-slate-900">
+                          ${formatAmount(breakdown.commodityCharge)}
+                        </span>
+                      </div>
+                      {breakdown.basePrice && (
+                        <div className="text-xs text-slate-600">
+                          Base Rate: ${formatAmount(breakdown.basePrice)} per unit
+                        </div>
+                      )}
+                      {breakdown.discountPercent !== undefined && (
+                        <div className="text-xs text-slate-600">
+                          Discount: {breakdown.discountPercent}%
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Accessorials */}
+                  {breakdown.accessorials.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-700 mb-3">Accessorials</h3>
+                      <div className="space-y-2">
+                        {breakdown.accessorials.map((acc, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg border border-slate-200"
+                          >
+                            <div className="flex-1">
+                              <div className="text-sm font-medium text-slate-900">{acc.desc}</div>
+                              {acc.code && (
+                                <div className="text-xs text-slate-600">Code: {acc.code}</div>
+                              )}
+                            </div>
+                            <div className="text-sm font-bold text-slate-900 ml-4">
+                              ${formatAmount(acc.amount)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {totalAccessorialAmount > 0 && (
+                        <div className="mt-3 pt-3 border-t border-slate-200">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-slate-700">Total Accessorials</span>
+                            <span className="text-base font-bold text-slate-900">
+                              ${formatAmount(totalAccessorialAmount)}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Discount */}
+                  {breakdown.totalDiscount > 0 && (
+                    <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-semibold text-green-700">Total Discount</span>
+                        <span className="text-base font-bold text-green-700">
+                          -${formatAmount(breakdown.totalDiscount)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Total Charge */}
+                  <div className="bg-yellow-50 rounded-lg p-4 border-2 border-yellow-300 mt-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-lg font-bold text-slate-900">Total Charge</span>
+                      <span className="text-2xl font-bold text-slate-900">
+                        ${formatAmount(breakdown.totalCharge)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 border-t border-slate-200 bg-slate-50">
+                <button
+                  type="button"
+                  onClick={() => setShowPriceBreakdown(null)}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 };
