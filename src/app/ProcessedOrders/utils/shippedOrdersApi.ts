@@ -6,6 +6,7 @@ export type ShippedOrder = {
   orderOnMarketPlace: string;
   status?: string;
   ordersJsonb?: Record<string, unknown>;
+  rateQuotesRequestJsonb?: Record<string, unknown>;
   rateQuotesResponseJsonb?: Record<string, unknown>;
   bolResponseJsonb?: Record<string, unknown>;
   pickupResponseJsonb?: Record<string, unknown>;

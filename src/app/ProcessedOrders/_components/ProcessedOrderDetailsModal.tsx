@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Eye, Download, FileText, Image as ImageIcon, File } from 'lucide-react';
+import { X, Eye, Download, FileText, Image as ImageIcon, File, Copy, ChevronDown, ChevronUp } from 'lucide-react';
 import type { ShippedOrder } from '../utils/shippedOrdersApi';
 import { getBackendBaseUrl } from '../../../../BaseUrl';
 
@@ -17,6 +17,12 @@ export const ProcessedOrderDetailsModal = ({
   onClose,
 }: ProcessedOrderDetailsModalProps) => {
   const [previewFile, setPreviewFile] = useState<{ url: string; filename: string; mimetype: string } | null>(null);
+  const [showSections, setShowSections] = useState<Record<string, boolean>>({
+    rateQuoteRequest: true,
+    rateQuoteResponse: true,
+    bol: true,
+    pickup: true,
+  });
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -65,6 +71,14 @@ export const ProcessedOrderDetailsModal = ({
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const toggleSection = (section: string) => {
+    setShowSections({ ...showSections, [section]: !showSections[section] });
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
   };
 
   if (!isOpen || !order) return null;
@@ -137,36 +151,165 @@ export const ProcessedOrderDetailsModal = ({
             {order.ordersJsonb && Object.keys(order.ordersJsonb).length > 0 && (
               <div>
                 <h3 className="text-sm font-semibold text-black mb-3">Orders JSONB</h3>
-                <pre className="p-4 bg-slate-50 border text-black border-slate-200 rounded-lg overflow-auto text-xs">
+                <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs max-h-64 text-black">
                   {JSON.stringify(order.ordersJsonb, null, 2)}
                 </pre>
               </div>
             )}
 
+            {/* Rate Quote Request */}
+            {order.rateQuotesRequestJsonb && Object.keys(order.rateQuotesRequestJsonb).length > 0 && (
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('rateQuoteRequest')}>
+                  <div className="flex items-center gap-2 flex-1">
+                    <h3 className="text-sm font-semibold text-black">Rate Quote Request</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSection('rateQuoteRequest');
+                    }}
+                    className="text-black hover:text-slate-700"
+                  >
+                    {showSections.rateQuoteRequest ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </button>
+                </div>
+                {showSections.rateQuoteRequest && (
+                  <div className="p-4">
+                    <div className="relative">
+                      <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs font-mono max-h-96 text-black">
+                        {JSON.stringify(order.rateQuotesRequestJsonb, null, 2)}
+                      </pre>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(JSON.stringify(order.rateQuotesRequestJsonb, null, 2))}
+                        className="absolute top-2 right-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+                        title="Copy to clipboard"
+                      >
+                        <Copy size={14} />
+                        <span className="text-xs">Copy</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Rate Quote Response */}
             {order.rateQuotesResponseJsonb && Object.keys(order.rateQuotesResponseJsonb).length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold text-black mb-3">Rate Quotes Response JSONB</h3>
-                <pre className="p-4 bg-slate-50 border text-black border-slate-200 rounded-lg overflow-auto text-xs">
-                  {JSON.stringify(order.rateQuotesResponseJsonb, null, 2)}
-                </pre>
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('rateQuoteResponse')}>
+                  <div className="flex items-center gap-2 flex-1">
+                    <h3 className="text-sm font-semibold text-black">Rate Quote Response</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSection('rateQuoteResponse');
+                    }}
+                    className="text-black hover:text-slate-700"
+                  >
+                    {showSections.rateQuoteResponse ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </button>
+                </div>
+                {showSections.rateQuoteResponse && (
+                  <div className="p-4">
+                    <div className="relative">
+                      <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs font-mono max-h-96 text-black">
+                        {JSON.stringify(order.rateQuotesResponseJsonb, null, 2)}
+                      </pre>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(JSON.stringify(order.rateQuotesResponseJsonb, null, 2))}
+                        className="absolute top-2 right-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+                        title="Copy to clipboard"
+                      >
+                        <Copy size={14} />
+                        <span className="text-xs">Copy</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
+            {/* BOL Response */}
             {order.bolResponseJsonb && Object.keys(order.bolResponseJsonb).length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold text-black mb-3">BOL Response JSONB</h3>
-                <pre className="p-4 bg-slate-50 border text-black border-slate-200 rounded-lg overflow-auto text-xs">
-                  {JSON.stringify(order.bolResponseJsonb, null, 2)}
-                </pre>
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('bol')}>
+                  <div className="flex items-center gap-2 flex-1">
+                    <h3 className="text-sm font-semibold text-black">BOL Response</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSection('bol');
+                    }}
+                    className="text-black hover:text-slate-700"
+                  >
+                    {showSections.bol ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </button>
+                </div>
+                {showSections.bol && (
+                  <div className="p-4">
+                    <div className="relative">
+                      <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs font-mono max-h-96 text-black">
+                        {JSON.stringify(order.bolResponseJsonb, null, 2)}
+                      </pre>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(JSON.stringify(order.bolResponseJsonb, null, 2))}
+                        className="absolute top-2 right-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+                        title="Copy to clipboard"
+                      >
+                        <Copy size={14} />
+                        <span className="text-xs">Copy</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
+            {/* Pickup Response */}
             {order.pickupResponseJsonb && Object.keys(order.pickupResponseJsonb).length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold text-black mb-3">Pickup Response JSONB</h3>
-                <pre className="p-4 bg-slate-50 border text-black border-slate-200 rounded-lg overflow-auto text-xs">
-                  {JSON.stringify(order.pickupResponseJsonb, null, 2)}
-                </pre>
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('pickup')}>
+                  <div className="flex items-center gap-2 flex-1">
+                    <h3 className="text-sm font-semibold text-black">Pickup Response</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSection('pickup');
+                    }}
+                    className="text-black hover:text-slate-700"
+                  >
+                    {showSections.pickup ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                  </button>
+                </div>
+                {showSections.pickup && (
+                  <div className="p-4">
+                    <div className="relative">
+                      <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs font-mono max-h-96 text-black">
+                        {JSON.stringify(order.pickupResponseJsonb, null, 2)}
+                      </pre>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(JSON.stringify(order.pickupResponseJsonb, null, 2))}
+                        className="absolute top-2 right-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
+                        title="Copy to clipboard"
+                      >
+                        <Copy size={14} />
+                        <span className="text-xs">Copy</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -178,11 +321,11 @@ export const ProcessedOrderDetailsModal = ({
                   <table className="w-full">
                     <thead className="bg-slate-50">
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">Preview</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">File Name</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">Type</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">Size</th>
-                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase">Actions</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-black uppercase">Preview</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-black uppercase">File Name</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-black uppercase">Type</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-black uppercase">Size</th>
+                        <th className="px-4 py-3 text-left text-xs font-semibold text-black uppercase">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-200">
@@ -251,16 +394,16 @@ export const ProcessedOrderDetailsModal = ({
                               )}
                             </td>
                             <td className="px-4 py-3">
-                              <p className="text-sm font-medium text-slate-900">{filename}</p>
-                              <p className="text-xs text-slate-500 truncate max-w-xs" title={filePath}>
+                              <p className="text-sm font-medium text-black">{filename}</p>
+                              <p className="text-xs text-black truncate max-w-xs" title={filePath}>
                                 {filePath}
                               </p>
                             </td>
                             <td className="px-4 py-3">
-                              <p className="text-xs text-slate-600">{mimetype}</p>
+                              <p className="text-xs text-black">{mimetype}</p>
                             </td>
                             <td className="px-4 py-3">
-                              <p className="text-xs text-slate-600">{formatFileSize(size)}</p>
+                              <p className="text-xs text-black">{formatFileSize(size)}</p>
                             </td>
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2">

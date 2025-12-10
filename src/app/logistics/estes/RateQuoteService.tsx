@@ -546,6 +546,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [response, setResponse] = useState<any>(null);
+  const [rateQuoteRequestPayload, setRateQuoteRequestPayload] = useState<any>(null);
   const [showAccountInfo, setShowAccountInfo] = useState(true);
   const [showResponseDropdown, setShowResponseDropdown] = useState(false);
 
@@ -1284,6 +1285,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     setLoading(true);
     setError(null);
     setResponse(null);
+    setRateQuoteRequestPayload(null);
 
     try {
       const requestBody = buildRequestBody();
@@ -1333,6 +1335,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       if (process.env.NODE_ENV === 'development') {
         console.log('Rate Quote Request:', JSON.stringify(payload, null, 2));
       }
+
+      // Store request payload for later submission
+      setRateQuoteRequestPayload(payload);
 
       const res = await fetch(buildApiUrl('/Logistics/create-rate-quote'), {
         method: 'POST',
@@ -2487,6 +2492,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           )}
           <ResponseSummary
             orderData={orderData || undefined}
+            rateQuotesRequestJsonb={rateQuoteRequestPayload || undefined}
             rateQuotesResponseJsonb={response?.data || undefined}
             bolResponseJsonb={bolResponseData?.data || undefined}
             pickupResponseJsonb={pickupResponseData?.data || undefined}

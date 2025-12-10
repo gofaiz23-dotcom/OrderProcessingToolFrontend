@@ -8,6 +8,7 @@ export type LogisticsShippedOrder = {
   status: string;
   uploads: string[];
   ordersJsonb: Record<string, unknown>;
+  rateQuotesRequestJsonb?: Record<string, unknown>;
   rateQuotesResponseJsonb?: Record<string, unknown>;
   bolResponseJsonb?: Record<string, unknown>;
   pickupResponseJsonb?: Record<string, unknown>;
@@ -76,6 +77,7 @@ export type CreateLogisticsShippedOrderPayload = {
   sku: string;
   orderOnMarketPlace: string;
   ordersJsonb: Record<string, unknown>;
+  rateQuotesRequestJsonb?: Record<string, unknown>;
   rateQuotesResponseJsonb?: Record<string, unknown>;
   bolResponseJsonb?: Record<string, unknown>;
   pickupResponseJsonb?: Record<string, unknown>;
@@ -99,6 +101,10 @@ export const createLogisticsShippedOrder = async (
   formData.append('sku', payload.sku);
   formData.append('orderOnMarketPlace', payload.orderOnMarketPlace);
   formData.append('ordersJsonb', JSON.stringify(payload.ordersJsonb));
+  
+  if (payload.rateQuotesRequestJsonb) {
+    formData.append('rateQuotesRequestJsonb', JSON.stringify(payload.rateQuotesRequestJsonb));
+  }
   
   if (payload.rateQuotesResponseJsonb) {
     formData.append('rateQuotesResponseJsonb', JSON.stringify(payload.rateQuotesResponseJsonb));

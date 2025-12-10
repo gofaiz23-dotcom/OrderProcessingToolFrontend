@@ -5,7 +5,7 @@ import { Search, X, ChevronDown } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { XPO_BOL_COUNTRY_OPTIONS } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
 import { US_STATES } from './constants';
-import { handlePhoneInputChange, handlePhoneInputFocus, handlePhoneInputBlur } from '../../utils/phoneFormatter';
+// Phone formatter removed - allow free-form input
 import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 
 type LocationData = {
@@ -417,11 +417,9 @@ export const LocationSection = ({
               </label>
               <input
                 type="tel"
-                value={data.phone || '+1'}
-                onChange={(e) => handlePhoneInputChange(e, data.phone || '+1', (value) => handleFieldChange('phone', value))}
-                onFocus={(e) => handlePhoneInputFocus(e, data.phone || '', (value) => handleFieldChange('phone', value))}
-                onBlur={() => handlePhoneInputBlur(data.phone || '', (value) => handleFieldChange('phone', value))}
-                placeholder="+1 (123) 456-7890"
+                value={data.phone || ''}
+                onChange={(e) => handleFieldChange('phone', e.target.value)}
+                placeholder="Enter phone number"
                 className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 required={required}
               />

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { CheckCircle2, FileText, Download, Copy, ChevronDown, ChevronUp, Loader2, Send, Eye, X, Upload } from 'lucide-react';
+import { CheckCircle2, FileText, Download, Copy, ChevronDown, ChevronUp, Loader2, Send, Eye, X, Upload, ArrowLeft } from 'lucide-react';
 import { createLogisticsShippedOrder } from '@/app/api/LogisticsApi/LogisticsShippedOrders';
 import { Toast } from '@/app/components/shared/Toast';
 
@@ -14,12 +14,14 @@ type ResponseSummaryProps = {
   rateQuotesResponseJsonb?: Record<string, unknown>;
   bolResponseJsonb?: Record<string, unknown>;
   pickupResponseJsonb?: Record<string, unknown>;
+  pickupCreatedWithBOL?: boolean; // Indicates if pickup was created together with BOL
   files?: File[];
   pdfUrl?: string | null;
   onDownloadPDF?: () => void;
   orderId?: number;
   onSubmitSuccess?: (orderId: number, sku: string) => void;
   onFilesChange?: (files: File[]) => void;
+  onPrevious?: () => void; // Navigate to previous step
 };
 
 export const ResponseSummary = ({
@@ -27,12 +29,14 @@ export const ResponseSummary = ({
   rateQuotesResponseJsonb,
   bolResponseJsonb,
   pickupResponseJsonb,
+  pickupCreatedWithBOL = false,
   files: initialFiles,
   pdfUrl,
   onDownloadPDF,
   orderId,
   onSubmitSuccess,
   onFilesChange,
+  onPrevious,
 }: ResponseSummaryProps) => {
   const [showSections, setShowSections] = useState<Record<string, boolean>>({
     orderInfo: true,
@@ -149,18 +153,21 @@ export const ResponseSummary = ({
         }
       }
       
-      // Validate required fields
-      if (!sku || sku.trim() === '') {
+      // Validate required fields - ensure they are strings before calling trim
+      const skuStr = String(sku || '').trim();
+      const orderOnMarketPlaceStr = String(orderOnMarketPlace || '').trim();
+      
+      if (!skuStr) {
         throw new Error('SKU is required. Please ensure the order data contains a SKU.');
       }
       
-      if (!orderOnMarketPlace || orderOnMarketPlace.trim() === '') {
+      if (!orderOnMarketPlaceStr) {
         throw new Error('Order Marketplace is required. Please ensure the order data contains a marketplace.');
       }
 
       const payload = {
-        sku: sku.trim(),
-        orderOnMarketPlace: orderOnMarketPlace.trim(),
+        sku: skuStr,
+        orderOnMarketPlace: orderOnMarketPlaceStr,
         ordersJsonb: orderData?.ordersJsonb || {},
         rateQuotesResponseJsonb: rateQuotesResponseJsonb,
         bolResponseJsonb: bolResponseJsonb,
@@ -207,6 +214,17 @@ export const ResponseSummary = ({
     <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 pb-4 sm:pb-8 px-3 sm:px-0">
       <div className="bg-white rounded-lg border border-slate-200 p-3 sm:p-4 lg:p-6">
         <div className="flex items-center gap-3 mb-4 sm:mb-6">
+          {onPrevious && (
+            <button
+              type="button"
+              onClick={onPrevious}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-all duration-200 flex-shrink-0 border border-transparent hover:border-slate-200"
+              title="Go to previous step"
+            >
+              <ArrowLeft size={18} />
+              <span className="text-xs font-medium hidden sm:inline">Back</span>
+            </button>
+          )}
           <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
             <CheckCircle2 className="text-green-600 sm:w-6 sm:h-6" size={20} />
           </div>
@@ -449,6 +467,15 @@ export const ResponseSummary = ({
                     <Copy size={16} />
                   </button>
                 </div>
+              ) : pickupCreatedWithBOL ? (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-sm font-medium text-blue-900">
+                    It is created together pickup + BOL
+                  </p>
+                  <p className="text-xs text-blue-700 mt-1">
+                    The pickup request was included in the BOL creation. Check the BOL Response above for pickup details.
+                  </p>
+                </div>
               ) : (
                 <p className="text-sm text-slate-500">No pickup request response available</p>
               )}
@@ -586,55 +613,67 @@ export const ResponseSummary = ({
             )}
             
             {/* Submit Button */}
-            <div className="flex justify-end">
-              {(() => {
-                // Check if required fields are available
-                let sku = orderData?.sku || '';
-                let orderOnMarketPlace = orderData?.orderOnMarketPlace || '';
-                
-                // Try to extract from ordersJsonb if not in orderData
-                if (!sku || !orderOnMarketPlace) {
-                  const ordersJsonb = orderData?.ordersJsonb || {};
-                  if (!sku) {
-                    sku = (ordersJsonb as any)?.SKU || 
-                          (ordersJsonb as any)?.sku || 
-                          (ordersJsonb as any)?.Sku ||
-                          (ordersJsonb as any)?.orderId ||
-                          '';
+            <div className="flex justify-between gap-4">
+              {onPrevious && (
+                <button
+                  type="button"
+                  onClick={onPrevious}
+                  className="px-3 sm:px-4 py-2 border border-slate-300 bg-white text-slate-700 rounded-lg hover:bg-slate-50 hover:border-slate-400 transition-all duration-200 text-sm font-medium flex items-center gap-1.5 shadow-sm hover:shadow"
+                >
+                  <ArrowLeft size={16} />
+                  <span>Previous</span>
+                </button>
+              )}
+              <div className="flex justify-end flex-1">
+                {(() => {
+                  // Check if required fields are available
+                  let sku = orderData?.sku || '';
+                  let orderOnMarketPlace = orderData?.orderOnMarketPlace || '';
+                  
+                  // Try to extract from ordersJsonb if not in orderData
+                  if (!sku || !orderOnMarketPlace) {
+                    const ordersJsonb = orderData?.ordersJsonb || {};
+                    if (!sku) {
+                      sku = (ordersJsonb as any)?.SKU || 
+                            (ordersJsonb as any)?.sku || 
+                            (ordersJsonb as any)?.Sku ||
+                            (ordersJsonb as any)?.orderId ||
+                            '';
+                    }
+                    if (!orderOnMarketPlace) {
+                      orderOnMarketPlace = (ordersJsonb as any)?.orderOnMarketPlace ||
+                                           (ordersJsonb as any)?.marketplace ||
+                                           (ordersJsonb as any)?.Marketplace ||
+                                           (ordersJsonb as any)?.marketPlace ||
+                                           '';
+                    }
                   }
-                  if (!orderOnMarketPlace) {
-                    orderOnMarketPlace = (ordersJsonb as any)?.orderOnMarketPlace ||
-                                         (ordersJsonb as any)?.marketplace ||
-                                         (ordersJsonb as any)?.Marketplace ||
-                                         (ordersJsonb as any)?.marketPlace ||
-                                         '';
-                  }
-                }
-                
-                const hasRequiredFields = sku.trim() !== '' && orderOnMarketPlace.trim() !== '';
-                
-                return (
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={isSubmitting || !hasRequiredFields}
-                    className="flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
-                    title={!hasRequiredFields ? 'SKU and Marketplace are required to submit' : ''}
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Submitting...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="h-4 w-4" />
-                        Submit
-                      </>
-                    )}
-                  </button>
-                );
-              })()}
+                  
+                  const hasRequiredFields = String(sku || '').trim() !== '' && String(orderOnMarketPlace || '').trim() !== '';
+                  
+                  return (
+                    <button
+                      type="button"
+                      onClick={handleSubmit}
+                      disabled={isSubmitting || !hasRequiredFields}
+                      className="flex items-center justify-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
+                      title={!hasRequiredFields ? 'SKU and Marketplace are required to submit' : ''}
+                    >
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Submitting...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-4 w-4" />
+                          Submit
+                        </>
+                      )}
+                    </button>
+                  );
+                })()}
+              </div>
             </div>
           </div>
         </div>
