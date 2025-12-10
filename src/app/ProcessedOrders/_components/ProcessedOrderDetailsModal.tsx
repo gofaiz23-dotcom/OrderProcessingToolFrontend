@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Eye, Download, FileText, Image as ImageIcon, File, Copy, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Eye, Download, FileText, Image as ImageIcon, File, ChevronDown, ChevronUp, Copy } from 'lucide-react';
 import type { ShippedOrder } from '../utils/shippedOrdersApi';
 import { getBackendBaseUrl } from '../../../../BaseUrl';
 
@@ -18,11 +18,22 @@ export const ProcessedOrderDetailsModal = ({
 }: ProcessedOrderDetailsModalProps) => {
   const [previewFile, setPreviewFile] = useState<{ url: string; filename: string; mimetype: string } | null>(null);
   const [showSections, setShowSections] = useState<Record<string, boolean>>({
+    basicInfo: true,
+    ordersJsonb: true,
     rateQuoteRequest: true,
     rateQuoteResponse: true,
-    bol: true,
-    pickup: true,
+    bolResponse: true,
+    pickupResponse: true,
+    files: true,
   });
+
+  const toggleSection = (section: string) => {
+    setShowSections({ ...showSections, [section]: !showSections[section] });
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -73,21 +84,13 @@ export const ProcessedOrderDetailsModal = ({
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  const toggleSection = (section: string) => {
-    setShowSections({ ...showSections, [section]: !showSections[section] });
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-  };
-
   if (!isOpen || !order) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-2 sm:p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
         <div className="p-4 sm:p-6 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-lg sm:text-xl font-bold text-slate-900">Processed Order Details</h2>
+          <h2 className="text-lg sm:text-xl font-bold text-black">Processed Order Details</h2>
           <button
             onClick={onClose}
             className="text-slate-400 hover:text-slate-600 transition-colors"
@@ -97,100 +100,137 @@ export const ProcessedOrderDetailsModal = ({
         </div>
 
         <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-          <div className="space-y-4 sm:space-y-6">
+          <div className="space-y-4">
             {/* Basic Information */}
-            <div>
-              <h3 className="text-xs sm:text-sm font-semibold text-black mb-2 sm:mb-3">Basic Information</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                <div>
-                  <label className="text-xs text-slate-500">ID</label>
-                  <p className="text-sm font-medium text-slate-900">#{order.id}</p>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500">SKU</label>
-                  <p className="text-sm font-medium text-slate-900">{order.sku}</p>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500">Marketplace</label>
-                  <p className="text-sm font-medium text-slate-900">{order.orderOnMarketPlace}</p>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500">Status</label>
-                  <p className="text-sm font-medium text-slate-900">
-                    <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${
-                      order.status === 'completed' 
-                        ? 'bg-green-100 text-green-800'
-                        : order.status === 'in_progress'
-                        ? 'bg-blue-100 text-blue-800'
-                        : order.status === 'pending'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : order.status === 'cancelled'
-                        ? 'bg-red-100 text-red-800'
-                        : 'bg-slate-100 text-slate-800'
-                    }`}>
-                      {order.status || 'pending'}
-                    </span>
-                  </p>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500">Created At</label>
-                  <p className="text-sm font-medium text-slate-900">
-                    {order.createdAt ? new Date(order.createdAt).toLocaleString() : '-'}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500">Updated At</label>
-                  <p className="text-sm font-medium text-slate-900">
-                    {order.updatedAt ? new Date(order.updatedAt).toLocaleString() : '-'}
-                  </p>
-                </div>
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('basicInfo')}>
+                <h3 className="text-sm font-semibold text-black">Basic Information</h3>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSection('basicInfo');
+                  }}
+                  className="text-slate-500 hover:text-slate-700"
+                >
+                  {showSections.basicInfo ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </button>
               </div>
+              {showSections.basicInfo && (
+                <div className="p-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div>
+                      <label className="text-xs text-black">ID</label>
+                      <p className="text-sm font-medium text-black">#{order.id}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs text-black">SKU</label>
+                      <p className="text-sm font-medium text-black">{order.sku}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs text-black">Marketplace</label>
+                      <p className="text-sm font-medium text-black">{order.orderOnMarketPlace}</p>
+                    </div>
+                    <div>
+                      <label className="text-xs text-black">Status</label>
+                      <p className="text-sm font-medium text-black">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${
+                          order.status === 'completed' 
+                            ? 'bg-green-100 text-green-800'
+                            : order.status === 'in_progress'
+                            ? 'bg-blue-100 text-blue-800'
+                            : order.status === 'pending'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : order.status === 'cancelled'
+                            ? 'bg-red-100 text-red-800'
+                            : 'bg-slate-100 text-slate-800'
+                        }`}>
+                          {order.status || 'pending'}
+                        </span>
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-xs text-black">Created At</label>
+                      <p className="text-sm font-medium text-black">
+                        {order.createdAt ? new Date(order.createdAt).toLocaleString() : '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="text-xs text-black">Updated At</label>
+                      <p className="text-sm font-medium text-black">
+                        {order.updatedAt ? new Date(order.updatedAt).toLocaleString() : '-'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* JSONB Fields */}
+            {/* Orders JSONB */}
             {order.ordersJsonb && Object.keys(order.ordersJsonb).length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold text-black mb-3">Orders JSONB</h3>
-                <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs max-h-64 text-black">
-                  {JSON.stringify(order.ordersJsonb, null, 2)}
-                </pre>
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('ordersJsonb')}>
+                  <h3 className="text-sm font-semibold text-black">Orders JSONB</h3>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSection('ordersJsonb');
+                    }}
+                    className="text-slate-500 hover:text-slate-700"
+                  >
+                    {showSections.ordersJsonb ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                  </button>
+                </div>
+                {showSections.ordersJsonb && (
+                  <div className="p-4 relative">
+                    <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs max-h-64 text-black">
+                      {JSON.stringify(order.ordersJsonb, null, 2)}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(JSON.stringify(order.ordersJsonb, null, 2))}
+                      className="absolute top-6 right-6 px-2 py-1.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-colors flex items-center gap-1"
+                      title="Copy to clipboard"
+                    >
+                      <Copy size={12} />
+                      Copy
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Rate Quote Request */}
-            {order.rateQuotesRequestJsonb && Object.keys(order.rateQuotesRequestJsonb).length > 0 && (
+            {(order as any).rateQuotesRequestJsonb && Object.keys((order as any).rateQuotesRequestJsonb).length > 0 && (
               <div className="border border-slate-200 rounded-lg overflow-hidden">
                 <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('rateQuoteRequest')}>
-                  <div className="flex items-center gap-2 flex-1">
-                    <h3 className="text-sm font-semibold text-black">Rate Quote Request</h3>
-                  </div>
+                  <h3 className="text-sm font-semibold text-black">Rate Quote Request</h3>
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       toggleSection('rateQuoteRequest');
                     }}
-                    className="text-black hover:text-slate-700"
+                    className="text-slate-500 hover:text-slate-700"
                   >
-                    {showSections.rateQuoteRequest ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                    {showSections.rateQuoteRequest ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                   </button>
                 </div>
                 {showSections.rateQuoteRequest && (
-                  <div className="p-4">
-                    <div className="relative">
-                      <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs font-mono max-h-96 text-black">
-                        {JSON.stringify(order.rateQuotesRequestJsonb, null, 2)}
-                      </pre>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(JSON.stringify(order.rateQuotesRequestJsonb, null, 2))}
-                        className="absolute top-2 right-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
-                        title="Copy to clipboard"
-                      >
-                        <Copy size={14} />
-                        <span className="text-xs">Copy</span>
-                      </button>
-                    </div>
+                  <div className="p-4 relative">
+                    <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs max-h-64 text-black">
+                      {JSON.stringify((order as any).rateQuotesRequestJsonb, null, 2)}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(JSON.stringify((order as any).rateQuotesRequestJsonb, null, 2))}
+                      className="absolute top-6 right-6 px-2 py-1.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-colors flex items-center gap-1"
+                      title="Copy to clipboard"
+                    >
+                      <Copy size={12} />
+                      Copy
+                    </button>
                   </div>
                 )}
               </div>
@@ -200,124 +240,126 @@ export const ProcessedOrderDetailsModal = ({
             {order.rateQuotesResponseJsonb && Object.keys(order.rateQuotesResponseJsonb).length > 0 && (
               <div className="border border-slate-200 rounded-lg overflow-hidden">
                 <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('rateQuoteResponse')}>
-                  <div className="flex items-center gap-2 flex-1">
-                    <h3 className="text-sm font-semibold text-black">Rate Quote Response</h3>
-                  </div>
+                  <h3 className="text-sm font-semibold text-black">Rate Quote Response</h3>
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       toggleSection('rateQuoteResponse');
                     }}
-                    className="text-black hover:text-slate-700"
+                    className="text-slate-500 hover:text-slate-700"
                   >
-                    {showSections.rateQuoteResponse ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                    {showSections.rateQuoteResponse ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                   </button>
                 </div>
                 {showSections.rateQuoteResponse && (
-                  <div className="p-4">
-                    <div className="relative">
-                      <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs font-mono max-h-96 text-black">
-                        {JSON.stringify(order.rateQuotesResponseJsonb, null, 2)}
-                      </pre>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(JSON.stringify(order.rateQuotesResponseJsonb, null, 2))}
-                        className="absolute top-2 right-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
-                        title="Copy to clipboard"
-                      >
-                        <Copy size={14} />
-                        <span className="text-xs">Copy</span>
-                      </button>
-                    </div>
+                  <div className="p-4 relative">
+                    <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs max-h-64 text-black">
+                      {JSON.stringify(order.rateQuotesResponseJsonb, null, 2)}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(JSON.stringify(order.rateQuotesResponseJsonb, null, 2))}
+                      className="absolute top-6 right-6 px-2 py-1.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-colors flex items-center gap-1"
+                      title="Copy to clipboard"
+                    >
+                      <Copy size={12} />
+                      Copy
+                    </button>
                   </div>
                 )}
               </div>
             )}
 
-            {/* BOL Response */}
+            {/* Bill of Lading Response */}
             {order.bolResponseJsonb && Object.keys(order.bolResponseJsonb).length > 0 && (
               <div className="border border-slate-200 rounded-lg overflow-hidden">
-                <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('bol')}>
-                  <div className="flex items-center gap-2 flex-1">
-                    <h3 className="text-sm font-semibold text-black">BOL Response</h3>
-                  </div>
+                <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('bolResponse')}>
+                  <h3 className="text-sm font-semibold text-black">Bill of Lading Response</h3>
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggleSection('bol');
+                      toggleSection('bolResponse');
                     }}
-                    className="text-black hover:text-slate-700"
+                    className="text-slate-500 hover:text-slate-700"
                   >
-                    {showSections.bol ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                    {showSections.bolResponse ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                   </button>
                 </div>
-                {showSections.bol && (
-                  <div className="p-4">
-                    <div className="relative">
-                      <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs font-mono max-h-96 text-black">
-                        {JSON.stringify(order.bolResponseJsonb, null, 2)}
-                      </pre>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(JSON.stringify(order.bolResponseJsonb, null, 2))}
-                        className="absolute top-2 right-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
-                        title="Copy to clipboard"
-                      >
-                        <Copy size={14} />
-                        <span className="text-xs">Copy</span>
-                      </button>
-                    </div>
+                {showSections.bolResponse && (
+                  <div className="p-4 relative">
+                    <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs max-h-64 text-black">
+                      {JSON.stringify(order.bolResponseJsonb, null, 2)}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(JSON.stringify(order.bolResponseJsonb, null, 2))}
+                      className="absolute top-6 right-6 px-2 py-1.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-colors flex items-center gap-1"
+                      title="Copy to clipboard"
+                    >
+                      <Copy size={12} />
+                      Copy
+                    </button>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Pickup Response */}
+            {/* Pickup Request Response */}
             {order.pickupResponseJsonb && Object.keys(order.pickupResponseJsonb).length > 0 && (
               <div className="border border-slate-200 rounded-lg overflow-hidden">
-                <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('pickup')}>
-                  <div className="flex items-center gap-2 flex-1">
-                    <h3 className="text-sm font-semibold text-black">Pickup Response</h3>
-                  </div>
+                <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('pickupResponse')}>
+                  <h3 className="text-sm font-semibold text-black">Pickup Request Response</h3>
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      toggleSection('pickup');
+                      toggleSection('pickupResponse');
                     }}
-                    className="text-black hover:text-slate-700"
+                    className="text-slate-500 hover:text-slate-700"
                   >
-                    {showSections.pickup ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                    {showSections.pickupResponse ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                   </button>
                 </div>
-                {showSections.pickup && (
-                  <div className="p-4">
-                    <div className="relative">
-                      <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs font-mono max-h-96 text-black">
-                        {JSON.stringify(order.pickupResponseJsonb, null, 2)}
-                      </pre>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(JSON.stringify(order.pickupResponseJsonb, null, 2))}
-                        className="absolute top-2 right-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2"
-                        title="Copy to clipboard"
-                      >
-                        <Copy size={14} />
-                        <span className="text-xs">Copy</span>
-                      </button>
-                    </div>
+                {showSections.pickupResponse && (
+                  <div className="p-4 relative">
+                    <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs max-h-64 text-black">
+                      {JSON.stringify(order.pickupResponseJsonb, null, 2)}
+                    </pre>
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(JSON.stringify(order.pickupResponseJsonb, null, 2))}
+                      className="absolute top-6 right-6 px-2 py-1.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-colors flex items-center gap-1"
+                      title="Copy to clipboard"
+                    >
+                      <Copy size={12} />
+                      Copy
+                    </button>
                   </div>
                 )}
               </div>
             )}
 
-            {/* Uploads */}
+            {/* Files */}
             {order.uploads && order.uploads.length > 0 && (
-              <div>
-                <h3 className="text-sm font-semibold text-black mb-3">Uploaded Files</h3>
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('files')}>
+                  <h3 className="text-sm font-semibold text-black">Files</h3>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleSection('files');
+                    }}
+                    className="text-slate-500 hover:text-slate-700"
+                  >
+                    {showSections.files ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                  </button>
+                </div>
+                {showSections.files && (
+                  <div className="p-4">
+                    <div className="border border-slate-200 rounded-lg overflow-hidden">
                   <table className="w-full">
                     <thead className="bg-slate-50">
                       <tr>
@@ -432,7 +474,9 @@ export const ProcessedOrderDetailsModal = ({
                       })}
                     </tbody>
                   </table>
-                </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

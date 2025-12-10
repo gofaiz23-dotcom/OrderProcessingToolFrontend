@@ -8,7 +8,6 @@ export type LogisticsShippedOrder = {
   status: string;
   uploads: string[];
   ordersJsonb: Record<string, unknown>;
-  rateQuotesRequestJsonb?: Record<string, unknown>;
   rateQuotesResponseJsonb?: Record<string, unknown>;
   bolResponseJsonb?: Record<string, unknown>;
   pickupResponseJsonb?: Record<string, unknown>;
