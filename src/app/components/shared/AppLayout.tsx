@@ -4,7 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useSearchParams, useRouter } from 'next/navigation';
 import { ReactNode, useState, useEffect, useRef } from 'react';
-import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart, Truck, PackageSearch, Users, LogOut, User, Menu, X, FileSpreadsheet, BarChart3, Folder } from 'lucide-react';
+import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart, Truck, PackageSearch, Users, LogOut, User, Menu, X, FileSpreadsheet, BarChart3, Folder, Package } from 'lucide-react';
 import API_BASE_URL from '../../../../BaseUrl';
 import { MARKETPLACES, LOGISTICS_CARRIERS } from '@/Shared/constant';
 import { LogisticsAuthModal } from './LogisticsAuthModal';
@@ -427,6 +427,34 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                                 className={`flex-shrink-0 ${hasActiveCustomerDetailsItem ? 'text-blue-600' : 'text-slate-400'}`}
                                             />
                                             <span className="text-xs sm:text-sm font-medium flex-1 text-left">Customer Details</span>
+                                        </div>
+                                    </Link>
+                                </div>
+
+                                {/* Estes Pickup Section - Separate */}
+                                <div>
+                                    <Link 
+                                        href="/3plGigaFedex/estes-pickup"
+                                        onClick={() => {
+                                            setIsMobileMenuOpen(false);
+                                            setIsOrdersExpanded(false);
+                                            setIsLogisticsExpanded(false);
+                                            setIsProcessedOrdersExpanded(false);
+                                            setIs3plGlobalExpanded(false);
+                                        }}
+                                    >
+                                        <div
+                                            className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-colors ${
+                                                pathname === '/3plGigaFedex/estes-pickup' || pathname?.startsWith('/3plGigaFedex/estes-pickup')
+                                                    ? 'bg-blue-50 text-blue-700'
+                                                    : 'text-slate-700 hover:bg-slate-50'
+                                            }`}
+                                        >
+                                            <Package
+                                                size={18}
+                                                className={`flex-shrink-0 ${pathname === '/3plGigaFedex/estes-pickup' || pathname?.startsWith('/3plGigaFedex/estes-pickup') ? 'text-blue-600' : 'text-slate-400'}`}
+                                            />
+                                            <span className="text-xs sm:text-sm font-medium flex-1 text-left">Estes Pickup</span>
                                         </div>
                                     </Link>
                                 </div>
