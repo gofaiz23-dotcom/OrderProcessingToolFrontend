@@ -162,6 +162,14 @@ export const useLogisticsStore = create<LogisticsStore>()(
         try {
           const shippingCompany = normalizedCarrier;
           
+          // Check if we're in a browser environment (fetch might not be available in SSR)
+          if (typeof window === 'undefined' || typeof fetch === 'undefined') {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn(`Cannot refresh token for ${normalizedCarrier}: fetch not available`);
+            }
+            return false;
+          }
+          
           const res = await fetch(buildApiUrl('/Logistics/Authenticate'), {
             method: 'POST',
             headers: {
@@ -172,6 +180,12 @@ export const useLogisticsStore = create<LogisticsStore>()(
               password: credentials.password,
               shippingCompany,
             }),
+          }).catch((fetchError) => {
+            // Handle network errors (Failed to fetch, CORS, etc.)
+            if (process.env.NODE_ENV === 'development') {
+              console.warn(`Network error refreshing token for ${normalizedCarrier}:`, fetchError.message || 'Failed to fetch');
+            }
+            throw fetchError;
           });
           
           if (!res.ok) {
@@ -210,9 +224,21 @@ export const useLogisticsStore = create<LogisticsStore>()(
           
           return true;
         } catch (error) {
+          // Handle all errors gracefully (network errors, parsing errors, etc.)
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          
+          // Only log network errors in development, silently fail in production
           if (process.env.NODE_ENV === 'development') {
-            console.error(`Error refreshing token for ${normalizedCarrier}:`, error);
+            // Check if it's a network error
+            if (errorMessage.includes('Failed to fetch') || 
+                errorMessage.includes('NetworkError') ||
+                errorMessage.includes('Network request failed')) {
+              console.warn(`Network error refreshing token for ${normalizedCarrier}:`, errorMessage);
+            } else {
+              console.error(`Error refreshing token for ${normalizedCarrier}:`, error);
+            }
           }
+          
           return false;
         }
       },

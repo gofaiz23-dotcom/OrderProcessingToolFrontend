@@ -62,15 +62,30 @@ export const useLogisticsTokenRefresh = () => {
     const handleFocus = () => {
       markSessionActive();
       // Check tokens when user returns to the tab
-      carriers.forEach(carrier => {
-        if (isTokenExpired(carrier, 10)) {
-          refreshToken(carrier);
+      carriers.forEach(async (carrier) => {
+        try {
+          if (isTokenExpired(carrier, 10)) {
+            await refreshToken(carrier).catch((error) => {
+              // Silently handle errors - refreshToken already logs them
+              if (process.env.NODE_ENV === 'development') {
+                console.warn(`Token refresh failed for ${carrier} on focus:`, error);
+              }
+            });
+          }
+        } catch (error) {
+          // Catch any synchronous errors
+          if (process.env.NODE_ENV === 'development') {
+            console.warn(`Error checking token for ${carrier} on focus:`, error);
+          }
         }
       });
     };
 
-    window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
+    // Only add event listener if window is available (browser environment)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', handleFocus);
+      return () => window.removeEventListener('focus', handleFocus);
+    }
   }, [markSessionActive, isTokenExpired, refreshToken]);
 };
 

@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Loader2, Plus, X, ChevronDown, ChevronUp, Info } from 'lucide-react';
-import { formatISO } from 'date-fns';
 import { buildApiUrl } from '../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
-import { buildXPOBillOfLadingRequestBody } from './utils/requestBuilder';
+import { buildXPOBillOfLadingRequestBody, buildXPOPickupRequestRequestBody } from './utils/requestBuilder';
 import type { XPOBillOfLadingFields, XPOBillOfLadingCommodity } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
+import type { XPOPickupRequestFields } from '@/app/api/ShippingUtil/xpo/PickupRequestField';
 import { 
   XPO_BOL_FIELD_DEFAULTS, 
   XPO_BOL_COMMODITY_DEFAULTS,
@@ -69,6 +69,8 @@ export const XPOBillOfLading = ({
   // Form state
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [showPayloadPreview, setShowPayloadPreview] = useState(false);
+  const [payloadPreview, setPayloadPreview] = useState<Record<string, unknown> | null>(null);
   const [showSections, setShowSections] = useState<Record<string, boolean>>({
     requester: true,
     consignee: true,
@@ -134,6 +136,14 @@ export const XPOBillOfLading = ({
   const [emergencyContactPhone, setEmergencyContactPhone] = useState<string>('');
   const [additionalService, setAdditionalService] = useState<string[]>([]);
   const [autoAssignPro, setAutoAssignPro] = useState<boolean>(true);
+  
+  // Declared Value and Excess Liability fields
+  const [declaredValueAmt, setDeclaredValueAmt] = useState<number>(0.01);
+  const [declaredValueAmtPerLb, setDeclaredValueAmtPerLb] = useState<number>(0.01);
+  const [excessLiabilityChargeInit, setExcessLiabilityChargeInit] = useState<string>('');
+  
+  // Rate Quote Number for suppRef
+  const [rateQuoteNumber, setRateQuoteNumber] = useState<string>('');
 
   // Helper function to get today's date in YYYY-MM-DD format
   const getTodayDate = () => {
@@ -148,7 +158,7 @@ export const XPOBillOfLading = ({
   const [schedulePickup, setSchedulePickup] = useState<boolean>(false);
   const [pickupDate, setPickupDate] = useState<string>(getTodayDate());
   const [pickupTime, setPickupTime] = useState<string>('11:00');
-  const [dockCloseTime, setDockCloseTime] = useState<string>('16:30');
+  const [dockCloseTime, setDockCloseTime] = useState<string>('12:00'); // 1 hour after pickup time
   const [pickupContactCompanyName, setPickupContactCompanyName] = useState<string>('XPO LOGISTICS FREIGHT, INC.');
   const [pickupContactFullName, setPickupContactFullName] = useState<string>('XPO Driver');
   const [pickupContactPhone, setPickupContactPhone] = useState<string>('562-9468331');
@@ -217,6 +227,10 @@ export const XPOBillOfLading = ({
       if (initialFormData.chargeToCd) setChargeToCd(initialFormData.chargeToCd);
       if (initialFormData.remarks) setRemarks(initialFormData.remarks);
       if (initialFormData.autoAssignPro !== undefined) setAutoAssignPro(initialFormData.autoAssignPro);
+      if (initialFormData.declaredValueAmt !== undefined) setDeclaredValueAmt(initialFormData.declaredValueAmt);
+      if (initialFormData.declaredValueAmtPerLb !== undefined) setDeclaredValueAmtPerLb(initialFormData.declaredValueAmtPerLb);
+      if (initialFormData.excessLiabilityChargeInit !== undefined) setExcessLiabilityChargeInit(initialFormData.excessLiabilityChargeInit);
+      if (initialFormData.rateQuoteNumber) setRateQuoteNumber(initialFormData.rateQuoteNumber);
       
       // Load pickup request data if available
       if (initialFormData.pickupInfo) {
@@ -245,12 +259,12 @@ export const XPOBillOfLading = ({
             const timeStr = dockCloseDateObj.toTimeString().split(' ')[0].substring(0, 5);
             setDockCloseTime(timeStr);
           } else {
-            // If parsing fails, use default
-            setDockCloseTime('16:30');
+            // If parsing fails, use default (1 hour after pickup time)
+            setDockCloseTime('12:00');
           }
         } else {
-          // If no dock close time provided, use default
-          setDockCloseTime('16:30');
+          // If no dock close time provided, use default (1 hour after pickup time)
+          setDockCloseTime('12:00');
         }
         if (initialFormData.pickupInfo.contact) {
           if (initialFormData.pickupInfo.contact.companyName) {
@@ -274,7 +288,7 @@ export const XPOBillOfLading = ({
             setPickupTime('11:00');
           }
           if (!dockCloseTime) {
-            setDockCloseTime('16:30');
+            setDockCloseTime('12:00'); // 1 hour after pickup time
           }
         }
       }
@@ -356,6 +370,10 @@ export const XPOBillOfLading = ({
       pickupContactCompanyName,
       pickupContactFullName,
       pickupContactPhone,
+      declaredValueAmt,
+      declaredValueAmtPerLb,
+      excessLiabilityChargeInit,
+      rateQuoteNumber,
     };
 
     // Only call onFormDataChange if data actually changed
@@ -379,6 +397,8 @@ export const XPOBillOfLading = ({
     commodities, chargeToCd, remarks, autoAssignPro,
     schedulePickup, pickupDate, pickupTime, dockCloseTime,
     pickupContactCompanyName, pickupContactFullName, pickupContactPhone,
+    declaredValueAmt, declaredValueAmtPerLb, excessLiabilityChargeInit,
+    rateQuoteNumber,
   ]);
 
   // Load response data if provided
@@ -387,6 +407,110 @@ export const XPOBillOfLading = ({
       onResponseDataChange(initialResponseData);
     }
   }, [initialResponseData, onResponseDataChange]);
+
+  // Build live payload preview
+  useEffect(() => {
+    try {
+      const requestBody = buildRequestBody();
+      const normalizedCarrier = carrier.toLowerCase();
+      const token = getToken(normalizedCarrier);
+      
+      if (token) {
+        const payload = buildXPOBillOfLadingRequestBody(requestBody);
+        const finalPayload = {
+          shippingCompany: normalizedCarrier,
+          ...payload,
+        };
+        
+        // Debug logging in development
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Payload Preview Debug:', {
+            schedulePickup,
+            pickupDate,
+            pickupTime,
+            dockCloseTime,
+            hasPickupInfoInRequestBody: !!requestBody.bol?.pickupInfo,
+            hasPickupInfoInPayload: !!finalPayload.bol?.pickupInfo,
+            requestBodyPickupInfo: requestBody.bol?.pickupInfo,
+            payloadPickupInfo: finalPayload.bol?.pickupInfo,
+          });
+          if (schedulePickup && !finalPayload.bol?.pickupInfo) {
+            console.warn('WARNING: schedulePickup is true but pickupInfo is missing in payload!', {
+              schedulePickup,
+              pickupDate,
+              pickupTime,
+              dockCloseTime,
+              requestBodyPickupInfo: requestBody.bol?.pickupInfo,
+            });
+          }
+        }
+        
+        setPayloadPreview(finalPayload);
+      } else {
+        setPayloadPreview(null);
+      }
+    } catch (error) {
+      // Log error in development
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Error building payload preview:', error);
+      }
+      // Silently fail - preview will update when form is valid
+      setPayloadPreview(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    requesterRole,
+    consigneeAddressLine1, consigneeCity, consigneeState, consigneeCountry, consigneePostalCd,
+    consigneeCompanyName, consigneeEmail, consigneePhone,
+    shipperAddressLine1, shipperCity, shipperState, shipperCountry, shipperPostalCd,
+    shipperCompanyName, shipperEmail, shipperPhone, shipperAcctInstId, pickupLocation,
+    billToAddressLine1, billToCity, billToState, billToCountry, billToPostalCd,
+    billToCompanyName, billToEmail, billToPhone,
+    commodities, chargeToCd, remarks, autoAssignPro,
+    schedulePickup, pickupDate, pickupTime, dockCloseTime,
+    pickupContactCompanyName, pickupContactFullName, pickupContactPhone,
+    declaredValueAmt, declaredValueAmtPerLb, excessLiabilityChargeInit,
+    rateQuoteNumber,
+    carrier, getToken,
+  ]);
+
+  // Extract rate quote number from quoteData
+  useEffect(() => {
+    if (quoteData && !initialFormData) {
+      let confirmationNbr: string = '';
+      
+      // Check if quoteData has a quote object with confirmationNbr
+      if ((quoteData as any)?.quote?.confirmationNbr) {
+        confirmationNbr = (quoteData as any).quote.confirmationNbr;
+      }
+      // Check if quoteData has data.data.rateQuote.confirmationNbr (full response structure)
+      else if ((quoteData as any)?.data?.data?.rateQuote?.confirmationNbr) {
+        confirmationNbr = (quoteData as any).data.data.rateQuote.confirmationNbr;
+      }
+      // Check if quoteData is the rateQuote object directly
+      else if ((quoteData as any)?.confirmationNbr) {
+        confirmationNbr = (quoteData as any).confirmationNbr;
+      }
+      // Also check for quoteId or spotQuoteNbr as fallback
+      else if ((quoteData as any)?.data?.data?.rateQuote?.quoteId) {
+        confirmationNbr = (quoteData as any).data.data.rateQuote.quoteId;
+      }
+      else if ((quoteData as any)?.data?.data?.rateQuote?.spotQuoteNbr) {
+        confirmationNbr = (quoteData as any).data.data.rateQuote.spotQuoteNbr;
+      }
+      else if ((quoteData as any)?.quoteId) {
+        confirmationNbr = (quoteData as any).quoteId;
+      }
+      else if ((quoteData as any)?.spotQuoteNbr) {
+        confirmationNbr = (quoteData as any).spotQuoteNbr;
+      }
+      
+      // Set rate quote number if found
+      if (confirmationNbr && confirmationNbr.trim() !== '') {
+        setRateQuoteNumber(confirmationNbr.trim());
+      }
+    }
+  }, [quoteData, initialFormData]);
 
   // Populate from quoteData (rate quote response)
   useEffect(() => {
@@ -620,6 +744,137 @@ export const XPOBillOfLading = ({
     setCommodities(updated);
   };
 
+  // Helper function to normalize phone number to XPO format: NNN-NNNNNNN (3 digits, hyphen, 7 digits)
+  // Handles formats like "+1 (646) 504-0655" -> "646-5040655"
+  const normalizePhoneNumber = (phone: string | null | undefined): string => {
+    if (!phone || typeof phone !== 'string') {
+      return '';
+    }
+    
+    let normalized = phone.trim();
+    
+    // Remove spaces, parentheses, and other non-digit characters except hyphens
+    normalized = normalized.replace(/[\s\(\)]/g, '');
+    
+    // Handle +1 prefix (e.g., "+1 (646) 504-0655" -> "6465040655")
+    if (normalized.startsWith('+1')) {
+      normalized = normalized.replace(/^\+1[\s\-]*/, '');
+    } else if (normalized.startsWith('1-') && normalized.replace(/[^\d]/g, '').length >= 11) {
+      normalized = normalized.replace(/^1-/, '');
+    } else if (normalized.match(/^1\d{10}$/)) {
+      // Handle format like "16465040655" (11 digits starting with 1)
+      normalized = normalized.substring(1);
+    }
+    
+    // Remove all non-digit characters to get just digits
+    const digitsOnly = normalized.replace(/[^\d]/g, '');
+    
+    // Format as NNN-NNNNNNN if we have 10 digits
+    if (digitsOnly.length === 10) {
+      return `${digitsOnly.substring(0, 3)}-${digitsOnly.substring(3)}`;
+    } else if (digitsOnly.length > 0) {
+      // If not exactly 10 digits, try to format anyway if we have at least 10 digits
+      if (digitsOnly.length >= 10) {
+        return `${digitsOnly.substring(0, 3)}-${digitsOnly.substring(3, 10)}`;
+      }
+      // Return as-is if we have some digits but less than 10
+      return digitsOnly;
+    }
+    
+    // Return empty string if no digits found
+    return '';
+  };
+
+  // Helper function to format date and time to ISO 8601 with PST timezone (-08:00)
+  // Returns format: "2025-12-15T12:00:00-08:00"
+  // Always uses PST timezone (-08:00) regardless of user's location
+  const formatDateTimeWithTimezone = (date: string, time: string): string => {
+    // Validate inputs - must be non-empty strings
+    if (!date || !time || typeof date !== 'string' || typeof time !== 'string') {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('formatDateTimeWithTimezone: Invalid input types', { date, time, dateType: typeof date, timeType: typeof time });
+      }
+      return '';
+    }
+    
+    // Trim whitespace
+    const trimmedDate = date.trim();
+    const trimmedTime = time.trim();
+    
+    // Check if inputs are empty after trimming
+    if (!trimmedDate || !trimmedTime) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('formatDateTimeWithTimezone: Empty after trim', { trimmedDate, trimmedTime });
+      }
+      return '';
+    }
+    
+    // Validate date format (should be YYYY-MM-DD for date input)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(trimmedDate)) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('formatDateTimeWithTimezone: Invalid date format', { trimmedDate });
+      }
+      return '';
+    }
+    
+    // Validate time format (should be HH:mm for time input)
+    const timeRegex = /^\d{2}:\d{2}$/;
+    if (!timeRegex.test(trimmedTime)) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('formatDateTimeWithTimezone: Invalid time format', { trimmedTime });
+      }
+      return '';
+    }
+    
+    // Parse date components
+    const [year, month, day] = trimmedDate.split('-').map(Number);
+    const [hours, minutes] = trimmedTime.split(':').map(Number);
+    
+    // Validate parsed values
+    if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hours) || isNaN(minutes)) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('formatDateTimeWithTimezone: Invalid parsed values', { year, month, day, hours, minutes });
+      }
+      return '';
+    }
+    
+    // Validate date values
+    if (month < 1 || month > 12 || day < 1 || day > 31 || hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('formatDateTimeWithTimezone: Invalid date/time values', { year, month, day, hours, minutes });
+      }
+      return '';
+    }
+    
+    // Format as ISO 8601 with PST timezone offset (-08:00)
+    // Format: "2025-12-15T12:00:00-08:00"
+    // XPO BOL expects PST timezone (-08:00) as shown in backend template examples
+    // This ensures consistent timezone regardless of user's browser location
+    // IMPORTANT: We ALWAYS use -08:00 (PST) regardless of user's timezone
+    const yearStr = String(year).padStart(4, '0');
+    const monthStr = String(month).padStart(2, '0');
+    const dayStr = String(day).padStart(2, '0');
+    const hoursStr = String(hours).padStart(2, '0');
+    const minutesStr = String(minutes).padStart(2, '0');
+    
+    // Use PST timezone offset (-08:00) - Pacific Standard Time
+    // This matches the example in the backend template: "2025-12-15T12:00:00-08:00"
+    // CRITICAL: We hardcode -08:00 to avoid timezone conversion issues
+    const formatted = `${yearStr}-${monthStr}-${dayStr}T${hoursStr}:${minutesStr}:00-08:00`;
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('formatDateTimeWithTimezone: Success - FORCING PST TIMEZONE (-08:00)', { 
+        inputDate: date, 
+        inputTime: time,
+        formatted,
+        note: 'This should ALWAYS end with -08:00, never with +05:30 or any other timezone'
+      });
+    }
+    
+    return formatted;
+  };
+
   const buildRequestBody = (): XPOBillOfLadingFields => {
     // Use shipperAcctInstId from state if available, otherwise extract from pickup location selection
     let finalShipperAcctInstId: string | undefined = shipperAcctInstId || undefined;
@@ -647,6 +902,221 @@ export const XPOBillOfLading = ({
       }
     }
 
+    // Build pickupInfo ONLY if schedulePickup is explicitly true and all date/time values are valid
+    // When schedulePickup is false, pickupInfo should NOT be included in the payload
+    let pickupInfo: any = undefined;
+    
+    // Debug: Log the raw state values
+    if (process.env.NODE_ENV === 'development') {
+      console.log('buildRequestBody - Raw pickup state:', {
+        schedulePickup,
+        pickupDate,
+        pickupTime,
+        dockCloseTime,
+        pickupDateType: typeof pickupDate,
+        pickupTimeType: typeof pickupTime,
+        dockCloseTimeType: typeof dockCloseTime,
+      });
+    }
+    
+    if (schedulePickup === true) {
+      // Validate that all required fields are present and non-empty
+      const trimmedDate = pickupDate ? String(pickupDate).trim() : '';
+      const trimmedTime = pickupTime ? String(pickupTime).trim() : '';
+      const trimmedDockCloseTime = dockCloseTime ? String(dockCloseTime).trim() : '';
+      
+      const hasValidDate = trimmedDate !== '';
+      const hasValidTime = trimmedTime !== '';
+      const hasValidDockCloseTime = trimmedDockCloseTime !== '';
+      
+      // Debug logging
+      if (process.env.NODE_ENV === 'development') {
+        console.log('buildRequestBody - Validating pickup fields:', {
+          schedulePickup,
+          trimmedDate,
+          trimmedTime,
+          trimmedDockCloseTime,
+          hasValidDate,
+          hasValidTime,
+          hasValidDockCloseTime,
+        });
+      }
+      
+      if (hasValidDate && hasValidTime && hasValidDockCloseTime) {
+        // Validate that pickup date is not in the past
+        const today = getTodayDate();
+        if (trimmedDate < today) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('buildRequestBody - PickupInfo validation failed: Pickup date cannot be in the past', {
+              pickupDate: trimmedDate,
+              today,
+            });
+          }
+          // Don't include pickupInfo if validation fails
+          pickupInfo = undefined;
+        } else {
+          // Validate that ready time is before dock close time
+          const [readyHours, readyMinutes] = trimmedTime.split(':').map(Number);
+          const [closeHours, closeMinutes] = trimmedDockCloseTime.split(':').map(Number);
+          const readyTimeMinutes = readyHours * 60 + readyMinutes;
+          const closeTimeMinutes = closeHours * 60 + closeMinutes;
+          
+          if (readyTimeMinutes >= closeTimeMinutes) {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('buildRequestBody - PickupInfo validation failed: Ready time must be before dock close time', {
+                readyTime: trimmedTime,
+                dockCloseTime: trimmedDockCloseTime,
+              });
+            }
+            // Don't include pickupInfo if validation fails
+            pickupInfo = undefined;
+          } else {
+          // Format all three fields as ISO 8601 with PST timezone (-08:00): "2025-12-15T12:00:00-08:00"
+          // pkupDate and pkupTime use the same date and pickup time (ready time)
+          // dockCloseTime uses the same date but with dock close time
+          // All three must have the same date (YYYY-MM-DD part)
+          // CRITICAL: formatDateTimeWithTimezone ALWAYS uses -08:00 (PST) regardless of user's location
+          const formattedPkupDate = formatDateTimeWithTimezone(trimmedDate, trimmedTime);
+          const formattedPkupTime = formatDateTimeWithTimezone(trimmedDate, trimmedTime);
+          const formattedDockCloseTime = formatDateTimeWithTimezone(trimmedDate, trimmedDockCloseTime);
+          
+          // Verify timezone is correct (should always end with -08:00)
+          if (process.env.NODE_ENV === 'development') {
+            console.log('buildRequestBody - Date formatting verification (should all end with -08:00):', {
+              formattedPkupDate,
+              formattedPkupTime,
+              formattedDockCloseTime,
+              pkupDateEndsWithPST: formattedPkupDate.endsWith('-08:00'),
+              pkupTimeEndsWithPST: formattedPkupTime.endsWith('-08:00'),
+              dockCloseTimeEndsWithPST: formattedDockCloseTime.endsWith('-08:00'),
+            });
+          }
+          
+          // Validate that all three formatted dates have the same date part (YYYY-MM-DD)
+          // Extract date part from formatted strings (before the 'T')
+          const pkupDatePart = formattedPkupDate ? formattedPkupDate.split('T')[0] : '';
+          const pkupTimeDatePart = formattedPkupTime ? formattedPkupTime.split('T')[0] : '';
+          const dockCloseDatePart = formattedDockCloseTime ? formattedDockCloseTime.split('T')[0] : '';
+          
+          // All three must have the same date part (YYYY-MM-DD) and match the input date
+          const datesMatch = pkupDatePart !== '' && 
+                            pkupTimeDatePart !== '' && 
+                            dockCloseDatePart !== '' &&
+                            pkupDatePart === pkupTimeDatePart && 
+                            pkupTimeDatePart === dockCloseDatePart && 
+                            pkupDatePart === trimmedDate;
+          
+          // Validate phone number is not empty
+          const contactPhone = pickupContactPhone && pickupContactPhone.trim() !== '' 
+            ? pickupContactPhone.trim() 
+            : null;
+          
+          // Debug logging in development
+          if (process.env.NODE_ENV === 'development') {
+            console.log('buildRequestBody - Formatted pickup times:', {
+              schedulePickup,
+              pickupDate: trimmedDate,
+              pickupTime: trimmedTime,
+              dockCloseTime: trimmedDockCloseTime,
+              formattedPkupDate,
+              formattedPkupTime,
+              formattedDockCloseTime,
+              pkupDatePart,
+              pkupTimeDatePart,
+              dockCloseDatePart,
+              datesMatch,
+              contactPhone,
+              allFormatted: !!(formattedPkupDate && formattedPkupTime && formattedDockCloseTime),
+            });
+          }
+          
+          // Only include pickupInfo if all formatted values are valid and dates match
+          if (formattedPkupDate && formattedPkupTime && formattedDockCloseTime && datesMatch && contactPhone) {
+            // Normalize phone number using the helper function
+            let normalizedPhone = normalizePhoneNumber(contactPhone);
+            
+            // If normalization resulted in empty string, use default
+            if (!normalizedPhone || normalizedPhone.trim() === '') {
+              if (process.env.NODE_ENV === 'development') {
+                console.warn('buildRequestBody - Pickup contact phone normalization resulted in empty string, using default');
+              }
+              normalizedPhone = '562-9468331';
+            }
+            
+            if (process.env.NODE_ENV === 'development') {
+              console.log('buildRequestBody - Pickup contact phone normalized:', {
+                original: contactPhone,
+                normalized: normalizedPhone,
+              });
+            }
+            
+            // CRITICAL VALIDATION: Ensure all dates end with -08:00 (PST timezone)
+            // If they don't, something is wrong with the formatting
+            if (!formattedPkupDate.endsWith('-08:00') || !formattedPkupTime.endsWith('-08:00') || !formattedDockCloseTime.endsWith('-08:00')) {
+              console.error('CRITICAL ERROR: Dates are not formatted with -08:00 timezone!', {
+                formattedPkupDate,
+                formattedPkupTime,
+                formattedDockCloseTime,
+                pkupDateEndsWithPST: formattedPkupDate.endsWith('-08:00'),
+                pkupTimeEndsWithPST: formattedPkupTime.endsWith('-08:00'),
+                dockCloseTimeEndsWithPST: formattedDockCloseTime.endsWith('-08:00'),
+              });
+              // Don't include pickupInfo if timezone is wrong
+              pickupInfo = undefined;
+            } else {
+              pickupInfo = {
+                pkupDate: formattedPkupDate,
+                pkupTime: formattedPkupTime,
+                dockCloseTime: formattedDockCloseTime,
+                contact: {
+                  companyName: pickupContactCompanyName || 'XPO LOGISTICS FREIGHT, INC.',
+                  fullName: pickupContactFullName || 'XPO Driver',
+                  phone: {
+                    phoneNbr: normalizedPhone,
+                  },
+                },
+              };
+              
+              if (process.env.NODE_ENV === 'development') {
+                console.log('buildRequestBody - pickupInfo built successfully with PST timezone (-08:00):', {
+                  pkupDate: pickupInfo.pkupDate,
+                  pkupTime: pickupInfo.pkupTime,
+                  dockCloseTime: pickupInfo.dockCloseTime,
+                  contactPhone: pickupInfo.contact.phone.phoneNbr,
+                });
+              }
+            }
+          } else if (process.env.NODE_ENV === 'development') {
+            console.warn('buildRequestBody - PickupInfo not included: Validation failed', {
+              formattedPkupDate: formattedPkupDate || 'EMPTY',
+              formattedPkupTime: formattedPkupTime || 'EMPTY',
+              formattedDockCloseTime: formattedDockCloseTime || 'EMPTY',
+              datesMatch,
+              contactPhone: contactPhone || 'EMPTY',
+            });
+          }
+          }
+        }
+      } else if (process.env.NODE_ENV === 'development') {
+        console.warn('buildRequestBody - PickupInfo not included: Missing required fields', {
+          hasValidDate,
+          hasValidTime,
+          hasValidDockCloseTime,
+          trimmedDate,
+          trimmedTime,
+          trimmedDockCloseTime,
+        });
+      }
+    } else if (process.env.NODE_ENV === 'development') {
+      console.log('buildRequestBody - schedulePickup is false, pickupInfo will not be included');
+    }
+    // When schedulePickup is false, pickupInfo remains undefined and will not be included
+
+    // Normalize all phone numbers to XPO format: NNN-NNNNNNN
+    const normalizedConsigneePhone = normalizePhoneNumber(consigneePhone);
+    const normalizedShipperPhone = normalizePhoneNumber(shipperPhone);
+    const normalizedBillToPhone = normalizePhoneNumber(billToPhone);
+
     return {
       bol: {
         requester: {
@@ -662,11 +1132,12 @@ export const XPOBillOfLading = ({
           },
           contactInfo: {
             companyName: consigneeCompanyName,
+            // Always include email object - set to null if empty (backend will handle it)
             email: {
-              emailAddr: consigneeEmail,
+              emailAddr: consigneeEmail && consigneeEmail.trim() !== '' ? consigneeEmail.trim() : null,
             },
             phone: {
-              phoneNbr: consigneePhone,
+              phoneNbr: normalizedConsigneePhone,
             },
           },
         },
@@ -681,11 +1152,12 @@ export const XPOBillOfLading = ({
           },
           contactInfo: {
             companyName: shipperCompanyName,
+            // Always include email object - set to null if empty (backend will handle it)
             email: {
-              emailAddr: shipperEmail,
+              emailAddr: shipperEmail && shipperEmail.trim() !== '' ? shipperEmail.trim() : null,
             },
             phone: {
-              phoneNbr: shipperPhone,
+              phoneNbr: normalizedShipperPhone,
             },
           },
         },
@@ -699,11 +1171,12 @@ export const XPOBillOfLading = ({
           },
           contactInfo: {
             companyName: billToCompanyName,
+            // Always include email object - set to null if empty (backend will handle it)
             email: {
-              emailAddr: billToEmail,
+              emailAddr: billToEmail && billToEmail.trim() !== '' ? billToEmail.trim() : null,
             },
             phone: {
-              phoneNbr: billToPhone,
+              phoneNbr: normalizedBillToPhone,
             },
           },
         },
@@ -713,96 +1186,47 @@ export const XPOBillOfLading = ({
         ...(emergencyContactName && { emergencyContactName }),
         ...(emergencyContactPhone && { emergencyContactPhone: { phoneNbr: emergencyContactPhone } }),
         ...(additionalService.length > 0 && { additionalService }),
-        // Include pickupInfo only if schedulePickup is true and all date/time values are valid
-        ...(schedulePickup && 
-            pickupDate && 
-            pickupTime && 
-            dockCloseTime && 
-            pickupDate.trim() !== '' && 
-            pickupTime.trim() !== '' && 
-            dockCloseTime.trim() !== '' && 
-            (() => {
-              // Format all three fields as ISO 8601 with timezone: "2025-12-15T12:00:00-08:00"
-              // pkupDate and pkupTime use the same date and pickup time
-              // dockCloseTime uses the same date but with dock close time
-              const formattedPkupDate = formatDateTimeWithTimezone(pickupDate, pickupTime);
-              const formattedPkupTime = formatDateTimeWithTimezone(pickupDate, pickupTime);
-              const formattedDockCloseTime = formatDateTimeWithTimezone(pickupDate, dockCloseTime);
-              
-              // Only include pickupInfo if all formatted values are valid (not empty strings)
-              if (formattedPkupDate && formattedPkupTime && formattedDockCloseTime) {
-                return {
-                  pickupInfo: {
-                    pkupDate: formattedPkupDate,
-                    pkupTime: formattedPkupTime,
-                    dockCloseTime: formattedDockCloseTime,
-                    contact: {
-                      companyName: pickupContactCompanyName || 'XPO LOGISTICS FREIGHT, INC.',
-                      fullName: pickupContactFullName || 'XPO Driver',
-                      phone: {
-                        phoneNbr: pickupContactPhone || '562-9468331',
-                      },
-                    },
-                  },
-                };
-              }
-              return null;
-            })()
-        ),
+        // Include suppRef with rate quote number if available
+        ...(rateQuoteNumber && rateQuoteNumber.trim() !== '' && {
+          suppRef: {
+            otherRefs: [
+              {
+                referenceCode: 'RQ#',
+                reference: rateQuoteNumber.trim(),
+                referenceDescr: 'Rate Quote Number',
+                referenceTypeCd: 'Other',
+              },
+            ],
+          },
+        }),
+        // Include declaredValueAmt (always include, default to 0.01)
+        declaredValueAmt: {
+          amt: declaredValueAmt !== undefined && declaredValueAmt !== null ? declaredValueAmt : 0.01,
+        },
+        // Include declaredValueAmtPerLb (always include, default to 0.01)
+        declaredValueAmtPerLb: {
+          amt: declaredValueAmtPerLb !== undefined && declaredValueAmtPerLb !== null ? declaredValueAmtPerLb : 0.01,
+        },
+        // Include excessLiabilityChargeInit (always include, empty string if not provided)
+        excessLiabilityChargeInit: excessLiabilityChargeInit !== undefined && excessLiabilityChargeInit !== null ? excessLiabilityChargeInit : '',
+        // Include pickupInfo if it was successfully built
+        ...(pickupInfo && { pickupInfo }),
       },
       autoAssignPro,
     };
   };
 
-  // Helper function to format date and time to ISO 8601 with timezone using date-fns
-  // Returns format: "2025-12-15T12:00:00-08:00"
-  const formatDateTimeWithTimezone = (date: string, time: string): string => {
-    // Validate inputs - must be non-empty strings
-    if (!date || !time || typeof date !== 'string' || typeof time !== 'string') {
-      return '';
-    }
-    
-    // Trim whitespace
-    const trimmedDate = date.trim();
-    const trimmedTime = time.trim();
-    
-    // Check if inputs are empty after trimming
-    if (!trimmedDate || !trimmedTime) {
-      return '';
-    }
-    
-    // Validate date format (should be YYYY-MM-DD for date input)
-    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-    if (!dateRegex.test(trimmedDate)) {
-      return '';
-    }
-    
-    // Validate time format (should be HH:mm for time input)
-    const timeRegex = /^\d{2}:\d{2}$/;
-    if (!timeRegex.test(trimmedTime)) {
-      return '';
-    }
-    
-    // Parse date components
-    const [year, month, day] = trimmedDate.split('-').map(Number);
-    const [hours, minutes] = trimmedTime.split(':').map(Number);
-    
-    // Validate parsed values
-    if (isNaN(year) || isNaN(month) || isNaN(day) || isNaN(hours) || isNaN(minutes)) {
-      return '';
-    }
-    
-    // Create date object with local time
-    const dateTime = new Date(year, month - 1, day, hours, minutes, 0);
-    
-    // Check if date is valid
-    if (isNaN(dateTime.getTime())) {
-      return '';
-    }
-    
-    // Use date-fns formatISO to format as ISO 8601 with timezone
-    // formatISO returns format like "2025-12-15T12:00:00-08:00"
-    return formatISO(dateTime);
+  // Helper function to convert date and time to ISO 8601 format for pickup request
+  // Returns format: "2016-12-17T14:00:00" (without timezone)
+  const convertToISO8601 = (date: string, time: string): string => {
+    if (!date || !time) return '';
+    const timeOnly = time.split('T')[1] || time.split(' ')[1] || time;
+    // Extract just the time part (HH:mm or HH:mm:ss) and ensure seconds
+    const timeParts = timeOnly.split(':');
+    const hours = timeParts[0] || '00';
+    const minutes = timeParts[1] || '00';
+    const seconds = timeParts[2] || '00';
+    return `${date}T${hours}:${minutes}:${seconds}`;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -838,8 +1262,36 @@ export const XPOBillOfLading = ({
         setLoading(false);
         return;
       }
+      
+      // Validate that pickup date is not in the past
+      const today = getTodayDate();
+      if (pickupDate < today) {
+        setError(new Error('Pickup date cannot be in the past. Please select today or a future date.'));
+        setLoading(false);
+        return;
+      }
+      
+      // Validate that ready time is before dock close time
+      const [readyHours, readyMinutes] = pickupTime.split(':').map(Number);
+      const [closeHours, closeMinutes] = dockCloseTime.split(':').map(Number);
+      const readyTimeMinutes = readyHours * 60 + readyMinutes;
+      const closeTimeMinutes = closeHours * 60 + closeMinutes;
+      
+      if (readyTimeMinutes >= closeTimeMinutes) {
+        setError(new Error('Pickup Ready Time must be before Dock Close Time'));
+        setLoading(false);
+        return;
+      }
+      
       if (!pickupContactCompanyName || !pickupContactFullName || !pickupContactPhone) {
         setError(new Error('Please fill in all required Pickup Contact fields'));
+        setLoading(false);
+        return;
+      }
+      
+      // Validate phone number is not empty
+      if (!pickupContactPhone || pickupContactPhone.trim() === '') {
+        setError(new Error('Pickup Contact Phone Number is required'));
         setLoading(false);
         return;
       }
@@ -949,6 +1401,116 @@ export const XPOBillOfLading = ({
       const data = await res.json();
       if (onResponseDataChange) {
         onResponseDataChange(data);
+      }
+      
+      // If schedulePickup is true, also create a pickup request
+      if (schedulePickup && pickupDate && pickupTime && dockCloseTime) {
+        try {
+          // Build pickup request payload from BOL form data
+          const pickupRequestPayload: XPOPickupRequestFields = {
+            pickupRqstInfo: {
+              pkupDate: convertToISO8601(pickupDate, '00:00:00'), // Use date with 00:00:00 time
+              readyTime: convertToISO8601(pickupDate, pickupTime),
+              closeTime: convertToISO8601(pickupDate, dockCloseTime),
+              shipper: {
+                name: shipperCompanyName,
+                addressLine1: shipperAddressLine1,
+                cityName: shipperCity,
+                stateCd: shipperState,
+                countryCd: shipperCountry,
+                postalCd: shipperPostalCd,
+              },
+              requestor: {
+                contact: {
+                  companyName: shipperCompanyName,
+                  email: {
+                    emailAddr: shipperEmail || '',
+                  },
+                  fullName: shipperCompanyName,
+                  phone: {
+                    phoneNbr: shipperPhone,
+                  },
+                },
+                roleCd: requesterRole,
+              },
+              contact: {
+                companyName: pickupContactCompanyName || shipperCompanyName,
+                email: {
+                  emailAddr: shipperEmail || '',
+                },
+                fullName: pickupContactFullName || shipperCompanyName,
+                phone: {
+                  phoneNbr: pickupContactPhone || shipperPhone,
+                },
+              },
+              ...(remarks && { remarks }),
+              pkupItem: commodities.map((commodity) => ({
+                destZip6: consigneePostalCd.substring(0, 6),
+                totWeight: {
+                  weight: commodity.grossWeight?.weight || 0,
+                },
+                loosePiecesCnt: commodity.packaging?.packageCd !== 'PLT' ? (commodity.pieceCnt || 0) : 0,
+                palletCnt: commodity.packaging?.packageCd === 'PLT' ? (commodity.pieceCnt || 0) : 0,
+                garntInd: false,
+                hazmatInd: commodity.hazmatInd || false,
+                frzbleInd: false,
+                holDlvrInd: false,
+                foodInd: false,
+                ...(commodity.desc && { remarks: commodity.desc }),
+              })),
+            },
+          };
+
+          const pickupPayload = buildXPOPickupRequestRequestBody(pickupRequestPayload);
+          const finalPickupPayload = {
+            shippingCompany: normalizedCarrier,
+            ...pickupPayload,
+          };
+
+          if (process.env.NODE_ENV === 'development') {
+            console.log('XPO Pickup Request:', JSON.stringify(finalPickupPayload, null, 2));
+          }
+
+          const pickupRes = await fetch(buildApiUrl('/Logistics/create-pickup-request'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(finalPickupPayload),
+          });
+
+          if (!pickupRes.ok) {
+            const pickupErrorText = await pickupRes.text();
+            let pickupErrorMessage = `Pickup request creation failed: ${pickupRes.status} ${pickupRes.statusText}`;
+            
+            try {
+              if (pickupErrorText && pickupErrorText.trim()) {
+                if (pickupErrorText.trim().startsWith('{') || pickupErrorText.trim().startsWith('[')) {
+                  const pickupErrorData = JSON.parse(pickupErrorText);
+                  pickupErrorMessage = pickupErrorData.message || pickupErrorData.error?.message || pickupErrorMessage;
+                } else {
+                  pickupErrorMessage = pickupErrorText.substring(0, 200);
+                }
+              }
+            } catch {
+              // Use default error message
+            }
+
+            // Log the error but don't fail the entire flow - BOL was created successfully
+            console.error('Pickup Request Creation Error:', pickupErrorMessage);
+            // You might want to show a warning to the user here
+          } else {
+            const pickupData = await pickupRes.json();
+            if (process.env.NODE_ENV === 'development') {
+              console.log('Pickup Request Created:', pickupData);
+            }
+          }
+        } catch (pickupErr) {
+          // Log the error but don't fail the entire flow - BOL was created successfully
+          console.error('Pickup Request Creation Error:', pickupErr);
+          // You might want to show a warning to the user here
+        }
       }
       
       // Call onNext to proceed to next step
@@ -1131,6 +1693,9 @@ export const XPOBillOfLading = ({
     );
     
     if (address) {
+      // Get phone number from address (will be used for both shipper and pickup contact)
+      const locationPhone = address.phone || '';
+      
       // Handle simplified format
       if (address.id && address.name && address.address) {
         const parsed = parseAddressString(address.address);
@@ -1140,7 +1705,7 @@ export const XPOBillOfLading = ({
         setShipperState(parsed.state);
         setShipperPostalCd(parsed.zip);
         setShipperCountry('US');
-        setShipperPhone(address.phone || '');
+        setShipperPhone(locationPhone);
         setShipperEmail('');
       } else {
         // Legacy format
@@ -1150,8 +1715,14 @@ export const XPOBillOfLading = ({
         setShipperState(address.state || '');
         setShipperPostalCd(address.zip || '');
         setShipperCountry(address.country || 'US');
-        setShipperPhone(address.phone || '');
+        setShipperPhone(locationPhone);
         setShipperEmail('');
+      }
+      
+      // Auto-populate pickup contact phone from pickup location phone
+      // User can still edit it if needed
+      if (locationPhone) {
+        setPickupContactPhone(locationPhone);
       }
     }
   };
@@ -1783,29 +2354,48 @@ export const XPOBillOfLading = ({
           </button>
           {showSections.pickupRequest && (
             <div className="p-4 sm:p-6 space-y-4">
-              <div className="space-y-2">
-                <label className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-slate-900">Pickup Request</h3>
+              
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 cursor-pointer">
                   <input
-                    type="checkbox"
-                    checked={schedulePickup}
-                    onChange={(e) => {
-                      const isEnabled = e.target.checked;
-                      setSchedulePickup(isEnabled);
+                    type="radio"
+                    name="pickupRequest"
+                    checked={schedulePickup === true}
+                    onChange={() => {
+                      setSchedulePickup(true);
                       // When enabling, always set to today's date and defaults
-                      if (isEnabled) {
-                        // Always set pickup date to today's date
-                        setPickupDate(getTodayDate());
-                        if (!pickupTime) {
-                          setPickupTime('11:00');
-                        }
-                        if (!dockCloseTime) {
-                          setDockCloseTime('16:30');
-                        }
-                      }
+                      const today = getTodayDate();
+                      setPickupDate(today);
+                      // Always set defaults (don't check if empty, just set them)
+            setPickupTime('11:00');
+            setDockCloseTime('12:00'); // 1 hour after pickup time
                     }}
-                    className="w-4 h-4 text-blue-600 rounded"
+                    className="w-4 h-4 text-blue-600 focus:ring-blue-500"
                   />
-                  <span className="text-sm font-semibold text-slate-900">Schedule Pickup</span>
+                  <span className="text-sm text-slate-700">Yes, schedule a pickup request</span>
+                </label>
+                
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="pickupRequest"
+                    checked={schedulePickup === false}
+                    onChange={() => {
+                      setSchedulePickup(false);
+                      // Clear pickup fields when "No" is selected
+                      setPickupDate('');
+                      setPickupTime('');
+                      setDockCloseTime('');
+                      setPickupContactCompanyName('XPO LOGISTICS FREIGHT, INC.');
+                      setPickupContactFullName('XPO Driver');
+                      setPickupContactPhone('562-9468331');
+                    }}
+                    className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-slate-700">
+                    No, we have a standing pickup, or will schedule one separately
+                  </span>
                 </label>
               </div>
 
@@ -1838,7 +2428,7 @@ export const XPOBillOfLading = ({
 
                     <div className="space-y-2">
                       <label className="block text-sm font-semibold text-slate-900">
-                        Pickup Time <span className="text-red-500">*</span>
+                        Pickup Ready Time <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="time"
@@ -1863,50 +2453,112 @@ export const XPOBillOfLading = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <label className="block text-sm font-semibold text-slate-900">
-                        Contact Company Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={pickupContactCompanyName}
-                        onChange={(e) => setPickupContactCompanyName(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required={schedulePickup}
-                      />
+                  <div className="space-y-4 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Toggle "Use My Contact Information" - for now, just show the fields
+                        // This can be enhanced later if needed
+                      }}
+                      className="text-blue-600 hover:text-blue-700 text-sm font-medium underline"
+                    >
+                      Use My Contact Information
+                    </button>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-slate-900">
+                          Company Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={pickupContactCompanyName}
+                          onChange={(e) => setPickupContactCompanyName(e.target.value)}
+                          className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required={schedulePickup}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-slate-900">
+                          Contact Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={pickupContactFullName}
+                          onChange={(e) => setPickupContactFullName(e.target.value)}
+                          className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required={schedulePickup}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-slate-900">
+                          Contact Phone Number <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="tel"
+                          value={pickupContactPhone}
+                          onChange={(e) => setPickupContactPhone(e.target.value)}
+                          className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required={schedulePickup}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="block text-sm font-semibold text-slate-900">
+                          Extension (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value=""
+                          onChange={() => {}}
+                          className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="block text-sm font-semibold text-slate-900">
-                        Contact Full Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={pickupContactFullName}
-                        onChange={(e) => setPickupContactFullName(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required={schedulePickup}
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="block text-sm font-semibold text-slate-900">
-                        Contact Phone <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="tel"
-                        value={pickupContactPhone}
-                        onChange={(e) => setPickupContactPhone(e.target.value)}
-                        className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required={schedulePickup}
-                      />
-                    </div>
+                    <p className="text-xs text-slate-600 mt-2">
+                      <span className="font-semibold">NOTE:</span> Please contact{' '}
+                      <a href="#" className="text-blue-600 underline">
+                        Your Local Service Center
+                      </a>{' '}
+                      for pickup requests submitted on or after 4:00PM to verify origin departure time.
+                    </p>
                   </div>
                 </div>
               )}
             </div>
           )}
+        </div>
+
+        {/* Payload Preview */}
+        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+          <div className="p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-slate-900">Request Payload Preview</h2>
+              <button
+                type="button"
+                onClick={() => setShowPayloadPreview(!showPayloadPreview)}
+                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+              >
+                {showPayloadPreview ? 'Hide' : 'Show'} Preview
+              </button>
+            </div>
+            {showPayloadPreview && (
+              <div className="mt-4">
+                {payloadPreview ? (
+                  <div className="bg-slate-50 rounded-lg p-4 border border-slate-200">
+                    <pre className="text-xs text-slate-700 overflow-auto max-h-96 whitespace-pre-wrap wrap-break-word">
+                      {JSON.stringify(payloadPreview, null, 2)}
+                    </pre>
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-500 italic">Fill in the form to see the payload preview</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Submit Buttons */}

@@ -2697,14 +2697,24 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                       </label>
                       <input
                         type="number"
-                        value={commodity.grossWeight?.weight || ''}
+                        value={commodity.grossWeight?.weight ?? ''}
                         onChange={(e) => {
                           const value = e.target.value;
-                          const numValue = value === '' ? 0 : parseFloat(value);
-                          updateCommodity(index, 'grossWeight', { 
-                            ...commodity.grossWeight, 
-                            weight: isNaN(numValue) ? 0 : numValue
-                          });
+                          if (value === '') {
+                            updateCommodity(index, 'grossWeight', { 
+                              ...commodity.grossWeight, 
+                              weight: 0
+                            });
+                            return;
+                          }
+                          // Use Number() to preserve exact values and avoid floating-point precision issues
+                          const numValue = Number(value);
+                          if (!isNaN(numValue) && numValue >= 0) {
+                            updateCommodity(index, 'grossWeight', { 
+                              ...commodity.grossWeight, 
+                              weight: numValue
+                            });
+                          }
                         }}
                         className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
@@ -2911,14 +2921,24 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
                         </label>
                         <input
                           type="number"
-                          value={commodities[0].grossWeight?.weight || ''}
+                          value={commodities[0].grossWeight?.weight ?? ''}
                           onChange={(e) => {
                             const value = e.target.value;
-                            const numValue = value === '' ? 0 : parseFloat(value);
-                            updateCommodity(0, 'grossWeight', { 
-                              ...commodities[0].grossWeight, 
-                              weight: isNaN(numValue) ? 0 : numValue
-                            });
+                            if (value === '') {
+                              updateCommodity(0, 'grossWeight', { 
+                                ...commodities[0].grossWeight, 
+                                weight: 0
+                              });
+                              return;
+                            }
+                            // Use Number() to preserve exact values and avoid floating-point precision issues
+                            const numValue = Number(value);
+                            if (!isNaN(numValue) && numValue >= 0) {
+                              updateCommodity(0, 'grossWeight', { 
+                                ...commodities[0].grossWeight, 
+                                weight: numValue
+                              });
+                            }
                           }}
                           className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                           required
