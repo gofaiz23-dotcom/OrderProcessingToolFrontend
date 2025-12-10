@@ -1843,6 +1843,20 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
     window.scrollTo({ top: 0, behavior: 'instant' });
   };
 
+  const handleBillOfLandingNextToPickup = () => {
+    handleStepComplete(2);
+    // Go to step 3 (Pickup Request) - user didn't schedule pickup with BOL
+    setCurrentStep(3);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
+  const handleBillOfLandingNextToSummary = () => {
+    handleStepComplete(2);
+    // Go directly to step 4 (Response Summary) - pickup was already scheduled with BOL
+    setCurrentStep(4);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
+
 
   const handlePickupRequestComplete = (pickupResponse?: any) => {
     handleStepComplete(3);
@@ -3423,6 +3437,8 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
       {currentStep === 2 && (
         <BOLForm
           onNext={handleBillOfLandingNext}
+          onNextToPickup={handleBillOfLandingNextToPickup}
+          onNextToSummary={handleBillOfLandingNextToSummary}
           onPrevious={handlePreviousStep}
           quoteData={selectedQuote}
           orderData={orderData}
@@ -3468,10 +3484,12 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
             rateQuotesResponseJsonb={response?.data || undefined}
             bolResponseJsonb={bolResponseData?.data || undefined}
             pickupResponseJsonb={pickupResponseData?.data || undefined}
+            pickupCreatedWithBOL={bolFormData?.schedulePickup === true || (bolResponseData?.data?.bol?.pickupInfo !== undefined && bolResponseData?.data?.bol?.pickupInfo !== null)}
             files={bolFiles}
             pdfUrl={bolPdfUrl}
             orderId={currentOrderId}
             onSubmitSuccess={handleSubmitSuccess}
+            onPrevious={handlePreviousStep}
             onFilesChange={(updatedFiles) => {
               setBolFiles(updatedFiles);
             }}

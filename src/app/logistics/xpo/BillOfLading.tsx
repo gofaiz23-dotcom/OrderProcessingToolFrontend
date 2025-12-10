@@ -61,6 +61,8 @@ type FormData = {
 
 type BillOfLandingProps = {
   onNext: () => void;
+  onNextToPickup?: () => void; // Navigate to Pickup Request page (step 3)
+  onNextToSummary?: () => void; // Navigate to Response Summary page (step 4)
   onPrevious: () => void;
   quoteData?: RateQuoteData;
   orderData?: {
@@ -94,6 +96,8 @@ type BillOfLandingProps = {
 
 export const XPOBillOfLading = ({
   onNext,
+  onNextToPickup,
+  onNextToSummary,
   onPrevious,
   quoteData,
   initialFormData,
@@ -1564,8 +1568,24 @@ export const XPOBillOfLading = ({
         }
       }
       
-      // Call onNext to proceed to next step
-      onNext();
+      // Navigate based on schedulePickup:
+      // - If schedulePickup is true: go to Response Summary (step 4) - pickup is already scheduled
+      // - If schedulePickup is false: go to Pickup Request page (step 3) - user needs to schedule pickup separately
+      if (schedulePickup) {
+        // Pickup is already scheduled with BOL, go directly to Response Summary
+        if (onNextToSummary) {
+          onNextToSummary();
+        } else {
+          onNext(); // Fallback to default navigation
+        }
+      } else {
+        // Pickup not scheduled, go to Pickup Request page
+        if (onNextToPickup) {
+          onNextToPickup();
+        } else {
+          onNext(); // Fallback to default navigation
+        }
+      }
     } catch (err) {
       console.error('BOL Creation Error:', err);
       
@@ -2233,12 +2253,35 @@ export const XPOBillOfLading = ({
                       </label>
                       <input
                         type="number"
-                        value={commodity.grossWeight?.weight || 0}
-                        onChange={(e) => updateCommodityNested(index, ['grossWeight', 'weight'], parseFloat(e.target.value) || 0)}
+                        value={commodity.grossWeight?.weight ?? ''}
+                        onChange={(e) => {
+                          const inputValue = e.target.value;
+                          // Allow empty string while typing, or parse as number
+                          if (inputValue === '' || inputValue === '-') {
+                            updateCommodityNested(index, ['grossWeight', 'weight'], '');
+                          } else {
+                            const numValue = parseFloat(inputValue);
+                            // Only update if it's a valid number
+                            if (!isNaN(numValue) && numValue >= 0) {
+                              updateCommodityNested(index, ['grossWeight', 'weight'], numValue);
+                            }
+                          }
+                        }}
+                        onBlur={(e) => {
+                          // Ensure we have a valid number on blur
+                          const numValue = parseFloat(e.target.value);
+                          if (isNaN(numValue) || numValue < 0) {
+                            updateCommodityNested(index, ['grossWeight', 'weight'], 0);
+                          } else {
+                            // Round to 2 decimal places to avoid floating point precision issues
+                            const rounded = Math.round(numValue * 100) / 100;
+                            updateCommodityNested(index, ['grossWeight', 'weight'], rounded);
+                          }
+                        }}
                         className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
                         min="0"
-                        step="0.01"
+                        step="1"
                       />
                     </div>
 
@@ -2631,10 +2674,10 @@ export const XPOBillOfLading = ({
             {loading ? (
               <>
                 <Loader2 className="h-5 w-5 animate-spin" />
-                Creating BOL...
+                {schedulePickup ? 'Creating BOL + Pickup...' : 'Creating BOL...'}
               </>
             ) : (
-              'Create Bill of Lading'
+              schedulePickup ? 'Create BOL + Pickup' : 'Create BOL'
             )}
           </button>
         </div>

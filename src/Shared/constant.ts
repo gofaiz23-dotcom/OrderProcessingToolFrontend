@@ -1090,7 +1090,7 @@ export const XPO_BOL_DEFAULTS = {
   defaultPremiumServices: [] as string[],
   
   // Pickup Request
-  schedulePickup: true,
+  schedulePickup: false, // Default to false - user must explicitly select "Yes" to schedule pickup
   pickupDate: (() => {
     // Get today's date in YYYY-MM-DD format
     const today = new Date();
@@ -1100,7 +1100,7 @@ export const XPO_BOL_DEFAULTS = {
     return `${year}-${month}-${day}`;
   })(), // Today's date
   pickupReadyTime: '11:00', // 11:00 AM
-  dockCloseTime: '16:30', // 4:30 PM
+  dockCloseTime: '16:00', // 4:00 PM
   contactCompanyName: 'Ammana',
   contactName: 'Warehouse person',
   contactPhone: '',

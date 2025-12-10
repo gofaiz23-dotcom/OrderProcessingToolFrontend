@@ -79,6 +79,13 @@ export const PickupRequestSection = ({
               if (onPickupDateChange && !pickupDate) {
                 onPickupDateChange(getTodayDate());
               }
+              // Set default times: 11:00 AM for ready time, 4:00 PM for dock close time
+              if (onPickupReadyTimeChange && !pickupReadyTime) {
+                onPickupReadyTimeChange('11:00');
+              }
+              if (onDockCloseTimeChange && !dockCloseTime) {
+                onDockCloseTimeChange('16:00');
+              }
             }}
             className="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />

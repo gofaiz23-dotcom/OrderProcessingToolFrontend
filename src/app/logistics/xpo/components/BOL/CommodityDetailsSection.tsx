@@ -61,12 +61,35 @@ export const CommodityDetailsSection = ({
           </label>
           <input
             type="number"
-            value={commodity.grossWeight?.weight || 0}
-            onChange={(e) => onUpdateNested(index, ['grossWeight', 'weight'], parseFloat(e.target.value) || 0)}
+            value={commodity.grossWeight?.weight ?? ''}
+            onChange={(e) => {
+              const inputValue = e.target.value;
+              // Allow empty string while typing, or parse as number
+              if (inputValue === '' || inputValue === '-') {
+                onUpdateNested(index, ['grossWeight', 'weight'], '');
+              } else {
+                const numValue = parseFloat(inputValue);
+                // Only update if it's a valid number
+                if (!isNaN(numValue) && numValue >= 0) {
+                  onUpdateNested(index, ['grossWeight', 'weight'], numValue);
+                }
+              }
+            }}
+            onBlur={(e) => {
+              // Ensure we have a valid number on blur
+              const numValue = parseFloat(e.target.value);
+              if (isNaN(numValue) || numValue < 0) {
+                onUpdateNested(index, ['grossWeight', 'weight'], 0);
+              } else {
+                // Round to 2 decimal places to avoid floating point precision issues
+                const rounded = Math.round(numValue * 100) / 100;
+                onUpdateNested(index, ['grossWeight', 'weight'], rounded);
+              }
+            }}
             className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
             min="0"
-            step="0.01"
+            step="1"
           />
         </div>
 

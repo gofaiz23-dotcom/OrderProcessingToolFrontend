@@ -43,6 +43,8 @@ type LocationData = {
 
 type BOLFormProps = {
   onNext?: () => void;
+  onNextToPickup?: () => void; // Navigate to Pickup Request page (step 3)
+  onNextToSummary?: () => void; // Navigate to Response Summary page (step 4)
   onPrevious?: () => void;
   quoteData?: Record<string, unknown>;
   orderData?: {
@@ -77,6 +79,8 @@ type BOLFormProps = {
 
 export const BOLForm = ({
   onNext,
+  onNextToPickup,
+  onNextToSummary,
   onPrevious,
   quoteData,
   initialFormData,
@@ -1220,9 +1224,11 @@ export const BOLForm = ({
             <button
               type="button"
               onClick={onPrevious}
-              className="text-slate-600 hover:text-slate-700"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-50 rounded-lg transition-all duration-200 flex-shrink-0 border border-transparent hover:border-slate-200"
+              title="Go to previous step"
             >
-              <ArrowLeft size={24} />
+              <ArrowLeft size={18} />
+              <span className="text-xs font-medium hidden sm:inline">Back</span>
             </button>
           )}
           <h1 className="text-2xl font-bold text-slate-900">Create Bill Of Lading</h1>
@@ -1629,6 +1635,16 @@ export const BOLForm = ({
 
               {/* Action Buttons */}
               <div className="flex items-center justify-between gap-4 pt-6 border-t border-slate-200">
+                {onPrevious && (
+                  <button
+                    type="button"
+                    onClick={onPrevious}
+                    className="px-3 sm:px-4 py-2 border border-slate-300 bg-white text-slate-700 rounded-lg hover:bg-slate-50 hover:border-slate-400 transition-all duration-200 text-sm font-medium flex items-center gap-1.5 shadow-sm hover:shadow"
+                  >
+                    <ArrowLeft size={16} />
+                    <span>Previous</span>
+                  </button>
+                )}
                 <div className="flex items-center gap-4 ml-auto">
                   <button
                     type="submit"
@@ -1642,10 +1658,10 @@ export const BOLForm = ({
                     {loading ? (
                       <>
                         <Loader2 className="h-5 w-5 animate-spin" />
-                        Creating BOL...
+                        {schedulePickup ? 'Creating BOL + Pickup...' : 'Creating BOL...'}
                       </>
                     ) : (
-                      'Create BOL'
+                      schedulePickup ? 'Create BOL + Pickup' : 'Create BOL'
                     )}
                   </button>
                   <button
@@ -1751,8 +1767,43 @@ export const BOLForm = ({
                 <button
                   type="button"
                   onClick={() => {
-                    if (onNext) {
-                      onNext();
+                    // Navigate based on schedulePickup:
+                    // - If schedulePickup is true: go to Response Summary (step 4) - pickup is already scheduled
+                    // - If schedulePickup is false: go to Pickup Request page (step 3) - user needs to schedule pickup separately
+                    // CRITICAL: Check schedulePickup state - must be explicitly true to go to Summary
+                    // If false or undefined, go to Pickup Request page
+                    const shouldGoToSummary = schedulePickup === true;
+                    
+                    if (process.env.NODE_ENV === 'development') {
+                      console.log('BOLForm - Next button clicked:', {
+                        schedulePickup,
+                        schedulePickupType: typeof schedulePickup,
+                        shouldGoToSummary,
+                        hasOnNextToSummary: !!onNextToSummary,
+                        hasOnNextToPickup: !!onNextToPickup,
+                      });
+                    }
+                    
+                    if (shouldGoToSummary) {
+                      // Pickup is already scheduled with BOL, go directly to Response Summary (step 4)
+                      if (process.env.NODE_ENV === 'development') {
+                        console.log('BOLForm - Navigating to Response Summary (step 4)');
+                      }
+                      if (onNextToSummary) {
+                        onNextToSummary();
+                      } else if (onNext) {
+                        onNext(); // Fallback to default navigation
+                      }
+                    } else {
+                      // Pickup not scheduled (false, undefined, or any other value), go to Pickup Request page (step 3)
+                      if (process.env.NODE_ENV === 'development') {
+                        console.log('BOLForm - Navigating to Pickup Request (step 3)');
+                      }
+                      if (onNextToPickup) {
+                        onNextToPickup();
+                      } else if (onNext) {
+                        onNext(); // Fallback to default navigation
+                      }
                     }
                   }}
                   className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold flex items-center gap-2"
