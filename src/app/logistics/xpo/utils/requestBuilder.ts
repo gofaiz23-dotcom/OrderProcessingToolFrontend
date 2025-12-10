@@ -424,8 +424,49 @@ const normalizeAddress = (address: Record<string, unknown> | null | undefined): 
   };
 };
 
+// Helper function to normalize phone number to XPO format: NNN-NNNNNNN (3 digits, hyphen, 7 digits)
+// Handles formats like "+1 (646) 504-0655" -> "646-5040655"
+const normalizePhoneNumber = (phone: string | null | undefined): string => {
+  if (!phone || typeof phone !== 'string') {
+    return '';
+  }
+  
+  let normalized = phone.trim();
+  
+  // Remove spaces, parentheses, and other non-digit characters except hyphens
+  normalized = normalized.replace(/[\s\(\)]/g, '');
+  
+  // Handle +1 prefix (e.g., "+1 (646) 504-0655" -> "6465040655")
+  if (normalized.startsWith('+1')) {
+    normalized = normalized.replace(/^\+1[\s\-]*/, '');
+  } else if (normalized.startsWith('1-') && normalized.replace(/[^\d]/g, '').length >= 11) {
+    normalized = normalized.replace(/^1-/, '');
+  } else if (normalized.match(/^1\d{10}$/)) {
+    // Handle format like "16465040655" (11 digits starting with 1)
+    normalized = normalized.substring(1);
+  }
+  
+  // Remove all non-digit characters to get just digits
+  const digitsOnly = normalized.replace(/[^\d]/g, '');
+  
+  // Format as NNN-NNNNNNN if we have 10 digits
+  if (digitsOnly.length === 10) {
+    return `${digitsOnly.substring(0, 3)}-${digitsOnly.substring(3)}`;
+  } else if (digitsOnly.length > 0) {
+    // If not exactly 10 digits, try to format anyway if we have at least 10 digits
+    if (digitsOnly.length >= 10) {
+      return `${digitsOnly.substring(0, 3)}-${digitsOnly.substring(3, 10)}`;
+    }
+    // Return as-is if we have some digits but less than 10
+    return digitsOnly;
+  }
+  
+  // Return empty string if no digits found
+  return '';
+};
+
 // Helper function to normalize contact info and clean empty strings
-// Phone numbers preserve hyphens (e.g., "123-4567890") to match backend validation
+// Phone numbers are normalized to XPO format: NNN-NNNNNNN
 // Email objects are always included (emailAddr set to null if empty)
 const normalizeContactInfo = (contactInfo: Record<string, unknown> | null | undefined): Record<string, unknown> | null | undefined => {
   if (!contactInfo) return contactInfo;
@@ -444,12 +485,12 @@ const normalizeContactInfo = (contactInfo: Record<string, unknown> | null | unde
     }
   }
   
-  // Phone numbers: preserve hyphens and format (backend normalizes by removing spaces/parentheses but keeps hyphens)
-  // If phoneNbr is empty, keep it as empty string (backend will handle it)
+  // Normalize phone numbers to XPO format: NNN-NNNNNNN
+  // Phone numbers should already be normalized from BillOfLading.tsx, but normalize again to be safe
   const phoneObj = cleaned.phone as { phoneNbr?: string } | undefined;
   if (phoneObj && phoneObj.phoneNbr) {
-    // Only trim, don't remove hyphens - backend will normalize by removing spaces/parentheses only
-    cleaned.phone = { ...phoneObj, phoneNbr: phoneObj.phoneNbr.trim() };
+    const normalizedPhone = normalizePhoneNumber(phoneObj.phoneNbr);
+    cleaned.phone = { ...phoneObj, phoneNbr: normalizedPhone || phoneObj.phoneNbr.trim() };
   }
   
   return cleaned;
@@ -515,21 +556,108 @@ export const buildXPOBillOfLadingRequestBody = (params: BuildXPOBillOfLadingPara
         : [],
       // Include suppRef if provided
       ...(params.bol.suppRef && { suppRef: params.bol.suppRef }),
-      // Include pickupInfo if provided
-      ...(params.bol.pickupInfo && {
+      // Include pickupInfo if provided (backend will validate and clean it)
+      // CRITICAL: Dates MUST be formatted with -08:00 timezone (PST) - never use local timezone
+      // Phone numbers should already be normalized to NNN-NNNNNNN format
+      ...(params.bol.pickupInfo && 
+          params.bol.pickupInfo.pkupDate && 
+          params.bol.pickupInfo.pkupTime && 
+          params.bol.pickupInfo.dockCloseTime && {
         pickupInfo: {
-          pkupDate: params.bol.pickupInfo.pkupDate,
-          pkupTime: params.bol.pickupInfo.pkupTime,
-          dockCloseTime: params.bol.pickupInfo.dockCloseTime,
+          // CRITICAL: Force all dates to use -08:00 (PST timezone) - replace any existing timezone
+          // This is a safety net to ensure dates are NEVER formatted with local timezone
+          pkupDate: (() => {
+            const date = String(params.bol.pickupInfo.pkupDate);
+            // If already correct, return as-is
+            if (date.endsWith('-08:00')) {
+              return date;
+            }
+            // Extract date and time parts (before timezone)
+            if (date.includes('T')) {
+              const [datePart, rest] = date.split('T');
+              // Remove timezone (handle both +05:30 and -08:00 formats)
+              // Match pattern: HH:MM:SS followed by + or - and timezone
+              const timeMatch = rest.match(/^(\d{2}):(\d{2}):(\d{2})/);
+              if (timeMatch) {
+                const [, hours, minutes, seconds] = timeMatch;
+                // Always return with -08:00 timezone
+                const fixed = `${datePart}T${hours}:${minutes}:${seconds}-08:00`;
+                console.warn('Fixed pkupDate timezone from', date, 'to', fixed);
+                return fixed;
+              }
+            }
+            return date;
+          })(),
+          pkupTime: (() => {
+            const date = String(params.bol.pickupInfo.pkupTime);
+            // If already correct, return as-is
+            if (date.endsWith('-08:00')) {
+              return date;
+            }
+            // Extract date and time parts (before timezone)
+            if (date.includes('T')) {
+              const [datePart, rest] = date.split('T');
+              // Remove timezone (handle both +05:30 and -08:00 formats)
+              // Match pattern: HH:MM:SS followed by + or - and timezone
+              const timeMatch = rest.match(/^(\d{2}):(\d{2}):(\d{2})/);
+              if (timeMatch) {
+                const [, hours, minutes, seconds] = timeMatch;
+                // Always return with -08:00 timezone
+                const fixed = `${datePart}T${hours}:${minutes}:${seconds}-08:00`;
+                console.warn('Fixed pkupTime timezone from', date, 'to', fixed);
+                return fixed;
+              }
+            }
+            return date;
+          })(),
+          dockCloseTime: (() => {
+            const date = String(params.bol.pickupInfo.dockCloseTime);
+            // If already correct, return as-is
+            if (date.endsWith('-08:00')) {
+              return date;
+            }
+            // Extract date and time parts (before timezone)
+            if (date.includes('T')) {
+              const [datePart, rest] = date.split('T');
+              // Remove timezone (handle both +05:30 and -08:00 formats)
+              // Match pattern: HH:MM:SS followed by + or - and timezone
+              const timeMatch = rest.match(/^(\d{2}):(\d{2}):(\d{2})/);
+              if (timeMatch) {
+                const [, hours, minutes, seconds] = timeMatch;
+                // Always return with -08:00 timezone
+                const fixed = `${datePart}T${hours}:${minutes}:${seconds}-08:00`;
+                console.warn('Fixed dockCloseTime timezone from', date, 'to', fixed);
+                return fixed;
+              }
+            }
+            return date;
+          })(),
           contact: {
-            companyName: params.bol.pickupInfo.contact.companyName,
-            fullName: params.bol.pickupInfo.contact.fullName,
+            companyName: params.bol.pickupInfo.contact?.companyName || 'XPO LOGISTICS FREIGHT, INC.',
+            fullName: params.bol.pickupInfo.contact?.fullName || 'XPO Driver',
             phone: {
-              phoneNbr: params.bol.pickupInfo.contact.phone.phoneNbr,
+              // Normalize phone number to ensure it's in NNN-NNNNNNN format
+              phoneNbr: normalizePhoneNumber(params.bol.pickupInfo.contact?.phone?.phoneNbr) || '562-9468331',
             },
           },
         },
       }),
+      // Always include declaredValueAmt (default to 0.01 if not provided)
+      declaredValueAmt: {
+        amt: params.bol.declaredValueAmt?.amt !== undefined && params.bol.declaredValueAmt?.amt !== null
+          ? params.bol.declaredValueAmt.amt
+          : 0.01,
+      },
+      // Always include declaredValueAmtPerLb (default to 0.01 if not provided)
+      declaredValueAmtPerLb: {
+        amt: params.bol.declaredValueAmtPerLb?.amt !== undefined && params.bol.declaredValueAmtPerLb?.amt !== null
+          ? params.bol.declaredValueAmtPerLb.amt
+          : 0.01,
+      },
+      // Always include excessLiabilityChargeInit (empty string if not provided)
+      excessLiabilityChargeInit: params.bol.excessLiabilityChargeInit !== undefined && params.bol.excessLiabilityChargeInit !== null
+        ? params.bol.excessLiabilityChargeInit
+        : '',
     },
     autoAssignPro: params.autoAssignPro !== undefined ? params.autoAssignPro : true,
   };

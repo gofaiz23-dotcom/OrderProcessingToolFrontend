@@ -90,7 +90,13 @@ export const PickupRequestSection = ({
             type="radio"
             name="pickupRequest"
             checked={schedulePickup === false}
-            onChange={() => onSchedulePickupChange(false)}
+            onChange={() => {
+              onSchedulePickupChange(false);
+              // Clear pickup fields when "No" is selected
+              if (onPickupDateChange) onPickupDateChange('');
+              if (onPickupReadyTimeChange) onPickupReadyTimeChange('');
+              if (onDockCloseTimeChange) onDockCloseTimeChange('');
+            }}
             className="w-4 h-4 text-blue-600 focus:ring-blue-500"
           />
           <span className="text-sm text-slate-700">
@@ -221,7 +227,7 @@ export const PickupRequestSection = ({
                         type="tel"
                         value={contactPhone}
                         onChange={(e) => onContactPhoneChange(e.target.value)}
-                        placeholder="+1 (123) 456-7890"
+                        placeholder=""
                         className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         required
                       />

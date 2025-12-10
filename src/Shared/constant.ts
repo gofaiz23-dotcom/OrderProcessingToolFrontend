@@ -1103,7 +1103,7 @@ export const XPO_BOL_DEFAULTS = {
   dockCloseTime: '16:30', // 4:30 PM
   contactCompanyName: 'Ammana',
   contactName: 'Warehouse person',
-  contactPhone: '+1 (123) 456-7890',
+  contactPhone: '',
   contactExtension: '',
   useMyContactInfo: false,
   
