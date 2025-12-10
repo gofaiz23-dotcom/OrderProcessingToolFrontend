@@ -5,7 +5,7 @@ import { Search, X, ChevronDown } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 import { XPO_BOL_COUNTRY_OPTIONS } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
 import { US_STATES } from './constants';
-import { formatPhoneInput, handlePhoneInputChange, handlePhoneInputFocus, handlePhoneInputBlur } from '../../utils/phoneFormatter';
+import { handlePhoneInputChange, handlePhoneInputFocus, handlePhoneInputBlur } from '../../utils/phoneFormatter';
 import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 
 type LocationData = {
@@ -185,9 +185,9 @@ export const LocationSection = ({
   // Convert addressBookOptions to SearchableDropdown format
   const searchableOptions: SearchableDropdownOption[] = addressBookOptions
     ? addressBookOptions.map(opt => ({
+        ...opt, // Spread other properties for filtering
         value: opt.value,
         label: opt.label,
-        ...opt, // Spread other properties for filtering
       }))
     : [];
 

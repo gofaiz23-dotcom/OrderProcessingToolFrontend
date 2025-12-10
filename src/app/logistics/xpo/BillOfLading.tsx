@@ -6,7 +6,7 @@ import { formatISO } from 'date-fns';
 import { buildApiUrl } from '../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
 import { buildXPOBillOfLadingRequestBody } from './utils/requestBuilder';
-import type { XPOBillOfLadingFields, XPOBillOfLadingCommodity } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
+import type { XPOBillOfLadingFields, XPOBillOfLadingCommodity, XPOBillOfLadingAddress, XPOBillOfLadingPickupInfo } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
 import { 
   XPO_BOL_COMMODITY_DEFAULTS,
   XPO_BOL_REQUESTER_ROLE_OPTIONS,
@@ -18,19 +18,61 @@ import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { XPO_SHIPPER_ADDRESS_BOOK } from '@/Shared/constant';
 import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 
+type RateQuoteData = {
+  data?: {
+    data?: {
+      rateQuote?: {
+        shipmentInfo?: {
+          shipper?: XPOBillOfLadingAddress;
+          commodity?: XPOBillOfLadingCommodity[];
+        };
+      };
+    };
+  };
+  quote?: {
+    shipmentInfo?: {
+      shipper?: XPOBillOfLadingAddress;
+      commodity?: XPOBillOfLadingCommodity[];
+    };
+  };
+  shipmentInfo?: {
+    shipper?: XPOBillOfLadingAddress;
+    commodity?: XPOBillOfLadingCommodity[];
+  };
+};
+
+type FormData = {
+  requesterRole?: string;
+  consignee?: XPOBillOfLadingAddress;
+  shipper?: XPOBillOfLadingAddress;
+  billToCust?: XPOBillOfLadingAddress;
+  commodityLine?: XPOBillOfLadingCommodity[];
+  chargeToCd?: string;
+  remarks?: string;
+  autoAssignPro?: boolean;
+  schedulePickup?: boolean;
+  pickupDate?: string;
+  pickupTime?: string;
+  dockCloseTime?: string;
+  pickupContactCompanyName?: string;
+  pickupContactFullName?: string;
+  pickupContactPhone?: string;
+  pickupInfo?: XPOBillOfLadingPickupInfo;
+};
+
 type BillOfLandingProps = {
   onNext: () => void;
   onPrevious: () => void;
-  quoteData?: any;
+  quoteData?: RateQuoteData;
   orderData?: {
     sku?: string;
     orderOnMarketPlace?: string;
     ordersJsonb?: Record<string, unknown>;
   } | null;
-  initialFormData?: any;
-  initialResponseData?: any;
-  onFormDataChange?: (data: any) => void;
-  onResponseDataChange?: (data: any) => void;
+  initialFormData?: FormData;
+  initialResponseData?: Record<string, unknown>;
+  onFormDataChange?: (data: FormData) => void;
+  onResponseDataChange?: (data: Record<string, unknown>) => void;
   consigneeData?: {
     address: {
       addressLine1: string;
@@ -55,7 +97,6 @@ export const XPOBillOfLading = ({
   onNext,
   onPrevious,
   quoteData,
-  orderData,
   initialFormData,
   initialResponseData,
   onFormDataChange,
@@ -131,7 +172,6 @@ export const XPOBillOfLading = ({
   const [remarks, setRemarks] = useState<string>('');
   const [emergencyContactName, setEmergencyContactName] = useState<string>('');
   const [emergencyContactPhone, setEmergencyContactPhone] = useState<string>('');
-  const [additionalService, setAdditionalService] = useState<string[]>([]);
   const [autoAssignPro, setAutoAssignPro] = useState<boolean>(true);
 
   // Helper function to get today's date in YYYY-MM-DD format
@@ -153,7 +193,7 @@ export const XPOBillOfLading = ({
   const [pickupContactPhone, setPickupContactPhone] = useState<string>('562-9468331');
 
   // Ref to track previous form data to prevent infinite loops
-  const prevFormDataRef = useRef<any>(null);
+  const prevFormDataRef = useRef<FormData | null>(null);
   const isInitialMountRef = useRef(true);
   const isLoadingFromInitialDataRef = useRef(false);
 
@@ -266,15 +306,9 @@ export const XPOBillOfLading = ({
         setSchedulePickup(initialFormData.schedulePickup);
         // If schedulePickup is enabled but no pickupInfo, ensure defaults are set
         if (initialFormData.schedulePickup) {
-          if (!pickupDate) {
-            setPickupDate(getTodayDate());
-          }
-          if (!pickupTime) {
-            setPickupTime('11:00');
-          }
-          if (!dockCloseTime) {
-            setDockCloseTime('16:30');
-          }
+          setPickupDate(getTodayDate());
+          setPickupTime('11:00');
+          setDockCloseTime('16:30');
         }
       }
       
@@ -392,19 +426,19 @@ export const XPOBillOfLading = ({
     if (quoteData && !initialFormData) {
       isLoadingFromInitialDataRef.current = true;
       // Extract data from various possible quoteData structures
-      let rateQuote: any = null;
+      let rateQuote: RateQuoteData | null = null;
       
       // Check if quoteData has data.data.rateQuote (full response structure)
       // Structure: { data: { data: { rateQuote: { shipmentInfo: {...} } } } }
-      if ((quoteData as any)?.data?.data?.rateQuote) {
-        rateQuote = (quoteData as any).data.data.rateQuote;
+      if (quoteData?.data?.data?.rateQuote) {
+        rateQuote = quoteData.data.data.rateQuote;
       }
       // Check if quoteData has a quote object with shipmentInfo
-      else if ((quoteData as any)?.quote?.shipmentInfo) {
-        rateQuote = (quoteData as any).quote;
+      else if (quoteData?.quote?.shipmentInfo) {
+        rateQuote = quoteData.quote;
       }
       // Check if quoteData is the rateQuote object directly
-      else if ((quoteData as any)?.shipmentInfo) {
+      else if (quoteData?.shipmentInfo) {
         rateQuote = quoteData;
       }
 
@@ -418,21 +452,21 @@ export const XPOBillOfLading = ({
           if (shipper.acctInstId) {
             setShipperAcctInstId(shipper.acctInstId);
           }
-          if (shipper.acctMadCd) {
+          // Check for acctMadCd in the shipper object (may exist in response but not in type)
+          if ('acctMadCd' in shipper && typeof shipper.acctMadCd === 'string') {
             setShipperAcctMadCd(shipper.acctMadCd);
           }
           if (shipper.address) {
-            if (shipper.address.name) {
+            // Check for name property (may exist in response but not in type)
+            if ('name' in shipper.address && typeof shipper.address.name === 'string') {
               setShipperCompanyName(shipper.address.name);
             }
             if (shipper.address.addressLine1) {
               setShipperAddressLine1(shipper.address.addressLine1);
             }
             // addressLine2 is optional and may be empty in response
-            if (shipper.address.addressLine2 !== undefined) {
-              // Note: addressLine2 field exists in the response but may be empty string
-              // The UI doesn't have a separate addressLine2 field, it's combined with addressLine1
-            }
+            // Note: addressLine2 field exists in the response but may be empty string
+            // The UI doesn't have a separate addressLine2 field, it's combined with addressLine1
             if (shipper.address.cityName) {
               setShipperCity(shipper.address.cityName);
             }
@@ -480,7 +514,6 @@ export const XPOBillOfLading = ({
                 ...(firstCommodity.grossWeight?.weight !== undefined && {
                   grossWeight: {
                     weight: firstCommodity.grossWeight.weight,
-                    weightUom: firstCommodity.grossWeight.weightUom || 'LBS',
                   }
                 }),
                 ...(firstCommodity.nmfcClass && {
@@ -600,19 +633,25 @@ export const XPOBillOfLading = ({
     }
   }, [billToPostalCd]);
 
-  const updateCommodity = (index: number, field: keyof XPOBillOfLadingCommodity, value: any) => {
+  const updateCommodity = (index: number, field: keyof XPOBillOfLadingCommodity, value: unknown) => {
     const updated = [...commodities];
     updated[index] = { ...updated[index], [field]: value };
     setCommodities(updated);
   };
 
-  const updateCommodityNested = (index: number, path: string[], value: any) => {
+  const updateCommodityNested = (index: number, path: string[], value: unknown) => {
     const updated = [...commodities];
     const commodity = { ...updated[index] };
-    let current: any = commodity;
+    let current: Record<string, unknown> = commodity as Record<string, unknown>;
     for (let i = 0; i < path.length - 1; i++) {
-      current[path[i]] = { ...current[path[i]] };
-      current = current[path[i]];
+      const nextValue = current[path[i]];
+      if (nextValue && typeof nextValue === 'object' && !Array.isArray(nextValue)) {
+        current[path[i]] = { ...nextValue as Record<string, unknown> };
+        current = current[path[i]] as Record<string, unknown>;
+      } else {
+        current[path[i]] = {};
+        current = current[path[i]] as Record<string, unknown>;
+      }
     }
     current[path[path.length - 1]] = value;
     updated[index] = commodity;
@@ -711,7 +750,6 @@ export const XPOBillOfLading = ({
         ...(remarks && { remarks }),
         ...(emergencyContactName && { emergencyContactName }),
         ...(emergencyContactPhone && { emergencyContactPhone: { phoneNbr: emergencyContactPhone } }),
-        ...(additionalService.length > 0 && { additionalService }),
         // Include pickupInfo only if schedulePickup is true and all date/time values are valid
         ...(schedulePickup && 
             pickupDate && 
@@ -877,7 +915,7 @@ export const XPOBillOfLading = ({
 
       if (!res.ok) {
         let errorMessage = `BOL creation failed: ${res.status} ${res.statusText}`;
-        let errorDetails: any = null;
+        let errorDetails: Record<string, unknown> | null = null;
         
         try {
           // Read response as text first (can only read once)
@@ -902,7 +940,11 @@ export const XPOBillOfLading = ({
                   errorData.type ||
                   (typeof errorData.error === 'string' ? errorData.error : null) ||
                   (errorData.errors && Array.isArray(errorData.errors) 
-                    ? errorData.errors.map((e: any) => e.message || e.msg || e.field || e).join(', ')
+                    ? errorData.errors.map((e: Record<string, unknown>) => 
+                        (typeof e === 'object' && e !== null 
+                          ? (e.message || e.msg || e.field || String(e))
+                          : String(e))
+                      ).join(', ')
                     : null) ||
                   errorData.originalError ||
                   null;
@@ -915,7 +957,7 @@ export const XPOBillOfLading = ({
                 } else {
                   errorMessage = `BOL creation failed: ${res.status} ${res.statusText}`;
                 }
-              } catch (parseError) {
+              } catch {
                 // If JSON parsing fails, use the text as error message
                 errorMessage = errorText.substring(0, 500) || `BOL creation failed: ${res.status} ${res.statusText}`;
               }
@@ -939,9 +981,9 @@ export const XPOBillOfLading = ({
         const safeErrorMessage = String(errorMessage).trim() || `BOL creation failed: ${res.status} ${res.statusText}`;
         
         // Create a more informative error
-        const apiError = new Error(safeErrorMessage);
-        (apiError as any).status = res.status;
-        (apiError as any).details = errorDetails;
+        const apiError = new Error(safeErrorMessage) as Error & { status?: number; details?: Record<string, unknown> | null };
+        apiError.status = res.status;
+        apiError.details = errorDetails;
         throw apiError;
       }
 
@@ -964,7 +1006,8 @@ export const XPOBillOfLading = ({
         } else if (typeof err === 'string') {
           errorMessage = err;
         } else if (err && typeof err === 'object') {
-          errorMessage = (err as any).message || (err as any).error || String(err);
+          const errObj = err as Record<string, unknown>;
+          errorMessage = (errObj.message || errObj.error || String(err)) as string;
         } else if (err !== null && err !== undefined) {
           errorMessage = String(err);
         }
@@ -981,15 +1024,16 @@ export const XPOBillOfLading = ({
       
       // Create a user-friendly error with guaranteed valid message
       const safeErrorMessage = String(errorMessage).trim() || 'An unexpected error occurred while creating the Bill of Lading.';
-      const userError = new Error(safeErrorMessage);
+      const userError = new Error(safeErrorMessage) as Error & { status?: number; details?: Record<string, unknown> | null };
       
       // Preserve error metadata if available
       if (err && typeof err === 'object') {
-        if ('status' in err) {
-          (userError as any).status = (err as any).status;
+        const errObj = err as Record<string, unknown>;
+        if ('status' in errObj) {
+          userError.status = errObj.status as number;
         }
-        if ('details' in err) {
-          (userError as any).details = (err as any).details;
+        if ('details' in errObj) {
+          userError.details = errObj.details as Record<string, unknown> | null;
         }
       }
       
@@ -1010,14 +1054,14 @@ export const XPOBillOfLading = ({
     }
 
     // Remove "US" if present before zip
-    let cleaned = addressStr.trim().replace(/\s+US\s+(\d{5})$/, ' $1');
+    const cleaned = addressStr.trim().replace(/\s+US\s+(\d{5})$/, ' $1');
     
     // Extract zip (5 digits at the end)
     const zipMatch = cleaned.match(/(\d{5})$/);
     const zip = zipMatch ? zipMatch[1] : '';
     
     // Remove zip from string
-    let withoutZip = cleaned.replace(/\s+\d{5}$/, '').trim();
+    const withoutZip = cleaned.replace(/\s+\d{5}$/, '').trim();
     
     // Extract state (2 uppercase letters before zip/at end)
     const stateMatch = withoutZip.match(/\s+([A-Z]{2})\s*$/);
