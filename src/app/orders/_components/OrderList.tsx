@@ -410,11 +410,10 @@ export const OrderList = ({
             <div className="relative w-full sm:w-auto" ref={logisticsDropdownRef}>
               <button
                 onClick={() => setShowLogisticsDropdown(!showLogisticsDropdown)}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto text-orange-600 rounded-md border border-orange-200 bg-orange-50 hover:bg-orange-100 transition-colors text-sm font-medium"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-slate-700 rounded-md border border-slate-300 hover:bg-slate-50 transition-colors text-sm font-medium shadow-sm"
               >
                 <Truck className="h-4 w-4" />
-                <span className="hidden sm:inline">Logistics</span>
-                <span className="sm:hidden">Logistics</span>
+                <span>Logistics</span>
                 <ChevronDown className={`h-4 w-4 transition-transform ${showLogisticsDropdown ? 'rotate-180' : ''}`} />
               </button>
 
@@ -471,13 +470,11 @@ export const OrderList = ({
             </div>
           )}
 
-            
-
           {/* Add New Button with Dropdown */}
           <div className="relative w-full sm:w-auto" ref={dropdownRef}>
             <button
               onClick={() => setShowDropdown(!showDropdown)}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto text-blue-600 rounded-md border border-blue-200 bg-blue-50 hover:bg-blue-100 transition-colors text-sm font-medium"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-slate-700 rounded-md border border-slate-300 hover:bg-slate-50 transition-colors text-sm font-medium shadow-sm"
             >
               <Plus className="h-4 w-4" />
               <span>Add New</span>
@@ -492,14 +489,14 @@ export const OrderList = ({
                     onCreateNew();
                     setShowDropdown(false);
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700   hover:bg-slate-50 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
                 >
                   <Plus className="h-4 w-4 text-slate-500" />
                   Add New
                 </button>
                 <button
                   onClick={handleImportClick}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700  hover:bg-slate-50 transition-colors text-left"
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
                 >
                   <FileUp className="h-4 w-4 text-slate-500" />
                   Import File
@@ -521,10 +518,10 @@ export const OrderList = ({
           {selectedOrderIds.size > 0 && (
             <button
               onClick={handleBulkDeleteClick}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto text-red-600 rounded-md border border-red-200 bg-red-50 hover:bg-red-100 transition-colors text-sm font-medium"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-red-600 rounded-md border border-red-300 hover:bg-red-50 transition-colors text-sm font-medium shadow-sm"
             >
               <Trash2 className="h-4 w-4" />
-              <span>Delete ({selectedOrderIds.size})</span>
+              <span> ({selectedOrderIds.size})</span>
             </button>
           )}
 
@@ -532,10 +529,9 @@ export const OrderList = ({
           <button
             onClick={() => exportOrdersToCSV(displayOrders)}
             disabled={displayOrders.length === 0}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-slate-700 rounded-md border border-slate-300 hover:bg-slate-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-slate-700 rounded-md border border-slate-300 hover:bg-slate-50 transition-colors text-sm font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download className="h-4 w-4" />
-            <span>Export</span>
           </button>
         </div>
       </div>
