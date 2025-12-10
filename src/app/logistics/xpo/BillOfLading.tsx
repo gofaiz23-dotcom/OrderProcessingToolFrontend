@@ -8,7 +8,6 @@ import { useLogisticsStore } from '@/store/logisticsStore';
 import { buildXPOBillOfLadingRequestBody } from './utils/requestBuilder';
 import type { XPOBillOfLadingFields, XPOBillOfLadingCommodity } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
 import { 
-  XPO_BOL_FIELD_DEFAULTS, 
   XPO_BOL_COMMODITY_DEFAULTS,
   XPO_BOL_REQUESTER_ROLE_OPTIONS,
   XPO_BOL_CHARGE_TO_OPTIONS,
