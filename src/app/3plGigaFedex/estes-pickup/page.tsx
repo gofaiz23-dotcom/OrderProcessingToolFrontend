@@ -82,8 +82,8 @@ export default function EstesPickupRequestPage() {
   ]);
 
   // Options
-  const [showBrowser, setShowBrowser] = useState(true);
-  const [browserType, setBrowserType] = useState<'chrome' | 'chromium' | 'edge' | 'firefox'>('edge');
+  const [showBrowser, setShowBrowser] = useState(false);
+  const [browserType, setBrowserType] = useState<'chrome' | 'chromium' | 'edge' | 'firefox'>('chrome');
   const [submitForm, setSubmitForm] = useState(true);
 
   const addShipment = () => {
@@ -452,17 +452,7 @@ export default function EstesPickupRequestPage() {
             {/* Shipments (only if Live Load) */}
             {pickupType === 'LL' && (
               <div className="bg-white rounded-xl border-2 border-slate-200 p-6 shadow-lg">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-xl font-bold text-slate-800">Shipment Information</h2>
-                  <button
-                    type="button"
-                    onClick={addShipment}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                  >
-                    <Plus size={18} />
-                    Add Shipment
-                  </button>
-                </div>
+                <h2 className="text-xl font-bold text-slate-800 mb-4">Shipment Information</h2>
                 <div className="space-y-4">
                   {shipments.map((shipment, index) => (
                     <div key={shipment.id} className="border-2 border-slate-200 rounded-lg p-4">
@@ -484,7 +474,7 @@ export default function EstesPickupRequestPage() {
                           <select
                             value={shipment.type}
                             onChange={(e) => updateShipment(shipment.id, 'type', e.target.value)}
-                            className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                           >
                             <option value="PALLET">PALLET</option>
                             <option value="SKID">SKID</option>
@@ -497,7 +487,7 @@ export default function EstesPickupRequestPage() {
                             type="text"
                             value={shipment.handlingUnits}
                             onChange={(e) => updateShipment(shipment.id, 'handlingUnits', e.target.value)}
-                            className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                           />
                         </div>
                         <div>
@@ -506,7 +496,7 @@ export default function EstesPickupRequestPage() {
                             type="text"
                             value={shipment.weight}
                             onChange={(e) => updateShipment(shipment.id, 'weight', e.target.value)}
-                            className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                           />
                         </div>
                         <div>
@@ -515,12 +505,22 @@ export default function EstesPickupRequestPage() {
                             type="text"
                             value={shipment.destinationZip}
                             onChange={(e) => updateShipment(shipment.id, 'destinationZip', e.target.value)}
-                            className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                           />
                         </div>
                       </div>
                     </div>
                   ))}
+                </div>
+                <div className="flex justify-end mt-4">
+                  <button
+                    type="button"
+                    onClick={addShipment}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <Plus size={18} />
+                    Add Shipment
+                  </button>
                 </div>
               </div>
             )}
@@ -655,44 +655,34 @@ export default function EstesPickupRequestPage() {
                   </label>
                 </div>
                 <div className="border-t-2 border-slate-200 pt-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-slate-700">Additional Contacts</h3>
-                    <button
-                      type="button"
-                      onClick={addContact}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      <Plus size={18} />
-                      Add Contact
-                    </button>
-                  </div>
+                  <h3 className="font-semibold text-slate-700 mb-4">Additional Contacts</h3>
                   <div className="space-y-4">
                     {contacts.map((contact, index) => (
-                      <div key={contact.id} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                      <div key={contact.id} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                         <div>
                           <label className="block text-sm font-medium text-slate-700 mb-2">Name</label>
                           <input
                             type="text"
                             value={contact.name}
                             onChange={(e) => updateContact(contact.id, 'name', e.target.value)}
-                            className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                           />
                         </div>
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
-                          <input
-                            type="email"
-                            value={contact.email}
-                            onChange={(e) => updateContact(contact.id, 'email', e.target.value)}
-                            className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                        <div>
+                        <div className="flex gap-4 items-end">
+                          <div className="flex-1">
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
+                            <input
+                              type="email"
+                              value={contact.email}
+                              onChange={(e) => updateContact(contact.id, 'email', e.target.value)}
+                              className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
+                            />
+                          </div>
                           {contacts.length > 1 && (
                             <button
                               type="button"
                               onClick={() => removeContact(contact.id)}
-                              className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
                             >
                               <Trash2 size={18} />
                               Remove
@@ -701,6 +691,16 @@ export default function EstesPickupRequestPage() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                  <div className="flex justify-end mt-4">
+                    <button
+                      type="button"
+                      onClick={addContact}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Plus size={18} />
+                      Add Contact
+                    </button>
                   </div>
                 </div>
               </div>
@@ -724,7 +724,7 @@ export default function EstesPickupRequestPage() {
                   <select
                     value={browserType}
                     onChange={(e) => setBrowserType(e.target.value as 'chrome' | 'chromium' | 'edge' | 'firefox')}
-                    className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
                   >
                     <option value="chrome">Chrome</option>
                     <option value="chromium">Chromium</option>

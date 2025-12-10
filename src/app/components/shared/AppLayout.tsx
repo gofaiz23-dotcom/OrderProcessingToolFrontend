@@ -139,7 +139,8 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     const hasActiveLogisticsItem = pathname?.startsWith('/logistics');
     const hasActiveProcessedOrdersItem = pathname?.startsWith('/ProcessedOrders');
     const hasActiveCustomerDetailsItem = pathname?.startsWith('/CustomerDetails');
-    const hasActive3plGlobalItem = pathname?.startsWith('/3plGigaFedex');
+    const hasActiveEstesPickupItem = pathname === '/3plGigaFedex/estes-pickup' || pathname?.startsWith('/3plGigaFedex/estes-pickup');
+    const hasActive3plGlobalItem = pathname?.startsWith('/3plGigaFedex') && !hasActiveEstesPickupItem;
 
     return (
         <div className="flex h-screen w-full bg-gradient-to-br from-slate-100 to-slate-200 relative overflow-hidden">
@@ -445,14 +446,14 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                     >
                                         <div
                                             className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-colors ${
-                                                pathname === '/3plGigaFedex/estes-pickup' || pathname?.startsWith('/3plGigaFedex/estes-pickup')
+                                                hasActiveEstesPickupItem
                                                     ? 'bg-blue-50 text-blue-700'
                                                     : 'text-slate-700 hover:bg-slate-50'
                                             }`}
                                         >
                                             <Package
                                                 size={18}
-                                                className={`flex-shrink-0 ${pathname === '/3plGigaFedex/estes-pickup' || pathname?.startsWith('/3plGigaFedex/estes-pickup') ? 'text-blue-600' : 'text-slate-400'}`}
+                                                className={`flex-shrink-0 ${hasActiveEstesPickupItem ? 'text-blue-600' : 'text-slate-400'}`}
                                             />
                                             <span className="text-xs sm:text-sm font-medium flex-1 text-left">Estes Pickup</span>
                                         </div>
