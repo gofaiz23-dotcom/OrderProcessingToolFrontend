@@ -4,8 +4,9 @@ import { useState, useEffect, useRef } from 'react';
 import { Loader2, Plus, X, ChevronDown, ChevronUp, Info } from 'lucide-react';
 import { buildApiUrl } from '../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
-import { buildXPOBillOfLadingRequestBody } from './utils/requestBuilder';
+import { buildXPOBillOfLadingRequestBody, buildXPOPickupRequestRequestBody } from './utils/requestBuilder';
 import type { XPOBillOfLadingFields, XPOBillOfLadingCommodity, XPOBillOfLadingAddress, XPOBillOfLadingPickupInfo } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
+import type { XPOPickupRequestFields } from '@/app/api/ShippingUtil/xpo/PickupRequestField';
 import { 
   XPO_BOL_COMMODITY_DEFAULTS,
   XPO_BOL_REQUESTER_ROLE_OPTIONS,
@@ -57,6 +58,10 @@ type FormData = {
   pickupContactFullName?: string;
   pickupContactPhone?: string;
   pickupInfo?: XPOBillOfLadingPickupInfo;
+  declaredValueAmt?: number;
+  declaredValueAmtPerLb?: number;
+  excessLiabilityChargeInit?: string;
+  rateQuoteNumber?: string;
 };
 
 type BillOfLandingProps = {
@@ -1173,9 +1178,9 @@ export const XPOBillOfLading = ({
           },
           contactInfo: {
             companyName: consigneeCompanyName,
-            // Always include email object - set to null if empty (backend will handle it)
+            // Always include email object - set to empty string if empty (backend will handle it)
             email: {
-              emailAddr: consigneeEmail && consigneeEmail.trim() !== '' ? consigneeEmail.trim() : null,
+              emailAddr: consigneeEmail && consigneeEmail.trim() !== '' ? consigneeEmail.trim() : '',
             },
             phone: {
               phoneNbr: normalizedConsigneePhone,
@@ -1193,9 +1198,9 @@ export const XPOBillOfLading = ({
           },
           contactInfo: {
             companyName: shipperCompanyName,
-            // Always include email object - set to null if empty (backend will handle it)
+            // Always include email object - set to empty string if empty (backend will handle it)
             email: {
-              emailAddr: shipperEmail && shipperEmail.trim() !== '' ? shipperEmail.trim() : null,
+              emailAddr: shipperEmail && shipperEmail.trim() !== '' ? shipperEmail.trim() : '',
             },
             phone: {
               phoneNbr: normalizedShipperPhone,
@@ -1212,9 +1217,9 @@ export const XPOBillOfLading = ({
           },
           contactInfo: {
             companyName: billToCompanyName,
-            // Always include email object - set to null if empty (backend will handle it)
+            // Always include email object - set to empty string if empty (backend will handle it)
             email: {
-              emailAddr: billToEmail && billToEmail.trim() !== '' ? billToEmail.trim() : null,
+              emailAddr: billToEmail && billToEmail.trim() !== '' ? billToEmail.trim() : '',
             },
             phone: {
               phoneNbr: normalizedBillToPhone,
