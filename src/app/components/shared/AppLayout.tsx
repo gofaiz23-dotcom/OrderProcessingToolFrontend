@@ -10,6 +10,7 @@ import { MARKETPLACES, LOGISTICS_CARRIERS } from '@/Shared/constant';
 import { LogisticsAuthModal } from './LogisticsAuthModal';
 import { useLogisticsStore } from '@/store/logisticsStore';
 import { useAuthStore } from '@/app/UserAuthentication/store/authStore';
+import { useWalmartTokenRefresh } from '@/app/hooks/useWalmartTokenRefresh';
 
 const emailSubItems = [
     { href: '/email/inbox', label: 'Inbox', icon: Inbox },
@@ -35,6 +36,10 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     const router = useRouter();
     const { getToken } = useLogisticsStore();
     const { user, logout } = useAuthStore();
+    
+    // Auto-refresh Walmart token every 10 minutes
+    useWalmartTokenRefresh();
+    
     const [isEmailExpanded, setIsEmailExpanded] = useState(true);
     const [isOrdersExpanded, setIsOrdersExpanded] = useState(false);
     const [isLogisticsExpanded, setIsLogisticsExpanded] = useState(false);
@@ -303,6 +308,22 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                         </Link>
                                     );
                                 })}
+                                            
+                                            {/* Walmart Orders option */}
+                                            <Link 
+                                                href="/orders/walmart"
+                                                onClick={() => setIsMobileMenuOpen(false)}
+                                            >
+                                                <div
+                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
+                                                        pathname === '/orders/walmart'
+                                                            ? 'bg-blue-50 text-blue-700'
+                                                            : 'text-slate-600 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    <span className="text-xs sm:text-sm font-medium">Walmart Orders</span>
+                                                </div>
+                                            </Link>
                                         </div>
                                     )}
                                 </div>

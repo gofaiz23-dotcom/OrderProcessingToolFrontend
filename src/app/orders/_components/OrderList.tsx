@@ -11,6 +11,7 @@ import { LOGISTICS_CARRIERS } from '@/Shared/constant';
 import { DateFilter } from '@/app/components/shared/DateFilter';
 import { useLogisticsStore } from '@/store/logisticsStore';
 import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
+import { AutomateLogisticModal } from '@/app/Automation/components/AutomateLogisticModal';
 
 type DateFilterOption = 'all' | 'today' | 'thisWeek' | 'specificDate' | 'custom';
 
@@ -77,6 +78,7 @@ export const OrderList = ({
   const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<Order | null>(null);
   const [showLogisticsAuthModal, setShowLogisticsAuthModal] = useState(false);
   const [selectedCarrier, setSelectedCarrier] = useState<string | null>(null);
+  const [showAutomateLogisticModal, setShowAutomateLogisticModal] = useState(false);
   const [pendingLogisticsAction, setPendingLogisticsAction] = useState<{
     carrier: string;
     order: Order;
@@ -405,6 +407,19 @@ export const OrderList = ({
 
         {/* Right Side Buttons */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
+          {/* Automate Logistic Button - Show when one or more orders are selected */}
+          {selectedOrderIds.size > 0 && (
+            <button
+              onClick={() => {
+                setShowAutomateLogisticModal(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-slate-700 rounded-md border border-slate-300 hover:bg-slate-50 transition-colors text-sm font-medium shadow-sm"
+            >
+              <Truck className="h-4 w-4" />
+              <span>Automate Logistic</span>
+            </button>
+          )}
+
           {/* Logistics Dropdown Button - Show only when exactly one order is selected */}
           {selectedOrderIds.size === 1 && (
             <div className="relative w-full sm:w-auto" ref={logisticsDropdownRef}>
@@ -878,6 +893,13 @@ export const OrderList = ({
             carrier={selectedCarrier}
           />
         )}
+
+        {/* Automate Logistic Modal */}
+        <AutomateLogisticModal
+          isOpen={showAutomateLogisticModal}
+          orders={orders.filter(order => selectedOrderIds.has(order.id))}
+          onClose={() => setShowAutomateLogisticModal(false)}
+        />
       </div>
     );
   };
