@@ -8,7 +8,6 @@ import { Paperclip, X, Loader2, Send, FileText, Bold, Italic, List, Link as Link
 import {
   ComposeFormState,
   defaultComposeState,
-  MAX_ATTACHMENTS,
   MAX_RECIPIENTS,
   submitComposeForm,
   updateAttachments,
@@ -168,10 +167,12 @@ export const InlineReply = ({
       return false;
     }
 
-    if (currentList.length >= MAX_RECIPIENTS) {
+    // Check max recipients limit (total across To, CC, BCC)
+    const totalRecipients = form.to.length + form.cc.length + form.bcc.length;
+    if (totalRecipients >= MAX_RECIPIENTS) {
       setStatus({
         type: 'error',
-        message: `Maximum ${MAX_RECIPIENTS} recipients allowed.`,
+        message: `Maximum ${MAX_RECIPIENTS} total recipients allowed (To + CC + BCC).`,
       });
       return false;
     }
@@ -311,7 +312,8 @@ export const InlineReply = ({
 
     if (emails.length > 0) {
       emails.forEach(email => {
-        if (isValidEmail(email) && !form.to.includes(email) && form.to.length < MAX_RECIPIENTS) {
+        const totalRecipients = form.to.length + form.cc.length + form.bcc.length;
+        if (isValidEmail(email) && !form.to.includes(email) && !form.cc.includes(email) && !form.bcc.includes(email) && totalRecipients < MAX_RECIPIENTS) {
           setForm((prev) => ({
             ...prev,
             to: [...prev.to, email],

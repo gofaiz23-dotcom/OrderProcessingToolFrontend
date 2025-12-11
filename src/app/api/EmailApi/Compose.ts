@@ -17,7 +17,7 @@ export type SendEmailResponse = {
   threadId: string;
 };
 
-const clampRecipients = (recipients: string[], limit = 10) => recipients.slice(0, limit);
+const clampRecipients = (recipients: string[], limit = 500) => recipients.slice(0, limit);
 const sanitizeRecipients = (input: string | string[]) => {
   const list = Array.isArray(input) ? input : input.split(',').map((value) => value.trim());
   return clampRecipients(list.filter(Boolean));

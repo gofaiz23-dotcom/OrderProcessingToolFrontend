@@ -1,7 +1,8 @@
 import { ComposeEmailPayload, sendEmail, SendEmailResponse } from '@/app/api/EmailApi/Compose';
 
-export const MAX_RECIPIENTS = 10;
-export const MAX_ATTACHMENTS = 5;
+export const MAX_RECIPIENTS = 500; // Gmail limit: 500 total recipients (To + CC + BCC)
+// Gmail has no hard limit on attachment count, only 25MB total size limit
+export const MAX_ATTACHMENTS = Infinity; // No count limit, only size limit enforced by backend
 
 export type ComposeFormState = {
   to: string[];
@@ -25,10 +26,17 @@ export const defaultComposeState: ComposeFormState = {
 
 const normalizeAttachments = (files: FileList | File[]): File[] => {
   const fileArray = Array.from(files);
-  return fileArray.slice(0, MAX_ATTACHMENTS);
+  // No count limit - Gmail supports unlimited attachments (25MB total size limit)
+  return fileArray;
 };
 
 const preparePayload = (state: ComposeFormState): ComposeEmailPayload => {
+  // Gmail allows 500 total recipients across To, CC, and BCC
+  // We'll limit each field individually, but the total should not exceed 500
+  const toList = state.to
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, MAX_RECIPIENTS);
   const ccList = state.cc
     .map((value) => value.trim())
     .filter(Boolean)
@@ -39,16 +47,13 @@ const preparePayload = (state: ComposeFormState): ComposeEmailPayload => {
     .slice(0, MAX_RECIPIENTS);
   
   return {
-    to: state.to
-      .map((value) => value.trim())
-      .filter(Boolean)
-      .slice(0, MAX_RECIPIENTS),
+    to: toList,
     cc: ccList.length > 0 ? ccList.join(',') : undefined,
     bcc: bccList.length > 0 ? bccList.join(',') : undefined,
     subject: state.subject.trim(),
     text: state.text.trim() || undefined,
     html: state.html.trim() || undefined,
-    attachments: state.attachments.slice(0, MAX_ATTACHMENTS),
+    attachments: state.attachments, // No count limit
   };
 };
 
