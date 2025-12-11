@@ -9,7 +9,6 @@ import { Paperclip, X, Loader2, Send, FileText, Bold, Italic, List, Link as Link
 import {
   ComposeFormState,
   defaultComposeState,
-  MAX_ATTACHMENTS,
   MAX_RECIPIENTS,
   submitComposeForm,
   updateAttachments,
@@ -18,7 +17,7 @@ import { fetchEmailSuggestions, filterEmailSuggestions } from '@/app/utils/Email
 import { extractErrorInfo } from '@/app/utils/Errors/ApiError';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 
-const helperText = `Up to ${MAX_RECIPIENTS} recipients and ${MAX_ATTACHMENTS} attachments per email.`;
+const helperText = `Up to ${MAX_RECIPIENTS} total recipients (To + CC + BCC). Attachments limited by 25MB total size.`;
 
 // Attachment Preview Component
 const AttachmentPreview = ({ 
@@ -266,11 +265,12 @@ const ComposeEmailForm = () => {
       return false;
     }
 
-    // Check max recipients limit
-    if (currentList.length >= MAX_RECIPIENTS) {
+    // Check max recipients limit (total across To, CC, BCC)
+    const totalRecipients = form.to.length + form.cc.length + form.bcc.length;
+    if (totalRecipients >= MAX_RECIPIENTS) {
       setStatus({
         type: 'error',
-        message: `Maximum ${MAX_RECIPIENTS} recipients allowed.`,
+        message: `Maximum ${MAX_RECIPIENTS} total recipients allowed (To + CC + BCC).`,
       });
       return false;
     }
@@ -466,9 +466,10 @@ const ComposeEmailForm = () => {
       .filter(email => email.length > 0);
 
     if (emails.length > 0) {
-      // Add all valid emails
+      // Add all valid emails (checking total recipients limit)
       emails.forEach(email => {
-        if (isValidEmail(email) && !form.to.includes(email) && form.to.length < MAX_RECIPIENTS) {
+        const totalRecipients = form.to.length + form.cc.length + form.bcc.length;
+        if (isValidEmail(email) && !form.to.includes(email) && !form.cc.includes(email) && !form.bcc.includes(email) && totalRecipients < MAX_RECIPIENTS) {
           setForm((prev) => ({
             ...prev,
             to: [...prev.to, email],
@@ -659,8 +660,8 @@ const ComposeEmailForm = () => {
               }
             }
             
-            // Add attachments to form (respecting MAX_ATTACHMENTS limit)
-            newForm.attachments = attachmentFiles.slice(0, MAX_ATTACHMENTS);
+            // Add attachments to form (no count limit, only size limit)
+            newForm.attachments = attachmentFiles;
             
             // Clear sessionStorage after reading
             sessionStorage.removeItem('compose_forward_attachments');
@@ -923,7 +924,8 @@ const ComposeEmailForm = () => {
                     const pastedText = e.clipboardData.getData('text');
                     const emails = pastedText.split(/[,;\n]/).map(email => email.trim()).filter(email => email.length > 0);
                     emails.forEach(email => {
-                      if (isValidEmail(email) && !form.cc.includes(email) && !form.to.includes(email) && !form.bcc.includes(email) && form.cc.length < MAX_RECIPIENTS) {
+                      const totalRecipients = form.to.length + form.cc.length + form.bcc.length;
+                      if (isValidEmail(email) && !form.cc.includes(email) && !form.to.includes(email) && !form.bcc.includes(email) && totalRecipients < MAX_RECIPIENTS) {
                         addEmailToField('cc', email);
                       }
                     });
@@ -1012,7 +1014,8 @@ const ComposeEmailForm = () => {
                     const pastedText = e.clipboardData.getData('text');
                     const emails = pastedText.split(/[,;\n]/).map(email => email.trim()).filter(email => email.length > 0);
                     emails.forEach(email => {
-                      if (isValidEmail(email) && !form.bcc.includes(email) && !form.to.includes(email) && !form.cc.includes(email) && form.bcc.length < MAX_RECIPIENTS) {
+                      const totalRecipients = form.to.length + form.cc.length + form.bcc.length;
+                      if (isValidEmail(email) && !form.bcc.includes(email) && !form.to.includes(email) && !form.cc.includes(email) && totalRecipients < MAX_RECIPIENTS) {
                         addEmailToField('bcc', email);
                       }
                     });
@@ -1194,7 +1197,7 @@ const ComposeEmailForm = () => {
                 Click to attach files
               </span>
               <span className="mt-1 text-xs text-slate-500">
-                Maximum {MAX_ATTACHMENTS} files
+                Attachments limited by 25MB total size
               </span>
             </label>
 
