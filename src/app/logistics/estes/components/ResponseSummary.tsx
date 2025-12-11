@@ -215,6 +215,31 @@ export const ResponseSummary = ({
         console.log('Order saved to database successfully:', response);
       }
 
+      // Store rateQuotesRequestJsonb in localStorage for later retrieval (frontend workaround)
+      // Key format: rateQuotesRequestJsonb_{orderId} or rateQuotesRequestJsonb_{sku}
+      if (hasRateQuotesRequest && rateQuotesRequestJsonb) {
+        try {
+          const orderId = response?.data?.id;
+          const storageKey = orderId 
+            ? `rateQuotesRequestJsonb_${orderId}` 
+            : `rateQuotesRequestJsonb_${skuStr}_${Date.now()}`;
+          localStorage.setItem(storageKey, JSON.stringify(rateQuotesRequestJsonb));
+          
+          // Also store with SKU as key for fallback lookup
+          if (skuStr) {
+            localStorage.setItem(`rateQuotesRequestJsonb_sku_${skuStr}`, JSON.stringify(rateQuotesRequestJsonb));
+          }
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Stored rateQuotesRequestJsonb in localStorage:', { storageKey, orderId, sku: skuStr });
+          }
+        } catch (storageError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Failed to store rateQuotesRequestJsonb in localStorage:', storageError);
+          }
+        }
+      }
+
       // Step 2: Wait a moment to ensure DB save is complete, then delete order
       // Call success callback which will handle deletion
       if (onSubmitSuccess && orderId) {

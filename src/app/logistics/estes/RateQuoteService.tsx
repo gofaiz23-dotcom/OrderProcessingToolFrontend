@@ -958,9 +958,48 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         }
       }
 
-      // Step 3: Clear all cache after deletion
+      // Step 3: Clear cache after deletion (but preserve authentication and rateQuotesRequestJsonb)
       sessionStorage.removeItem('selectedOrderForLogistics');
+      
+      // Preserve authentication storage keys
+      const authStorageKey = 'auth-storage';
+      const logisticsStorageKey = 'logistics-tokens-storage';
+      const authData = localStorage.getItem(authStorageKey);
+      const logisticsData = localStorage.getItem(logisticsStorageKey);
+      
+      // Preserve rateQuotesRequestJsonb data (frontend workaround)
+      const rateQuotesRequestJsonbKeys: string[] = [];
+      const rateQuotesRequestJsonbData: Record<string, string> = {};
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && (key.startsWith('rateQuotesRequestJsonb_') || key.startsWith('rateQuotesRequestJsonb_sku_'))) {
+          rateQuotesRequestJsonbKeys.push(key);
+          const value = localStorage.getItem(key);
+          if (value) {
+            rateQuotesRequestJsonbData[key] = value;
+          }
+        }
+      }
+      
+      // Clear all localStorage
       localStorage.clear();
+      
+      // Restore authentication data if it existed
+      if (authData) {
+        localStorage.setItem(authStorageKey, authData);
+      }
+      if (logisticsData) {
+        localStorage.setItem(logisticsStorageKey, logisticsData);
+      }
+      
+      // Restore rateQuotesRequestJsonb data
+      Object.entries(rateQuotesRequestJsonbData).forEach(([key, value]) => {
+        localStorage.setItem(key, value);
+      });
+      
+      if (process.env.NODE_ENV === 'development' && rateQuotesRequestJsonbKeys.length > 0) {
+        console.log('Preserved rateQuotesRequestJsonb keys:', rateQuotesRequestJsonbKeys);
+      }
       
       // Clear any other relevant caches
       if ('caches' in window) {
