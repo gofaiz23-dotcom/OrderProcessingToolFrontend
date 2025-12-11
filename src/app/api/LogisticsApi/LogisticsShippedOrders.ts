@@ -8,6 +8,7 @@ export type LogisticsShippedOrder = {
   status: string;
   uploads: string[];
   ordersJsonb: Record<string, unknown>;
+  rateQuotesRequestJsonb?: Record<string, unknown>;
   rateQuotesResponseJsonb?: Record<string, unknown>;
   bolResponseJsonb?: Record<string, unknown>;
   pickupResponseJsonb?: Record<string, unknown>;
@@ -101,19 +102,28 @@ export const createLogisticsShippedOrder = async (
   formData.append('orderOnMarketPlace', payload.orderOnMarketPlace);
   formData.append('ordersJsonb', JSON.stringify(payload.ordersJsonb));
   
-  if (payload.rateQuotesRequestJsonb) {
+  // Only append rateQuotesRequestJsonb if it exists and is not null/empty
+  if (payload.rateQuotesRequestJsonb && 
+      typeof payload.rateQuotesRequestJsonb === 'object' && 
+      Object.keys(payload.rateQuotesRequestJsonb).length > 0) {
     formData.append('rateQuotesRequestJsonb', JSON.stringify(payload.rateQuotesRequestJsonb));
   }
   
-  if (payload.rateQuotesResponseJsonb) {
+  if (payload.rateQuotesResponseJsonb && 
+      typeof payload.rateQuotesResponseJsonb === 'object' && 
+      Object.keys(payload.rateQuotesResponseJsonb).length > 0) {
     formData.append('rateQuotesResponseJsonb', JSON.stringify(payload.rateQuotesResponseJsonb));
   }
   
-  if (payload.bolResponseJsonb) {
+  if (payload.bolResponseJsonb && 
+      typeof payload.bolResponseJsonb === 'object' && 
+      Object.keys(payload.bolResponseJsonb).length > 0) {
     formData.append('bolResponseJsonb', JSON.stringify(payload.bolResponseJsonb));
   }
   
-  if (payload.pickupResponseJsonb) {
+  if (payload.pickupResponseJsonb && 
+      typeof payload.pickupResponseJsonb === 'object' && 
+      Object.keys(payload.pickupResponseJsonb).length > 0) {
     formData.append('pickupResponseJsonb', JSON.stringify(payload.pickupResponseJsonb));
   }
   

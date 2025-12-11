@@ -1337,7 +1337,17 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       }
 
       // Store request payload for later submission
-      setRateQuoteRequestPayload(payload);
+      // Make sure to store a deep copy to prevent mutations
+      const payloadCopy = JSON.parse(JSON.stringify(payload));
+      setRateQuoteRequestPayload(payloadCopy);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('✅ Stored rateQuoteRequestPayload:', {
+          hasPayload: !!payloadCopy,
+          keys: Object.keys(payloadCopy || {}),
+          shippingCompany: payloadCopy?.shippingCompany,
+        });
+      }
 
       const res = await fetch(buildApiUrl('/Logistics/create-rate-quote'), {
         method: 'POST',
@@ -2490,10 +2500,32 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
               <span className="ml-2 text-slate-600">Loading order data...</span>
             </div>
           )}
-          <ResponseSummary
-            orderData={orderData || undefined}
-            rateQuotesRequestJsonb={rateQuoteRequestPayload || undefined}
-            rateQuotesResponseJsonb={response?.data || undefined}
+          {(() => {
+            // Debug: Log what we're passing to ResponseSummary
+            const requestPayloadToPass = rateQuoteRequestPayload && 
+              typeof rateQuoteRequestPayload === 'object' && 
+              Object.keys(rateQuoteRequestPayload).length > 0
+                ? rateQuoteRequestPayload 
+                : undefined;
+            
+            if (process.env.NODE_ENV === 'development') {
+              console.log('🔍 Passing to ResponseSummary:', {
+                hasRateQuoteRequestPayload: !!rateQuoteRequestPayload,
+                rateQuoteRequestPayloadType: typeof rateQuoteRequestPayload,
+                rateQuoteRequestPayloadValue: rateQuoteRequestPayload,
+                rateQuoteRequestPayloadKeys: rateQuoteRequestPayload && typeof rateQuoteRequestPayload === 'object' 
+                  ? Object.keys(rateQuoteRequestPayload) 
+                  : 'N/A',
+                requestPayloadToPass: requestPayloadToPass,
+                hasRequestPayloadToPass: !!requestPayloadToPass,
+              });
+            }
+            
+            return (
+              <ResponseSummary
+                orderData={orderData || undefined}
+                rateQuotesRequestJsonb={requestPayloadToPass}
+                rateQuotesResponseJsonb={response?.data || undefined}
             bolResponseJsonb={bolResponseData?.data || undefined}
             pickupResponseJsonb={pickupResponseData?.data || undefined}
             files={bolFiles}
@@ -2514,7 +2546,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
                 document.body.removeChild(link);
               }
             }}
-          />
+              />
+            );
+          })()}
         </>
       )}
 

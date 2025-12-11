@@ -16,20 +16,26 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const hasHydrated = useAuthStore((state) => state.hasHydrated);
+  const setHasHydrated = useAuthStore((state) => state.setHasHydrated);
   const [mounted, setMounted] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
-  const [isHydrated, setIsHydrated] = useState(false);
 
-  // Wait for Zustand persist to rehydrate from localStorage
+  // Mark component as mounted (client-side only)
   useEffect(() => {
-    // Give Zustand persist middleware time to rehydrate
-    const timer = setTimeout(() => {
-      setIsHydrated(true);
-      setMounted(true);
-    }, 150); // Slightly longer to ensure localStorage is read
-
-    return () => clearTimeout(timer);
+    setMounted(true);
   }, []);
+
+  // Fallback: Ensure hydration is marked after a short delay if not already set
+  // This handles cases where onRehydrateStorage callback might not fire
+  useEffect(() => {
+    if (mounted && !hasHydrated) {
+      const timer = setTimeout(() => {
+        setHasHydrated(true);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [mounted, hasHydrated, setHasHydrated]);
 
   // Scroll to top on pathname change
   useEffect(() => {
@@ -40,7 +46,7 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   // Handle redirect for unauthenticated users (only after hydration)
   useEffect(() => {
-    if (!mounted || !isHydrated || !pathname) return;
+    if (!mounted || !hasHydrated || !pathname) return;
 
     const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname?.startsWith(route));
 
@@ -55,10 +61,10 @@ export function AuthGuard({ children }: AuthGuardProps) {
     } else if (isAuthenticated || isPublicRoute) {
       setIsRedirecting(false);
     }
-  }, [isAuthenticated, pathname, router, mounted, isHydrated, isRedirecting]);
+  }, [isAuthenticated, pathname, router, mounted, hasHydrated, isRedirecting]);
 
   // Show loading state during initial mount and hydration
-  if (!mounted || !isHydrated) {
+  if (!mounted || !hasHydrated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-4">
         <div className="text-center">
