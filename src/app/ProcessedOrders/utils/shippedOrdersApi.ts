@@ -6,6 +6,7 @@ export type ShippedOrder = {
   orderOnMarketPlace: string;
   status?: string;
   ordersJsonb?: Record<string, unknown>;
+  rateQuotesRequestJsonb?: Record<string, unknown>;
   rateQuotesResponseJsonb?: Record<string, unknown>;
   bolResponseJsonb?: Record<string, unknown>;
   pickupResponseJsonb?: Record<string, unknown>;
@@ -24,6 +25,7 @@ export type CreateShippedOrderPayload = {
   orderOnMarketPlace: string;
   status?: string;
   ordersJsonb?: Record<string, unknown>;
+  rateQuotesRequestJsonb?: Record<string, unknown>;
   rateQuotesResponseJsonb?: Record<string, unknown>;
   bolResponseJsonb?: Record<string, unknown>;
   pickupResponseJsonb?: Record<string, unknown>;
@@ -78,22 +80,57 @@ export const getAllShippedOrders = async (
 
   const data = await res.json();
   
-  // Handle both old format (array) and new format (with pagination)
-  if (Array.isArray(data.orders)) {
-    return {
-      orders: data.orders,
-      pagination: data.pagination || {
-        page: 1,
-        limit: data.orders.length,
-        totalCount: data.orders.length,
-        totalPages: 1,
-        hasNextPage: false,
-        hasPreviousPage: false,
-      },
+  // Handle different response structures
+  let orders: ShippedOrder[] = [];
+  let pagination = null;
+  
+  // Case 1: Response has data.orders array
+  if (data.orders && Array.isArray(data.orders)) {
+    orders = data.orders;
+    pagination = data.pagination;
+  }
+  // Case 2: Response has data.data array (nested structure)
+  else if (data.data && Array.isArray(data.data)) {
+    orders = data.data;
+    pagination = data.pagination;
+  }
+  // Case 3: Response is directly an array
+  else if (Array.isArray(data)) {
+    orders = data;
+  }
+  // Case 4: Response has orders property but it's not an array yet
+  else if (data.orders) {
+    orders = Array.isArray(data.orders) ? data.orders : [data.orders];
+    pagination = data.pagination;
+  }
+  // Case 5: Single order object
+  else if (data.id) {
+    orders = [data];
+  }
+  
+  // Ensure pagination structure
+  if (!pagination && orders.length > 0) {
+    pagination = {
+      page: 1,
+      limit: orders.length,
+      totalCount: orders.length,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
     };
   }
   
-  return data;
+  return {
+    orders,
+    pagination: pagination || {
+      page: 1,
+      limit: 0,
+      totalCount: 0,
+      totalPages: 1,
+      hasNextPage: false,
+      hasPreviousPage: false,
+    },
+  };
 };
 
 // GET - Get shipped order by ID
@@ -127,6 +164,9 @@ export const createShippedOrder = async (payload: CreateShippedOrderPayload): Pr
   
   if (payload.ordersJsonb) {
     formData.append('ordersJsonb', JSON.stringify(payload.ordersJsonb));
+  }
+  if (payload.rateQuotesRequestJsonb) {
+    formData.append('rateQuotesRequestJsonb', JSON.stringify(payload.rateQuotesRequestJsonb));
   }
   if (payload.rateQuotesResponseJsonb) {
     formData.append('rateQuotesResponseJsonb', JSON.stringify(payload.rateQuotesResponseJsonb));
@@ -176,6 +216,9 @@ export const updateShippedOrder = async (
   }
   if (payload.ordersJsonb !== undefined) {
     formData.append('ordersJsonb', JSON.stringify(payload.ordersJsonb));
+  }
+  if (payload.rateQuotesRequestJsonb !== undefined) {
+    formData.append('rateQuotesRequestJsonb', JSON.stringify(payload.rateQuotesRequestJsonb));
   }
   if (payload.rateQuotesResponseJsonb !== undefined) {
     formData.append('rateQuotesResponseJsonb', JSON.stringify(payload.rateQuotesResponseJsonb));

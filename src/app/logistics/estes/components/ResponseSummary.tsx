@@ -164,16 +164,50 @@ export const ResponseSummary = ({
         throw new Error('Order Marketplace is required. Please ensure the order data contains a marketplace.');
       }
 
+      // Only include rateQuotesRequestJsonb if it has actual data
+      const hasRateQuotesRequest = rateQuotesRequestJsonb && 
+                                   typeof rateQuotesRequestJsonb === 'object' && 
+                                   Object.keys(rateQuotesRequestJsonb).length > 0;
+      
       const payload = {
         sku: skuStr,
         orderOnMarketPlace: orderOnMarketPlaceStr,
         ordersJsonb: orderData?.ordersJsonb || {},
-        rateQuotesRequestJsonb: rateQuotesRequestJsonb,
+        ...(hasRateQuotesRequest && { rateQuotesRequestJsonb: rateQuotesRequestJsonb }),
         rateQuotesResponseJsonb: rateQuotesResponseJsonb,
         bolResponseJsonb: bolResponseJsonb,
         pickupResponseJsonb: pickupResponseJsonb,
         files: files || [],
       };
+
+      // Debug: Log payload structure in development
+      if (process.env.NODE_ENV === 'development') {
+        console.log('ResponseSummary - Submitting payload:', {
+          sku: payload.sku,
+          orderOnMarketPlace: payload.orderOnMarketPlace,
+          hasRateQuotesRequestJsonb: !!payload.rateQuotesRequestJsonb,
+          rateQuotesRequestJsonbValue: payload.rateQuotesRequestJsonb,
+          rateQuotesRequestJsonbType: typeof payload.rateQuotesRequestJsonb,
+          rateQuotesRequestJsonbKeys: payload.rateQuotesRequestJsonb && typeof payload.rateQuotesRequestJsonb === 'object' 
+            ? Object.keys(payload.rateQuotesRequestJsonb) 
+            : [],
+          shippingCompany: payload.rateQuotesRequestJsonb && typeof payload.rateQuotesRequestJsonb === 'object' 
+            ? (payload.rateQuotesRequestJsonb as any)?.shippingCompany 
+            : 'N/A',
+          hasRateQuotesResponseJsonb: !!payload.rateQuotesResponseJsonb,
+          hasBolResponseJsonb: !!payload.bolResponseJsonb,
+          hasPickupResponseJsonb: !!payload.pickupResponseJsonb,
+          filesCount: payload.files?.length || 0,
+        });
+        console.log('ResponseSummary - Original rateQuotesRequestJsonb prop:', {
+          value: rateQuotesRequestJsonb,
+          type: typeof rateQuotesRequestJsonb,
+          isObject: typeof rateQuotesRequestJsonb === 'object',
+          keys: rateQuotesRequestJsonb && typeof rateQuotesRequestJsonb === 'object' 
+            ? Object.keys(rateQuotesRequestJsonb) 
+            : 'N/A',
+        });
+      }
 
       // Step 1: Save to database first
       const response = await createLogisticsShippedOrder(payload);

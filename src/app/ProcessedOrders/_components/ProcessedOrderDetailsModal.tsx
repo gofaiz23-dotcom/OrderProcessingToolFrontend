@@ -86,6 +86,17 @@ export const ProcessedOrderDetailsModal = ({
 
   if (!isOpen || !order) return null;
 
+  // Debug: Log order data to check if rateQuotesRequestJsonb exists
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Order data:', {
+      id: order.id,
+      hasRateQuotesRequestJsonb: 'rateQuotesRequestJsonb' in order,
+      rateQuotesRequestJsonb: order.rateQuotesRequestJsonb,
+      rateQuotesRequestJsonbType: typeof order.rateQuotesRequestJsonb,
+      allOrderKeys: Object.keys(order),
+    });
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-2 sm:p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
@@ -202,39 +213,55 @@ export const ProcessedOrderDetailsModal = ({
             )}
 
             {/* Rate Quote Request */}
-            {(order as any).rateQuotesRequestJsonb && Object.keys((order as any).rateQuotesRequestJsonb).length > 0 && (
-              <div className="border border-slate-200 rounded-lg overflow-hidden">
-                <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('rateQuoteRequest')}>
-                  <h3 className="text-sm font-semibold text-black">Rate Quote Request</h3>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleSection('rateQuoteRequest');
-                    }}
-                    className="text-slate-500 hover:text-slate-700"
-                  >
-                    {showSections.rateQuoteRequest ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                  </button>
-                </div>
-                {showSections.rateQuoteRequest && (
-                  <div className="p-4 relative">
-                    <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs max-h-64 text-black">
-                      {JSON.stringify((order as any).rateQuotesRequestJsonb, null, 2)}
-                    </pre>
-                    <button
-                      type="button"
-                      onClick={() => copyToClipboard(JSON.stringify((order as any).rateQuotesRequestJsonb, null, 2))}
-                      className="absolute top-6 right-6 px-2 py-1.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-colors flex items-center gap-1"
-                      title="Copy to clipboard"
-                    >
-                      <Copy size={12} />
-                      Copy
-                    </button>
-                  </div>
-                )}
+            <div className="border border-slate-200 rounded-lg overflow-hidden">
+              <div className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer" onClick={() => toggleSection('rateQuoteRequest')}>
+                <h3 className="text-sm font-semibold text-black">Rate Quote Request</h3>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleSection('rateQuoteRequest');
+                  }}
+                  className="text-slate-500 hover:text-slate-700"
+                >
+                  {showSections.rateQuoteRequest ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </button>
               </div>
-            )}
+              {showSections.rateQuoteRequest && (
+                <div className="p-4 relative">
+                  {order.rateQuotesRequestJsonb && 
+                   typeof order.rateQuotesRequestJsonb === 'object' && 
+                   Object.keys(order.rateQuotesRequestJsonb).length > 0 ? (
+                    <>
+                      <pre className="p-4 bg-slate-50 border border-slate-200 rounded-lg overflow-auto text-xs max-h-64 text-black">
+                        {JSON.stringify(order.rateQuotesRequestJsonb, null, 2)}
+                      </pre>
+                      <button
+                        type="button"
+                        onClick={() => copyToClipboard(JSON.stringify(order.rateQuotesRequestJsonb, null, 2))}
+                        className="absolute top-6 right-6 px-2 py-1.5 bg-blue-500 text-white rounded text-xs hover:bg-blue-600 transition-colors flex items-center gap-1"
+                        title="Copy to clipboard"
+                      >
+                        <Copy size={12} />
+                        Copy
+                      </button>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="text-sm text-slate-500">No rate quote request data available</p>
+                      {process.env.NODE_ENV === 'development' && (
+                        <div className="text-xs text-slate-400 bg-slate-50 p-2 rounded">
+                          <p>Debug Info:</p>
+                          <p>Has rateQuotesRequestJsonb: {'rateQuotesRequestJsonb' in order ? 'Yes' : 'No'}</p>
+                          <p>Value: {order.rateQuotesRequestJsonb === undefined ? 'undefined' : order.rateQuotesRequestJsonb === null ? 'null' : typeof order.rateQuotesRequestJsonb}</p>
+                          <p>Keys: {order.rateQuotesRequestJsonb && typeof order.rateQuotesRequestJsonb === 'object' ? Object.keys(order.rateQuotesRequestJsonb).join(', ') : 'N/A'}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Rate Quote Response */}
             {order.rateQuotesResponseJsonb && Object.keys(order.rateQuotesResponseJsonb).length > 0 && (

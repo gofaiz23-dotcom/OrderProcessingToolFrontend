@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Send, Loader2, CheckCircle2, XCircle, Plus, Trash2 } from 'lucide-react';
 import { createEstesPickupRequest, type EstesPickupData } from '@/app/api/3plGigaFedexApi/estesPickupApi';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
@@ -22,6 +22,7 @@ type Contact = {
 
 export default function EstesPickupRequestPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [success, setSuccess] = useState(false);
@@ -55,10 +56,52 @@ export default function EstesPickupRequestPage() {
   const [pickupEndTime, setPickupEndTime] = useState('05:00 PM');
   const [pickupType, setPickupType] = useState('LL');
 
-  // Shipments
-  const [shipments, setShipments] = useState<Shipment[]>([
-    { id: '1', type: 'PALLET', handlingUnits: '', weight: '', destinationZip: '' },
-  ]);
+  // Shipments - Initialize from URL params if available
+  const [shipments, setShipments] = useState<Shipment[]>(() => {
+    const shipmentsParam = searchParams?.get('shipments');
+    if (shipmentsParam) {
+      try {
+        const parsedShipments = JSON.parse(shipmentsParam);
+        if (Array.isArray(parsedShipments) && parsedShipments.length > 0) {
+          return parsedShipments.map((shipment: any, index: number) => ({
+            id: String(index + 1),
+            type: shipment.type || 'PALLET',
+            handlingUnits: shipment.handlingUnits || '',
+            weight: shipment.weight || '',
+            destinationZip: shipment.destinationZip || '',
+          }));
+        }
+      } catch (e) {
+        console.error('Error parsing shipments from URL:', e);
+      }
+    }
+    return [{ id: '1', type: 'PALLET', handlingUnits: '', weight: '', destinationZip: '' }];
+  });
+
+  // Update shipments when URL params change
+  useEffect(() => {
+    const shipmentsParam = searchParams?.get('shipments');
+    if (shipmentsParam) {
+      try {
+        const parsedShipments = JSON.parse(shipmentsParam);
+        if (Array.isArray(parsedShipments) && parsedShipments.length > 0) {
+          setShipments(
+            parsedShipments.map((shipment: any, index: number) => ({
+              id: String(index + 1),
+              type: shipment.type || 'PALLET',
+              handlingUnits: shipment.handlingUnits || '',
+              weight: shipment.weight || '',
+              destinationZip: shipment.destinationZip || '',
+            }))
+          );
+          // Set pickup type to LL (Live Load) if we have shipments
+          setPickupType('LL');
+        }
+      } catch (e) {
+        console.error('Error parsing shipments from URL:', e);
+      }
+    }
+  }, [searchParams]);
 
   // Freight Characteristics
   const [hazmat, setHazmat] = useState(false);

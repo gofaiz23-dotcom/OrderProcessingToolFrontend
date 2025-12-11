@@ -188,14 +188,73 @@ export const useLogisticsStore = create<LogisticsStore>()(
             throw fetchError;
           });
           
+          // Read response body once - can't read it multiple times
+          let responseData: any = null;
+          let responseText: string | null = null;
+          
+          try {
+            // Try to parse as JSON first
+            const contentType = res.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              responseData = await res.json();
+            } else {
+              // If not JSON, try to get as text
+              responseText = await res.text();
+              // Try to parse as JSON if it looks like JSON
+              if (responseText && (responseText.trim().startsWith('{') || responseText.trim().startsWith('['))) {
+                try {
+                  responseData = JSON.parse(responseText);
+                } catch {
+                  // Keep as text if parsing fails
+                }
+              }
+            }
+          } catch (parseError) {
+            // If parsing fails, try to get text
+            try {
+              responseText = await res.text();
+            } catch (textError) {
+              // If all else fails, we'll use status text
+              if (process.env.NODE_ENV === 'development') {
+                console.warn(`Could not read response body for ${normalizedCarrier}:`, textError);
+              }
+            }
+          }
+          
           if (!res.ok) {
+            // Extract error message from response
+            let errorMessage = res.statusText || 'Unknown error';
+            
+            if (responseData) {
+              errorMessage = responseData.message || 
+                            responseData.error || 
+                            responseData.data?.message ||
+                            responseData.errorMessage ||
+                            (typeof responseData === 'string' ? responseData : JSON.stringify(responseData));
+            } else if (responseText) {
+              errorMessage = responseText;
+            }
+            
             if (process.env.NODE_ENV === 'development') {
-              console.error(`Token refresh failed for ${normalizedCarrier}:`, res.statusText);
+              console.error(`Token refresh failed for ${normalizedCarrier}:`, {
+                status: res.status,
+                statusText: res.statusText,
+                errorMessage,
+                responseData,
+              });
             }
             return false;
           }
           
-          const data = await res.json();
+          // If we got here, response was OK
+          const data = responseData;
+          
+          if (!data) {
+            if (process.env.NODE_ENV === 'development') {
+              console.error(`No response data received for ${normalizedCarrier}`);
+            }
+            return false;
+          }
           
           // Extract token from response
           const token = data.data?.token || 

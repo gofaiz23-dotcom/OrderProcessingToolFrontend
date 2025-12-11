@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
-import { Search, Trash2, Edit, Info, ChevronLeft, ChevronRight, Calendar, PackageSearch, FileText, Loader2, X } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { Search, Trash2, Edit, Info, ChevronLeft, ChevronRight, Calendar, PackageSearch, FileText, Loader2, X, Truck } from 'lucide-react';
 import { buildFileUrl, getBackendBaseUrl } from '../../../../BaseUrl';
 import type { ShippedOrder } from '../utils/shippedOrdersApi';
 import type { PaginationMeta } from '@/app/types/order';
@@ -57,12 +58,17 @@ export const ProcessedOrdersList = ({
   onUpdate,
   onDeleteByDateRange,
 }: ProcessedOrdersListProps) => {
+  const router = useRouter();
   // Use prop searchQuery if provided, otherwise use local state
   const searchQuery = searchQueryProp !== undefined ? searchQueryProp : '';
   const setSearchQuery = onSearchChange || (() => {});
   const currentPage = pagination?.page ?? currentPageProp;
   const totalPages = pagination?.totalPages ?? 1;
   
+  const [orderType, setOrderType] = useState<string>('All');
+  const [isLogisticsDropdownOpen, setIsLogisticsDropdownOpen] = useState(false);
+  const logisticsDropdownRef = useRef<HTMLDivElement>(null);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<number>>(new Set());
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<ShippedOrder | null>(null);
   const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<ShippedOrder | null>(null);
   const [deleteModalState, setDeleteModalState] = useState<{
@@ -79,14 +85,375 @@ export const ProcessedOrdersList = ({
   const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<ShippedOrder | null>(null);
   const [previewFile, setPreviewFile] = useState<{ url: string; filename: string; isPDF: boolean } | null>(null);
 
-  // No client-side filtering - backend handles search
-  const displayOrders = orders;
+  // Close logistics dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (logisticsDropdownRef.current && !logisticsDropdownRef.current.contains(event.target as Node)) {
+        setIsLogisticsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Helper function to determine logistics company from order
+  const getLogisticsCompany = (order: ShippedOrder): string | null => {
+    // Helper to normalize and check company name
+    const normalizeCompany = (value: any): string | null => {
+      if (!value) return null;
+      const normalized = String(value).toLowerCase().trim();
+      if (normalized === 'estes') return 'Estes';
+      if (normalized === 'xpo' || normalized === 'expo') return 'XPO';
+      return null;
+    };
+
+    // Check rateQuotesRequestJsonb first (most reliable source - this is where shippingCompany is stored)
+    if (order.rateQuotesRequestJsonb && typeof order.rateQuotesRequestJsonb === 'object') {
+      const requestData = order.rateQuotesRequestJsonb as any;
+      // Check multiple possible field names - shippingCompany is the primary field from Estes/XPO
+      const shippingCompany = requestData?.shippingCompany || 
+                               requestData?.shipping_company ||
+                               requestData?.shippingCompanyName ||
+                               requestData?.shipping_company_name ||
+                               requestData?.company ||
+                               requestData?.carrier;
+      const result = normalizeCompany(shippingCompany);
+      if (result) {
+        // Debug logging
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Found logistics company in rateQuotesRequestJsonb:', {
+            orderId: order.id,
+            shippingCompany,
+            normalized: result,
+            requestDataKeys: Object.keys(requestData),
+          });
+        }
+        return result;
+      }
+    }
+    
+    // Check rateQuotesResponseJsonb
+    if (order.rateQuotesResponseJsonb && typeof order.rateQuotesResponseJsonb === 'object') {
+      const responseData = order.rateQuotesResponseJsonb as any;
+      // Check response data structure - might be nested
+      const shippingCompanyName = responseData?.shippingCompanyName || 
+                                   responseData?.shipping_company_name ||
+                                   responseData?.shippingCompany ||
+                                   responseData?.shipping_company ||
+                                   responseData?.data?.shippingCompanyName ||
+                                   responseData?.data?.shippingCompany ||
+                                   responseData?.company ||
+                                   responseData?.carrier;
+      const result = normalizeCompany(shippingCompanyName);
+      if (result) return result;
+    }
+    
+    // Check bolResponseJsonb as fallback
+    if (order.bolResponseJsonb && typeof order.bolResponseJsonb === 'object') {
+      const bolData = order.bolResponseJsonb as any;
+      const shippingCompany = bolData?.shippingCompany || 
+                               bolData?.shipping_company ||
+                               bolData?.shippingCompanyName ||
+                               bolData?.shipping_company_name ||
+                               bolData?.data?.shippingCompany ||
+                               bolData?.data?.shippingCompanyName ||
+                               bolData?.company ||
+                               bolData?.carrier;
+      const result = normalizeCompany(shippingCompany);
+      if (result) return result;
+    }
+    
+    // Check pickupResponseJsonb as fallback
+    if (order.pickupResponseJsonb && typeof order.pickupResponseJsonb === 'object') {
+      const pickupData = order.pickupResponseJsonb as any;
+      const shippingCompany = pickupData?.shippingCompany || 
+                               pickupData?.shipping_company ||
+                               pickupData?.shippingCompanyName ||
+                               pickupData?.shipping_company_name ||
+                               pickupData?.data?.shippingCompany ||
+                               pickupData?.data?.shippingCompanyName ||
+                               pickupData?.company ||
+                               pickupData?.carrier;
+      const result = normalizeCompany(shippingCompany);
+      if (result) return result;
+    }
+    
+    // Check ordersJsonb as last resort - might contain carrier info
+    if (order.ordersJsonb && typeof order.ordersJsonb === 'object') {
+      const ordersData = order.ordersJsonb as any;
+      const carrier = ordersData?.carrier || 
+                      ordersData?.Carrier ||
+                      ordersData?.shippingCompany ||
+                      ordersData?.ShippingCompany ||
+                      ordersData?.logisticsCompany ||
+                      ordersData?.LogisticsCompany;
+      const result = normalizeCompany(carrier);
+      if (result) return result;
+    }
+    
+    return null;
+  };
+
+  // Filter orders based on selected logistics type
+  const displayOrders = useMemo(() => {
+    if (orderType === 'All') {
+      return orders;
+    }
+    
+    const filtered = orders.filter(order => {
+      const logisticsCompany = getLogisticsCompany(order);
+      const matches = logisticsCompany === orderType;
+      
+      // Debug logging in development
+      if (process.env.NODE_ENV === 'development' && !matches && logisticsCompany) {
+        console.log('Order filtered out:', {
+          orderId: order.id,
+          selectedType: orderType,
+          foundCompany: logisticsCompany,
+          rateQuotesRequestJsonb: order.rateQuotesRequestJsonb,
+          rateQuotesResponseJsonb: order.rateQuotesResponseJsonb,
+        });
+      }
+      
+      return matches;
+    });
+    
+    // Debug logging in development
+    if (process.env.NODE_ENV === 'development') {
+      const companyCounts = orders.reduce((acc, order) => {
+        const company = getLogisticsCompany(order);
+        if (company) {
+          acc[company] = (acc[company] || 0) + 1;
+        } else {
+          acc['Unknown'] = (acc['Unknown'] || 0) + 1;
+        }
+        return acc;
+      }, {} as Record<string, number>);
+
+      console.log('Filtering orders:', {
+        selectedType: orderType,
+        totalOrders: orders.length,
+        filteredCount: filtered.length,
+        companyCounts,
+        sampleOrder: orders[0] ? {
+          id: orders[0].id,
+          logisticsCompany: getLogisticsCompany(orders[0]),
+          hasRequestJsonb: !!orders[0].rateQuotesRequestJsonb,
+          hasResponseJsonb: !!orders[0].rateQuotesResponseJsonb,
+          requestJsonbKeys: orders[0].rateQuotesRequestJsonb && typeof orders[0].rateQuotesRequestJsonb === 'object' 
+            ? Object.keys(orders[0].rateQuotesRequestJsonb) 
+            : [],
+          responseJsonbKeys: orders[0].rateQuotesResponseJsonb && typeof orders[0].rateQuotesResponseJsonb === 'object'
+            ? Object.keys(orders[0].rateQuotesResponseJsonb)
+            : [],
+        } : null,
+      });
+    }
+    
+    return filtered;
+  }, [orders, orderType]);
 
   // Handle page changes
   const handlePageChange = (page: number) => {
     if (onPageChange) {
       onPageChange(page);
     }
+  };
+
+  // Handle order selection
+  const handleOrderSelect = (orderId: number, checked: boolean) => {
+    setSelectedOrderIds((prev) => {
+      const newSet = new Set(prev);
+      if (checked) {
+        newSet.add(orderId);
+      } else {
+        newSet.delete(orderId);
+      }
+      return newSet;
+    });
+  };
+
+  // Handle select all
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedOrderIds(new Set(displayOrders.map((order) => order.id)));
+    } else {
+      setSelectedOrderIds(new Set());
+    }
+  };
+
+  // Extract shipment data from selected orders
+  const extractShipmentData = () => {
+    const selectedOrders = displayOrders.filter((order) => selectedOrderIds.has(order.id));
+    const shipments: Array<{
+      type: string;
+      handlingUnits: string;
+      weight: string;
+      destinationZip: string;
+    }> = [];
+
+    selectedOrders.forEach((order) => {
+      // Try to extract data from Rate Quote Request structure
+      let type = 'PALLET';
+      let handlingUnits = '';
+      let weight = '';
+      let destinationZip = '';
+
+      // Helper function to map type code to full name
+      const mapType = (typeCode: string): string => {
+        const code = String(typeCode).toUpperCase();
+        if (code === 'PL' || code.includes('PALLET')) {
+          return 'PALLET';
+        } else if (code === 'SKID' || code.includes('SKID')) {
+          return 'SKID';
+        } else if (code === 'PIECE' || code.includes('PIECE')) {
+          return 'PIECE';
+        }
+        return 'PALLET'; // Default
+      };
+
+      // Priority 1: Check rateQuotesRequestJsonb (Rate Quote Request body)
+      if (order.rateQuotesRequestJsonb && typeof order.rateQuotesRequestJsonb === 'object') {
+        const data = order.rateQuotesRequestJsonb as any;
+        
+        // Extract from commodity.handlingUnits array
+        if (data.commodity && Array.isArray(data.commodity.handlingUnits) && data.commodity.handlingUnits.length > 0) {
+          const handlingUnit = data.commodity.handlingUnits[0];
+          
+          // Type from handlingUnits[0].type (e.g., "PL")
+          if (handlingUnit.type) {
+            type = mapType(handlingUnit.type);
+          }
+          
+          // Handling Units from handlingUnits[0].count
+          if (handlingUnit.count !== undefined && handlingUnit.count !== null) {
+            handlingUnits = String(handlingUnit.count);
+          }
+          
+          // Weight from handlingUnits[0].weight
+          if (handlingUnit.weight !== undefined && handlingUnit.weight !== null) {
+            weight = String(handlingUnit.weight);
+          }
+        }
+        
+        // Destination ZIP from destination.address.postalCode
+        if (data.destination && data.destination.address && data.destination.address.postalCode) {
+          destinationZip = String(data.destination.address.postalCode);
+        }
+      }
+
+      // Priority 2: Check rateQuotesResponseJsonb (fallback)
+      if ((!handlingUnits || !weight || !destinationZip) && order.rateQuotesResponseJsonb && typeof order.rateQuotesResponseJsonb === 'object') {
+        const data = order.rateQuotesResponseJsonb as any;
+        
+        // Try to extract from response structure (may have similar structure)
+        if (!type || type === 'PALLET') {
+          if (data.commodity && Array.isArray(data.commodity.handlingUnits) && data.commodity.handlingUnits.length > 0) {
+            const handlingUnit = data.commodity.handlingUnits[0];
+            if (handlingUnit.type) {
+              type = mapType(handlingUnit.type);
+            }
+            if (!handlingUnits && handlingUnit.count !== undefined && handlingUnit.count !== null) {
+              handlingUnits = String(handlingUnit.count);
+            }
+            if (!weight && handlingUnit.weight !== undefined && handlingUnit.weight !== null) {
+              weight = String(handlingUnit.weight);
+            }
+          }
+        }
+        
+        if (!destinationZip && data.destination && data.destination.address && data.destination.address.postalCode) {
+          destinationZip = String(data.destination.address.postalCode);
+        }
+      }
+
+      // Priority 3: Check ordersJsonb (fallback)
+      if ((!handlingUnits || !weight || !destinationZip) && order.ordersJsonb && typeof order.ordersJsonb === 'object') {
+        const data = order.ordersJsonb as any;
+        
+        // Try to find type
+        if (data.type) {
+          type = mapType(data.type);
+        }
+        
+        // Try to find handling units
+        if (!handlingUnits && (data.handlingUnits || data.handling_units || data.units || data.count)) {
+          handlingUnits = String(data.handlingUnits || data.handling_units || data.units || data.count);
+        }
+        
+        // Try to find weight
+        if (!weight && (data.weight || data.weightLbs || data.weight_lbs)) {
+          weight = String(data.weight || data.weightLbs || data.weight_lbs);
+        }
+        
+        // Try to find destination ZIP
+        if (!destinationZip) {
+          if (data.destination && data.destination.address && data.destination.address.postalCode) {
+            destinationZip = String(data.destination.address.postalCode);
+          } else if (data.destinationZip || data.destination_zip || data.postalCode || data.postal_code) {
+            destinationZip = String(data.destinationZip || data.destination_zip || data.postalCode || data.postal_code);
+          }
+        }
+      }
+
+      // Priority 4: Check bolResponseJsonb (last fallback)
+      if ((!handlingUnits || !weight || !destinationZip) && order.bolResponseJsonb && typeof order.bolResponseJsonb === 'object') {
+        const data = order.bolResponseJsonb as any;
+        
+        if (!destinationZip) {
+          if (data.destination && data.destination.address && data.destination.address.postalCode) {
+            destinationZip = String(data.destination.address.postalCode);
+          } else if (data.consignee && (data.consignee.postalCode || data.consignee.postal_code || data.consignee.zipCode)) {
+            destinationZip = String(data.consignee.postalCode || data.consignee.postal_code || data.consignee.zipCode);
+          }
+        }
+        
+        if (!weight && (data.weight || data.weightLbs || data.weight_lbs)) {
+          weight = String(data.weight || data.weightLbs || data.weight_lbs);
+        }
+        
+        if (!handlingUnits && (data.handlingUnits || data.handling_units || data.units || data.count)) {
+          handlingUnits = String(data.handlingUnits || data.handling_units || data.units || data.count);
+        }
+      }
+
+      // Only add shipment if we have at least some data
+      if (handlingUnits || weight || destinationZip) {
+        shipments.push({
+          type,
+          handlingUnits: handlingUnits || '',
+          weight: weight || '',
+          destinationZip: destinationZip || '',
+        });
+      }
+    });
+
+    return shipments;
+  };
+
+  // Handle Estes Pickup button click
+  const handleEstesPickup = () => {
+    if (selectedOrderIds.size === 0) {
+      alert('Please select at least one order to proceed with Estes Pickup.');
+      return;
+    }
+
+    const shipments = extractShipmentData();
+    
+    if (shipments.length === 0) {
+      alert('No shipment data found in selected orders. Please ensure orders contain type, handling units, weight, or destination ZIP information.');
+      return;
+    }
+
+    // Encode shipments data as URL params
+    const params = new URLSearchParams();
+    params.set('shipments', JSON.stringify(shipments));
+    
+    // Navigate to estes-pickup page
+    router.push(`/3plGigaFedex/estes-pickup?${params.toString()}`);
   };
 
   const handleDeleteClick = (orderId: number) => {
@@ -160,6 +527,61 @@ export const ProcessedOrdersList = ({
       {/* Search and Actions */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-end justify-between gap-3 mb-4 sm:mb-6 relative z-50">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 flex-1 flex-wrap">
+          <div className="flex flex-col gap-1 relative" ref={logisticsDropdownRef}>
+            <span className="text-xs font-medium text-slate-900">Logistics</span>
+            <button
+              type="button"
+              onClick={() => setIsLogisticsDropdownOpen(!isLogisticsDropdownOpen)}
+              className="w-full sm:w-28 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-left text-sm text-slate-900 hover:bg-slate-50 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            >
+              {orderType}
+              <span className="float-right mt-0.5">▼</span>
+            </button>
+
+            {isLogisticsDropdownOpen && (
+              <div className="absolute top-full z-50 mt-1 w-28 rounded-md border border-slate-200 bg-white shadow-lg">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderType('All');
+                    setSelectedOrderIds(new Set());
+                    setIsLogisticsDropdownOpen(false);
+                  }}
+                  className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${
+                    orderType === 'All' ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderType('Estes');
+                    setSelectedOrderIds(new Set());
+                    setIsLogisticsDropdownOpen(false);
+                  }}
+                  className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${
+                    orderType === 'Estes' ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
+                  }`}
+                >
+                  Estes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOrderType('XPO');
+                    setSelectedOrderIds(new Set());
+                    setIsLogisticsDropdownOpen(false);
+                  }}
+                  className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${
+                    orderType === 'XPO' ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
+                  }`}
+                >
+                  XPO
+                </button>
+              </div>
+            )}
+          </div>
           <label className="flex flex-col gap-1 flex-1 sm:flex-initial">
             <span className="text-xs font-medium text-slate-900">Search</span>
             <div className="relative">
@@ -223,6 +645,17 @@ export const ProcessedOrdersList = ({
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          {orderType === 'All' && (
+            <button
+              onClick={handleEstesPickup}
+              disabled={selectedOrderIds.size === 0}
+              className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium w-full sm:w-auto justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Truck className="h-4 w-4" />
+              <span className="hidden sm:inline">Estes Pickup</span>
+              <span className="sm:hidden">Estes Pickup</span>
+            </button>
+          )}
           <button
             onClick={() => setDateRangeDeleteModalOpen(true)}
             className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium w-full sm:w-auto justify-center"
@@ -238,8 +671,17 @@ export const ProcessedOrdersList = ({
       {displayOrders.length === 0 && !loading ? (
         <div className="flex flex-col items-center justify-center h-64 text-slate-500 p-8">
           <p className="text-sm">
-            {searchQuery ? 'No orders match your search' : 'No processed orders found'}
+            {orderType !== 'All' 
+              ? `No ${orderType} orders found${searchQuery ? ' matching your search' : ''}`
+              : searchQuery 
+                ? 'No orders match your search' 
+                : 'No processed orders found'}
           </p>
+          {orderType !== 'All' && process.env.NODE_ENV === 'development' && (
+            <p className="text-xs mt-2 text-slate-400">
+              Debug: Check console for filtering details. Make sure orders have shippingCompany in rateQuotesRequestJsonb or rateQuotesResponseJsonb.
+            </p>
+          )}
         </div>
       ) : (
         <div className="flex-1 overflow-hidden relative">
@@ -248,6 +690,14 @@ export const ProcessedOrdersList = ({
               <table className="min-w-full divide-y divide-slate-200">
                 <thead className="bg-slate-100 border-b border-slate-200 sticky top-0 z-20">
                   <tr>
+                    <th className="px-3 sm:px-6 py-3 text-center text-xs font-bold text-slate-700 uppercase tracking-wider w-12">
+                      <input
+                        type="checkbox"
+                        checked={displayOrders.length > 0 && selectedOrderIds.size === displayOrders.length}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                      />
+                    </th>
                     <th className="px-3 sm:px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
                       ID
                     </th>
@@ -277,6 +727,14 @@ export const ProcessedOrdersList = ({
                       key={order.id}
                       className="bg-slate-50 hover:bg-slate-100 transition-colors"
                     >
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedOrderIds.has(order.id)}
+                          onChange={(e) => handleOrderSelect(order.id, e.target.checked)}
+                          className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                        />
+                      </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-slate-900">
                           #{order.id}

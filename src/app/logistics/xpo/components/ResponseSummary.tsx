@@ -11,6 +11,7 @@ type ResponseSummaryProps = {
     orderOnMarketPlace?: string;
     ordersJsonb?: Record<string, unknown>;
   };
+  rateQuotesRequestJsonb?: Record<string, unknown>;
   rateQuotesResponseJsonb?: Record<string, unknown>;
   bolResponseJsonb?: Record<string, unknown>;
   pickupResponseJsonb?: Record<string, unknown>;
@@ -26,6 +27,7 @@ type ResponseSummaryProps = {
 
 export const ResponseSummary = ({
   orderData,
+  rateQuotesRequestJsonb,
   rateQuotesResponseJsonb,
   bolResponseJsonb,
   pickupResponseJsonb,
@@ -40,6 +42,7 @@ export const ResponseSummary = ({
 }: ResponseSummaryProps) => {
   const [showSections, setShowSections] = useState<Record<string, boolean>>({
     orderInfo: true,
+    rateQuoteRequest: true,
     rateQuote: true,
     bol: true,
     pickup: true,
@@ -165,10 +168,16 @@ export const ResponseSummary = ({
         throw new Error('Order Marketplace is required. Please ensure the order data contains a marketplace.');
       }
 
+      // Only include rateQuotesRequestJsonb if it has actual data
+      const hasRateQuotesRequest = rateQuotesRequestJsonb && 
+                                   typeof rateQuotesRequestJsonb === 'object' && 
+                                   Object.keys(rateQuotesRequestJsonb).length > 0;
+      
       const payload = {
         sku: skuStr,
         orderOnMarketPlace: orderOnMarketPlaceStr,
         ordersJsonb: orderData?.ordersJsonb || {},
+        ...(hasRateQuotesRequest && { rateQuotesRequestJsonb: rateQuotesRequestJsonb }),
         rateQuotesResponseJsonb: rateQuotesResponseJsonb,
         bolResponseJsonb: bolResponseJsonb,
         pickupResponseJsonb: pickupResponseJsonb,
@@ -340,6 +349,49 @@ export const ResponseSummary = ({
                     </button>
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Rate Quote Request */}
+        <div className="border border-slate-200 rounded-lg overflow-hidden mb-3 sm:mb-4">
+          <div className="w-full px-3 sm:px-4 lg:px-6 py-3 sm:py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors">
+            <div className="flex items-center gap-2 flex-1">
+              <button
+                type="button"
+                onClick={() => toggleSection('rateQuoteRequest')}
+                className="text-left"
+              >
+                <h3 className="text-base sm:text-lg font-bold text-slate-900">Rate Quote Request</h3>
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => toggleSection('rateQuoteRequest')}
+              className="text-slate-500 hover:text-slate-700"
+            >
+              {showSections.rateQuoteRequest ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+            </button>
+          </div>
+          {showSections.rateQuoteRequest && (
+            <div className="p-3 sm:p-4 lg:p-6 space-y-3 sm:space-y-4">
+              {rateQuotesRequestJsonb ? (
+                <div className="relative">
+                  <pre className="px-4 py-3 border border-slate-300 bg-slate-50 text-slate-900 rounded-lg overflow-auto max-h-64 text-sm font-mono">
+                    {JSON.stringify(rateQuotesRequestJsonb, null, 2)}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => copyToClipboard(JSON.stringify(rateQuotesRequestJsonb, null, 2))}
+                    className="absolute top-2 right-2 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                    title="Copy to clipboard"
+                  >
+                    <Copy size={16} />
+                  </button>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No rate quote request available</p>
               )}
             </div>
           )}

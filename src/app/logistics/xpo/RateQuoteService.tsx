@@ -3481,6 +3481,7 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
           )}
           <ResponseSummary
             orderData={orderData || undefined}
+            rateQuotesRequestJsonb={requestPayload || undefined}
             rateQuotesResponseJsonb={response?.data || undefined}
             bolResponseJsonb={bolResponseData?.data || undefined}
             pickupResponseJsonb={pickupResponseData?.data || undefined}
