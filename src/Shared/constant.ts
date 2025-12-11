@@ -1,6 +1,5 @@
 export const MARKETPLACES = [
   'Amazon',
-  'Walmart',
   'eBay',
   'Shopify',
   'Overstock',

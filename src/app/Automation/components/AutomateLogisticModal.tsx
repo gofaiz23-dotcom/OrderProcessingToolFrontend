@@ -296,7 +296,7 @@ export const AutomateLogisticModal = ({
               : '-';
 
             return (
-              <div key={order.id} className={`space-y-4 border-2 ${colorScheme.border} rounded-lg p-4 sm:p-6 ${colorScheme.bg}`}>
+              <div key={order.id} className={`space-y-4 border-2 rounded-lg p-4 sm:p-6 ${colorScheme.bg}`}>
                 {/* Card 1: Product Name, SKU, Price - Full Width */}
                 <div className={`w-full ${colorScheme.cardBg} rounded-lg border-2 ${colorScheme.cardBorder} p-4 sm:p-6 shadow-sm relative`}>
                   <h3 className={`text-xs font-semibold ${colorScheme.headerText} uppercase tracking-wider mb-4`}>
