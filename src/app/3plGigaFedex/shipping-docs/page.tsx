@@ -624,7 +624,7 @@ export default function ShippingDocsPage() {
                 onClick={() => setTimeDetailsModal({ record: null })}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                <X size={20} />
+                <X size={20} className="text-slate-900" />
               </button>
             </div>
             
@@ -709,7 +709,7 @@ export default function ShippingDocsPage() {
             <div className="mt-6 flex justify-end gap-3">
               <button
                 onClick={() => setTimeDetailsModal({ record: null })}
-                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                className="px-4 py-2 bg-slate-100 text-slate-900 rounded-lg hover:bg-slate-200 transition-colors font-medium"
               >
                 Close
               </button>
@@ -728,7 +728,7 @@ export default function ShippingDocsPage() {
                 onClick={() => setPreviewFile(null)}
                 className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
               >
-                <X size={20} />
+                <X size={20} className="text-slate-900" />
               </button>
             </div>
             <div className="border border-slate-200 rounded-lg p-4">
@@ -749,7 +749,7 @@ export default function ShippingDocsPage() {
               </a>
               <button
                 onClick={() => setPreviewFile(null)}
-                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
+                className="px-4 py-2 bg-slate-100 text-slate-900 rounded-lg hover:bg-slate-200 transition-colors font-medium"
               >
                 Close
               </button>
@@ -874,7 +874,7 @@ function UpdateModal({ record, isOpen, onClose, onSave, loading = false, error }
             className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
             disabled={loading}
           >
-            <X size={20} />
+            <X size={20} className="text-slate-900" />
           </button>
         </div>
 

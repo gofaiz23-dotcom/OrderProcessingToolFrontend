@@ -204,7 +204,7 @@ export default function ScrapBolPage() {
                       Start Date <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
-                      <Calendar size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                      <Calendar size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none z-10" />
                       <input
                         type="date"
                         value={startDate}
@@ -212,9 +212,13 @@ export default function ScrapBolPage() {
                         max={maxDateString}
                         required
                         disabled={scraping}
-                        className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                        className="w-full pl-10 pr-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed bg-white text-slate-900 font-medium"
+                        style={{ colorScheme: 'light' }}
                       />
                     </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      mm/dd/yyyy
+                    </p>
                   </div>
 
                   {/* End Date */}
@@ -223,7 +227,7 @@ export default function ScrapBolPage() {
                       End Date <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
-                      <Calendar size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+                      <Calendar size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none z-10" />
                       <input
                         type="date"
                         value={endDate}
@@ -232,9 +236,13 @@ export default function ScrapBolPage() {
                         max={maxDateString}
                         required
                         disabled={scraping || !startDate}
-                        className="w-full pl-10 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed"
+                        className="w-full pl-10 pr-4 py-2.5 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed bg-white text-slate-900 font-medium"
+                        style={{ colorScheme: 'light' }}
                       />
                     </div>
+                    <p className="text-xs text-slate-500 mt-1">
+                      mm/dd/yyyy
+                    </p>
                     {startDate && (
                       <p className="text-xs text-slate-500 mt-1">
                         Must be greater than or equal to start date

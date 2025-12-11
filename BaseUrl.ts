@@ -25,7 +25,7 @@ export const getBackendBaseUrl = () => {
 
 // Get upload path from environment variable
 const getUploadPath = () => {
-  return process.env.NEXT_PUBLIC_UPLOAD_PATH || 'FhsOrdersMedia';
+  return process.env.NEXT_PUBLIC_UPLOAD_PATH;
 };
 
 export const buildApiUrl = (resourcePath = '/') => {
@@ -43,8 +43,8 @@ export const buildFileUrl = (filePath: string) => {
   }
  
   let backendUrl = getBackendBaseUrl();
-  const uploadPath = getUploadPath();
- 
+  const uploadPath = getUploadPath() || 'uploads';
+
   // Fallback to default if backendUrl is invalid
   if (!backendUrl || (!backendUrl.startsWith('http://') && !backendUrl.startsWith('https://'))) {
     if (isDevelopment) {

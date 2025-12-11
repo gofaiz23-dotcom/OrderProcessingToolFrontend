@@ -1,4 +1,5 @@
 import { buildApiUrl } from '../../../../BaseUrl';
+import { parseJsonSafely } from '@/app/utils/Orders';
 
 export type ShippedOrder = {
   id: number;
@@ -80,6 +81,22 @@ export const getAllShippedOrders = async (
 
   const data = await res.json();
   
+  // Debug: Log raw API response in development
+  if (process.env.NODE_ENV === 'development') {
+    const sampleOrder = data.orders?.[0] || data.data?.[0] || (Array.isArray(data) ? data[0] : null);
+    console.log('getAllShippedOrders - Raw API response:', {
+      hasOrders: !!data.orders,
+      hasData: !!data.data,
+      isArray: Array.isArray(data),
+      sampleOrder,
+      sampleOrderKeys: sampleOrder ? Object.keys(sampleOrder) : [],
+      hasRateQuotesRequestJsonb: sampleOrder ? 'rateQuotesRequestJsonb' in sampleOrder : false,
+      rateQuotesRequestJsonbValue: sampleOrder?.rateQuotesRequestJsonb,
+      // Check for alternative field names
+      allFieldsWithJsonb: sampleOrder ? Object.keys(sampleOrder).filter(k => k.toLowerCase().includes('jsonb') || k.toLowerCase().includes('request')) : [],
+    });
+  }
+  
   // Handle different response structures
   let orders: ShippedOrder[] = [];
   let pagination = null;
@@ -120,8 +137,76 @@ export const getAllShippedOrders = async (
     };
   }
   
+  // Normalize JSONB fields - handle both string and object cases
+  const normalizedOrders = orders.map((order, index) => {
+    // Debug: Log raw order before normalization
+    if (process.env.NODE_ENV === 'development' && index === 0) {
+      console.log('getAllShippedOrders - Raw order before normalization:', {
+        id: order.id,
+        hasRateQuotesRequestJsonb: 'rateQuotesRequestJsonb' in order,
+        rateQuotesRequestJsonb: order.rateQuotesRequestJsonb,
+        rateQuotesRequestJsonbType: typeof order.rateQuotesRequestJsonb,
+        allKeys: Object.keys(order),
+        // Check for alternative field names that might exist
+        hasRateQuotesRequest: 'rateQuotesRequest' in order,
+        hasRateQuotesRequestJson: 'rateQuotesRequestJson' in order,
+        jsonbFields: Object.keys(order).filter(k => k.toLowerCase().includes('jsonb') || k.toLowerCase().includes('request')),
+      });
+      
+      // If rateQuotesRequestJsonb is missing, warn about potential backend issue
+      if (!('rateQuotesRequestJsonb' in order)) {
+        console.warn('⚠️ rateQuotesRequestJsonb is missing from API response. Backend may not be returning this field even though it is being saved.');
+      }
+    }
+    
+    const normalizeJsonb = (jsonb: unknown): Record<string, unknown> | undefined => {
+      // Convert null to undefined (TypeScript optional fields use undefined)
+      if (jsonb === null || jsonb === undefined) {
+        return undefined;
+      }
+      
+      // If it's already an object (and not null), return it
+      if (typeof jsonb === 'object' && !Array.isArray(jsonb)) {
+        return jsonb as Record<string, unknown>;
+      }
+      
+      // If it's a string, try to parse it
+      if (typeof jsonb === 'string' && jsonb.trim()) {
+        const parsed = parseJsonSafely(jsonb);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      }
+      
+      // If we can't normalize it, return undefined (field doesn't exist)
+      return undefined;
+    };
+    
+    const normalized = {
+      ...order,
+      ordersJsonb: normalizeJsonb(order.ordersJsonb) || order.ordersJsonb,
+      // Preserve original value if normalization returns undefined but original exists
+      rateQuotesRequestJsonb: normalizeJsonb(order.rateQuotesRequestJsonb) ?? order.rateQuotesRequestJsonb,
+      rateQuotesResponseJsonb: normalizeJsonb(order.rateQuotesResponseJsonb) ?? order.rateQuotesResponseJsonb,
+      bolResponseJsonb: normalizeJsonb(order.bolResponseJsonb) ?? order.bolResponseJsonb,
+      pickupResponseJsonb: normalizeJsonb(order.pickupResponseJsonb) ?? order.pickupResponseJsonb,
+    };
+    
+    // Debug: Log normalized order
+    if (process.env.NODE_ENV === 'development' && index === 0) {
+      console.log('getAllShippedOrders - Normalized order:', {
+        id: normalized.id,
+        hasRateQuotesRequestJsonb: 'rateQuotesRequestJsonb' in normalized,
+        rateQuotesRequestJsonb: normalized.rateQuotesRequestJsonb,
+        rateQuotesRequestJsonbType: typeof normalized.rateQuotesRequestJsonb,
+      });
+    }
+    
+    return normalized;
+  });
+  
   return {
-    orders,
+    orders: normalizedOrders,
     pagination: pagination || {
       page: 1,
       limit: 0,
