@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
-import { X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { X, Loader2 } from 'lucide-react';
 import type { Order } from '@/app/types/order';
-import { XPORateQuote } from './XPORateQuote';
-import { EstesRateQuote } from './EstesRateQuote';
+import { XPORateQuote, type XPORateQuoteRef } from './XPORateQuote';
+import { EstesRateQuote, type EstesRateQuoteRef } from './EstesRateQuote';
 
 type LTLRateQuoteModalProps = {
   isOpen: boolean;
@@ -17,6 +17,10 @@ export const LTLRateQuoteModal = ({
   order,
   onClose,
 }: LTLRateQuoteModalProps) => {
+  const xpoRef = useRef<XPORateQuoteRef>(null);
+  const estesRef = useRef<EstesRateQuoteRef>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
   // Handle Escape key to close modal
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -32,6 +36,19 @@ export const LTLRateQuoteModal = ({
       };
     }
   }, [isOpen, onClose]);
+
+  const handleGetBothQuotes = async () => {
+    setIsLoading(true);
+    try {
+      // Trigger both quote generations simultaneously
+      await Promise.all([
+        xpoRef.current?.getQuote().catch(err => console.error('XPO quote error:', err)),
+        estesRef.current?.getQuote().catch(err => console.error('Estes quote error:', err)),
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -49,12 +66,28 @@ export const LTLRateQuoteModal = ({
           <h2 className="text-lg sm:text-xl font-bold text-slate-900">
             LTL Rate Quote - Order #{order.id}
           </h2>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-full text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleGetBothQuotes}
+              disabled={isLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2 text-sm font-medium"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Getting Quotes...
+                </>
+              ) : (
+                'Get Rate Quote'
+              )}
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 rounded-full text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Content - Split Screen */}
@@ -65,7 +98,7 @@ export const LTLRateQuoteModal = ({
               <h3 className="text-base font-semibold text-blue-900 mb-4 pb-2 border-b-2 border-blue-300">
                 XPO Rate Quote
               </h3>
-              <XPORateQuote order={order} />
+              <XPORateQuote ref={xpoRef} order={order} />
             </div>
           </div>
 
@@ -75,7 +108,7 @@ export const LTLRateQuoteModal = ({
               <h3 className="text-base font-semibold text-green-900 mb-4 pb-2 border-b-2 border-green-300">
                 Estes Rate Quote
               </h3>
-              <EstesRateQuote order={order} />
+              <EstesRateQuote ref={estesRef} order={order} />
             </div>
           </div>
         </div>
