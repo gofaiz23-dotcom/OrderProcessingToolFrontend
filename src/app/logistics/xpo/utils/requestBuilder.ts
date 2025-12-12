@@ -287,14 +287,31 @@ export const buildXPORateQuoteRequestBody = (params: BuildXPORateQuoteParams) =>
           commodityItem.nmfcItemCd = itemWithNmfcItemCd.nmfcItemCd.trim();
         }
         
-        // Include dimensions if they exist (even if 0, as per correct payload structure)
+        // Include dimensions if they exist
+        // XPO API requires dimensions to be at least 1, not 0
         if (item.dimensions) {
-          commodityItem.dimensions = {
-            length: item.dimensions.length || 0,
-            width: item.dimensions.width || 0,
-            height: item.dimensions.height || 0,
-            dimensionsUom: item.dimensions.dimensionsUom || 'INCH',
-          };
+          const length = item.dimensions.length || 0;
+          const width = item.dimensions.width || 0;
+          const height = item.dimensions.height || 0;
+          
+          // Only include dimensions if at least one dimension is greater than 0
+          // If all are 0, set them to 1 as minimum (API requirement)
+          if (length > 0 || width > 0 || height > 0) {
+            commodityItem.dimensions = {
+              length: length > 0 ? length : 1,
+              width: width > 0 ? width : 1,
+              height: height > 0 ? height : 1,
+              dimensionsUom: item.dimensions.dimensionsUom || 'INCH',
+            };
+          } else {
+            // If all dimensions are 0, set to 1 as minimum (API requirement)
+            commodityItem.dimensions = {
+              length: 1,
+              width: 1,
+              height: 1,
+              dimensionsUom: item.dimensions.dimensionsUom || 'INCH',
+            };
+          }
         }
         
         return commodityItem;

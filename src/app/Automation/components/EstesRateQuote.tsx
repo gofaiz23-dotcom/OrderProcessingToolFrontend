@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, forwardRef, useImperativeHandle, useRef } from 'react';
 import { Loader2, ChevronDown, ChevronUp, Info, Plus } from 'lucide-react';
 import type { Order } from '@/app/types/order';
 import { buildEstesRequestBody } from '@/app/logistics/estes/utils/requestBuilder';
@@ -11,13 +11,19 @@ import { ESTES_ACCOUNTS, ESTES_RATE_QUOTE_DEFAULTS, ESTES_RATE_QUOTE_FORM_DEFAUL
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
+import { ESTESBOLForm } from './ESTESBOL/ESTESBOLForm';
 
 type EstesRateQuoteProps = {
   order: Order;
+  subSKUs?: string[];
 };
 
 export type EstesRateQuoteRef = {
   getQuote: () => Promise<void>;
+  hasQuotes: () => boolean;
+  getSelectedQuote: () => any | null;
+  showBOLForm: () => void;
+  isBOLFormVisible: () => boolean;
 };
 
 type HandlingUnit = {
@@ -94,7 +100,7 @@ const getTodayDate = () => {
   return `${year}-${month}-${day}`;
 };
 
-export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>(({ order }, ref) => {
+export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>(({ order, subSKUs = [] }, ref) => {
   const { getToken, isTokenExpired, refreshToken, isSessionActive } = useLogisticsStore();
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<any>(null);
@@ -103,6 +109,13 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
   const [isMounted, setIsMounted] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [showAccountInfo, setShowAccountInfo] = useState(true);
+  const [requestPayload, setRequestPayload] = useState<any>(null);
+  const [showPayload, setShowPayload] = useState(false);
+  const [errorResponse, setErrorResponse] = useState<any>(null);
+  const [showErrorResponse, setShowErrorResponse] = useState(false);
+  const [selectedQuote, setSelectedQuote] = useState<any | null>(null);
+  const [showBOLForm, setShowBOLForm] = useState(false);
+  const bolFormRef = useRef<HTMLDivElement>(null);
 
   // Account Information
   const [myAccount, setMyAccount] = useState(ESTES_ACCOUNTS[0]?.accountNumber || '');
@@ -152,6 +165,15 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
     return accessorials;
   });
 
+  // Format description with subSKUs
+  const formatDescriptionWithSubSKUs = (baseDescription: string, subSKUs: string[]): string => {
+    if (subSKUs.length === 0) {
+      return baseDescription;
+    }
+    const subSKUsString = subSKUs.join(', ');
+    return `${baseDescription} ${subSKUsString}`;
+  };
+
   // Handling Units
   const defaultHandlingUnit: HandlingUnit = {
     id: 'default-unit',
@@ -166,7 +188,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
     nmfc: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultNMFC,
     sub: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultSub,
     hazardous: false,
-    description: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription,
+    description: formatDescriptionWithSubSKUs(ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription, subSKUs),
     items: [],
   };
   const [handlingUnits, setHandlingUnits] = useState<HandlingUnit[]>([defaultHandlingUnit]);
@@ -341,22 +363,57 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
       }
     }
 
-    // Ship Date
-    const orderDate = getJsonbValue(orderJsonb, 'Order Date') ||
-                     getJsonbValue(orderJsonb, 'Date') ||
-                     getJsonbValue(orderJsonb, 'Ship Date');
-    if (orderDate) {
-      try {
-        const date = new Date(orderDate);
-        if (!isNaN(date.getTime())) {
-          const formattedDate = date.toISOString().split('T')[0];
-          setShipDate(formattedDate);
-        }
-      } catch (e) {
-        // If parsing fails, use today's date
-      }
-    }
+    // Ship Date - Always defaults to today's date, user can change it manually
+    // We don't auto-populate from order data to ensure it always starts with today
   }, [order]);
+
+  // Update handling unit descriptions with subSKUs when subSKUs change
+  useEffect(() => {
+    if (subSKUs.length > 0) {
+      const baseDescription = ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription;
+      const formattedDescription = formatDescriptionWithSubSKUs(baseDescription, subSKUs);
+      
+      setHandlingUnits((prevUnits) => {
+        return prevUnits.map((unit) => {
+          // Update if description is empty, just the base, or starts with base (but not already formatted)
+          const shouldUpdate = 
+            !unit.description || 
+            unit.description === '' ||
+            unit.description === baseDescription ||
+            (unit.description.startsWith(baseDescription) && !unit.description.includes(subSKUs.join(', ')));
+          
+          return {
+            ...unit,
+            description: shouldUpdate ? formattedDescription : unit.description,
+          };
+        });
+      });
+    }
+  }, [subSKUs]);
+
+  // Listen for quote selection events
+  useEffect(() => {
+    const handleQuoteSelected = (e: CustomEvent) => {
+      const { quoteId, index, carrier } = e.detail;
+      if (carrier === 'estes' && response?.data?.data?.[index]) {
+        setSelectedQuote(response.data.data[index]);
+      }
+    };
+    window.addEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
+    return () => {
+      window.removeEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
+    };
+  }, [response]);
+
+  // Auto-scroll to BOL form when it's shown
+  useEffect(() => {
+    console.log('showBOLForm changed:', showBOLForm);
+    if (showBOLForm && bolFormRef.current) {
+      setTimeout(() => {
+        bolFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [showBOLForm]);
 
   // Initialize token on mount
   useEffect(() => {
@@ -414,7 +471,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
       nmfc: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultNMFC,
       sub: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultSub,
       hazardous: false,
-      description: ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription,
+      description: formatDescriptionWithSubSKUs(ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription, subSKUs),
       items: [],
     };
     setHandlingUnits([...handlingUnits, newUnit]);
@@ -453,6 +510,10 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
     setLoading(true);
     setError(null);
     setResponse(null);
+    setRequestPayload(null);
+    setShowPayload(false);
+    setErrorResponse(null);
+    setShowErrorResponse(false);
 
     try {
       const normalizedCarrier = 'estes';
@@ -507,6 +568,12 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
         ...requestBody,
       };
 
+      // Store request payload for UI display
+      setRequestPayload(payload);
+      
+      // Log request payload for debugging
+      console.log('🚀 Estes Rate Quote Request Payload:', JSON.stringify(payload, null, 2));
+
       const res = await fetch(buildApiUrl('/Logistics/create-rate-quote'), {
         method: 'POST',
         headers: {
@@ -524,8 +591,9 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
         }
 
         let errorMessage = `Rate quote creation failed: ${res.statusText}`;
+        let errorData: any = null;
         try {
-          const errorData = await res.json();
+          errorData = await res.json();
           if (errorData.message) {
             errorMessage = errorData.message;
           } else if (errorData.error) {
@@ -537,12 +605,32 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
           // Use default error message
         }
 
+        // Store error response for UI display
+        setErrorResponse({
+          status: res.status,
+          statusText: res.statusText,
+          errorMessage,
+          errorData,
+        });
+        setShowErrorResponse(true);
+        
+        // Log error response for debugging
+        console.error('❌ Estes Rate Quote Error Response:', {
+          status: res.status,
+          statusText: res.statusText,
+          errorMessage,
+          errorData: errorData ? JSON.stringify(errorData, null, 2) : 'Could not parse error response',
+        });
+
         throw new Error(errorMessage);
       }
 
       const data = await res.json();
       setResponse(data);
       setShowAccountInfo(false);
+      
+      // Log response for debugging
+      console.log('✅ Estes Rate Quote Response:', JSON.stringify(data, null, 2));
     } catch (err) {
       setError(err);
     } finally {
@@ -553,6 +641,10 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
   // Expose getQuote function via ref
   useImperativeHandle(ref, () => ({
     getQuote: () => handleGetQuote(),
+    hasQuotes: () => response && response.data?.data && response.data.data.length > 0 && response.data.data.some((q: any) => q.rateFound && q.quoteRate?.totalCharges && parseFloat(q.quoteRate.totalCharges) > 0),
+    getSelectedQuote: () => selectedQuote,
+    showBOLForm: () => setShowBOLForm(true),
+    isBOLFormVisible: () => showBOLForm,
   }));
 
   // Calculate totals
@@ -795,7 +887,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                             maxLength={2}
                             className="px-2 py-1.5 text-xs border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                           />
-                        </div>
+          </div>
 
                         <div className="space-y-1">
                           <label className="block text-xs font-semibold text-slate-900">
@@ -825,10 +917,10 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                               </option>
                             ))}
                           </select>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+          </div>
+          </div>
+        </div>
+      </div>
 
                   {/* Destination */}
                   <div className="space-y-3">
@@ -983,7 +1075,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                         Handling Unit {index + 1}
                       </h4>
                       {handlingUnits.length > 1 && (
-                        <button
+      <button
                           type="button"
                           onClick={() => removeHandlingUnit(unit.id)}
                           className="text-red-600 hover:text-red-700 text-xs"
@@ -1130,12 +1222,12 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
 
                     <div className="mt-3 space-y-1">
                       <label className="block text-xs font-semibold text-slate-900">Description</label>
-                      <input
-                        type="text"
+                      <textarea
                         value={unit.description || ''}
                         onChange={(e) => updateHandlingUnit(unit.id, 'description', e.target.value)}
                         placeholder="Enter description"
-                        className="w-full px-2 py-1.5 text-xs border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                        rows={3}
+                        className="w-full px-2 py-1.5 text-xs border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 resize-y min-h-[60px]"
                       />
                     </div>
                   </div>
@@ -1148,7 +1240,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                 >
                   <Plus size={14} />
                   ADD HANDLING UNIT
-                </button>
+      </button>
 
                 {/* Summary */}
                 <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
@@ -1191,10 +1283,25 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
           )}
       </div>
 
-        {/* Submit Button */}
-        <div className="flex justify-end">
+      </form>
+
+      {/* Submit Button - Outside dropdown */}
+      <div className="flex justify-end">
+        {response && response.data?.data && response.data.data.length > 0 && response.data.data.some((q: any) => q.rateFound && q.quoteRate?.totalCharges && parseFloat(q.quoteRate.totalCharges) > 0) ? (
+          <button
+            type="button"
+            onClick={() => {
+              console.log('Create BOL clicked, showBOLForm will be set to true', { selectedQuote, showBOLForm });
+              setShowBOLForm(true);
+            }}
+            className="px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm flex items-center justify-center gap-2"
+          >
+            Create BOL
+          </button>
+        ) : (
       <button
-            type="submit"
+            type="button"
+        onClick={handleGetQuote}
             disabled={!isMounted || loading}
             className="px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm disabled:bg-green-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
       >
@@ -1207,8 +1314,8 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
               'GET QUOTE'
         )}
       </button>
-        </div>
-      </form>
+        )}
+      </div>
 
       {/* Error Display */}
       {error && (
@@ -1225,7 +1332,73 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
             {response.data.data.map((quote: any, index: number) => (
               <EstesQuoteCard key={quote.quoteId || index} quote={quote} index={index} />
             ))}
+                  </div>
                 </div>
+      )}
+
+      {/* Combined Payload Display (Request & Response) */}
+      {(requestPayload || response) && (
+        <div className="mt-4 bg-white rounded-lg border border-slate-200 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowPayload(!showPayload)}
+            className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+          >
+            <h4 className="text-sm font-semibold text-slate-900">📋 Request & Response Payload</h4>
+            {showPayload ? (
+              <ChevronUp className="text-slate-600" size={18} />
+            ) : (
+              <ChevronDown className="text-slate-600" size={18} />
+            )}
+          </button>
+          {showPayload && (
+            <div className="p-4 bg-slate-50 space-y-4">
+              {/* Request Payload */}
+              {requestPayload && (
+                <div>
+                  <h5 className="text-xs font-semibold text-green-900 mb-2">📤 Request Payload</h5>
+                  <pre className="text-xs text-slate-800 bg-white p-3 rounded border border-slate-200 overflow-x-auto max-h-96 overflow-y-auto">
+                    {JSON.stringify(requestPayload, null, 2)}
+                  </pre>
+                  </div>
+              )}
+              
+              {/* Response Payload */}
+              {response && (
+                <div>
+                  <h5 className="text-xs font-semibold text-green-900 mb-2">📥 Response Payload</h5>
+                  <pre className="text-xs text-slate-800 bg-white p-3 rounded border border-slate-200 overflow-x-auto max-h-96 overflow-y-auto">
+                    {JSON.stringify(response, null, 2)}
+                  </pre>
+                </div>
+              )}
+                </div>
+          )}
+              </div>
+      )}
+
+      {/* Error Response Display */}
+      {errorResponse && (
+        <div className="mt-4 bg-white rounded-lg border border-red-200 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowErrorResponse(!showErrorResponse)}
+            className="w-full px-4 py-3 flex items-center justify-between bg-red-50 hover:bg-red-100 transition-colors"
+          >
+            <h4 className="text-sm font-semibold text-red-900">❌ Error Response</h4>
+            {showErrorResponse ? (
+              <ChevronUp className="text-red-600" size={18} />
+            ) : (
+              <ChevronDown className="text-red-600" size={18} />
+            )}
+              </button>
+          {showErrorResponse && (
+            <div className="p-4 bg-slate-50">
+              <pre className="text-xs text-slate-800 bg-white p-3 rounded border border-slate-200 overflow-x-auto max-h-96 overflow-y-auto">
+                {JSON.stringify(errorResponse, null, 2)}
+              </pre>
+            </div>
+      )}
         </div>
       )}
 
@@ -1243,6 +1416,42 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
         }}
         carrier="estes"
       />
+
+      {/* BOL Form - Show when Create BOL is clicked */}
+      {showBOLForm && (
+        <div ref={bolFormRef} className="mt-8 pt-8 border-t-2 border-slate-300">
+          <ESTESBOLForm
+            order={order}
+            subSKUs={subSKUs}
+            quoteData={{
+              quote: selectedQuote,
+              formData: {
+                myAccount,
+                role,
+                term,
+                shipDate,
+                shipTime,
+                requestorName,
+                requestorPhone,
+                requestorEmail,
+                originCity,
+                originState,
+                originZipCode,
+                originCountry,
+                destinationCity,
+                destinationState,
+                destinationZipCode,
+                destinationCountry,
+                handlingUnits,
+                liftGateService,
+                residentialDelivery,
+                appointmentRequest,
+              },
+            }}
+            onBack={() => setShowBOLForm(false)}
+          />
+        </div>
+      )}
     </div>
   );
 });

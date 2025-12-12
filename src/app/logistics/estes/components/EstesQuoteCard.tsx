@@ -10,6 +10,7 @@ type EstesQuoteCardProps = {
 
 export const EstesQuoteCard = ({ quote, index }: EstesQuoteCardProps) => {
   const [showChargesPopup, setShowChargesPopup] = useState(false);
+  const [isSelected, setIsSelected] = useState(false);
   const popupRef = useRef<HTMLDivElement>(null);
   const chargesTextRef = useRef<HTMLDivElement>(null);
 
@@ -42,12 +43,59 @@ export const EstesQuoteCard = ({ quote, index }: EstesQuoteCardProps) => {
     }
   }, [showChargesPopup]);
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // Don't trigger selection if clicking on buttons, links, or popup triggers
+    const target = e.target as HTMLElement;
+    if (
+      target.closest('button') ||
+      target.closest('a') ||
+      target.closest('[data-no-select]') ||
+      chargesTextRef.current?.contains(target)
+    ) {
+      return;
+    }
+    
+    if (quote.rateFound && quote.quoteRate?.totalCharges && parseFloat(quote.quoteRate.totalCharges) > 0) {
+      setIsSelected(true);
+      // Unselect all other quotes (both XPO and Estes) by dispatching a custom event with carrier identifier
+      window.dispatchEvent(new CustomEvent('quoteSelected', { 
+        detail: { 
+          quoteId: quote.quoteId, 
+          index,
+          carrier: 'estes' // Identify this as an Estes quote
+        } 
+      }));
+    }
+  };
+
+  // Listen for selection events from other cards (both XPO and Estes)
+  useEffect(() => {
+    const handleQuoteSelected = (e: CustomEvent) => {
+      const { index: selectedIndex, carrier: selectedCarrier } = e.detail;
+      // Deselect if it's a different quote (different carrier OR same carrier but different index)
+      const isThisQuote = selectedCarrier === 'estes' && selectedIndex === index;
+      if (!isThisQuote) {
+        setIsSelected(false);
+      } else {
+        setIsSelected(true);
+      }
+    };
+    window.addEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
+    return () => {
+      window.removeEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
+    };
+  }, [index]);
+
   return (
     <div
-      className={`border-2 rounded-lg p-3 sm:p-4 lg:p-5 transition-all ${
-        index === 0
-          ? 'border-yellow-400 bg-yellow-50'
-          : 'border-slate-300 bg-white hover:border-slate-400'
+      onClick={handleCardClick}
+      data-quote-selected={isSelected}
+      className={`border-2 rounded-lg p-3 sm:p-4 lg:p-5 transition-all cursor-pointer ${
+        isSelected
+          ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+          : quote.rateFound && quote.quoteRate?.totalCharges && parseFloat(quote.quoteRate.totalCharges) > 0
+          ? 'border-slate-300 bg-white hover:border-blue-300 hover:bg-blue-50'
+          : 'border-slate-300 bg-slate-50 cursor-not-allowed opacity-60'
       }`}
     >
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-0 mb-3 sm:mb-4">
@@ -76,7 +124,11 @@ export const EstesQuoteCard = ({ quote, index }: EstesQuoteCardProps) => {
               {quote.chargeItems && quote.chargeItems.length > 0 ? (
                 <div
                   ref={chargesTextRef}
-                  onClick={() => setShowChargesPopup(!showChargesPopup)}
+                  data-no-select
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowChargesPopup(!showChargesPopup);
+                  }}
                   className="text-xs sm:text-sm text-blue-600 hover:text-blue-700 cursor-pointer underline font-semibold transition-colors"
                 >
                   Quote Details
@@ -126,18 +178,12 @@ export const EstesQuoteCard = ({ quote, index }: EstesQuoteCardProps) => {
         </div>
       )}
 
-      <div className="flex items-center gap-2 pt-3 sm:pt-4 border-t border-slate-200">
-        <input
-          type="radio"
-          name="selectedQuote"
-          defaultChecked={index === 0 && quote.rateFound && quote.quoteRate?.totalCharges && parseFloat(quote.quoteRate.totalCharges) > 0}
-          disabled={!quote.rateFound || !quote.quoteRate?.totalCharges || parseFloat(quote.quoteRate.totalCharges) === 0}
-          className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-        />
-        <span className={`text-xs sm:text-sm ${!quote.rateFound || !quote.quoteRate?.totalCharges || parseFloat(quote.quoteRate.totalCharges) === 0 ? 'text-slate-400' : 'text-slate-700'}`}>
-          {quote.rateFound && quote.quoteRate?.totalCharges && parseFloat(quote.quoteRate.totalCharges) > 0 ? 'Select this quote' : 'Rate not available'}
-        </span>
-      </div>
+      {isSelected && (
+        <div className="flex items-center gap-2 pt-3 sm:pt-4 border-t border-slate-200">
+          <CheckCircle2 size={16} className="text-blue-600" />
+          <span className="text-xs sm:text-sm text-blue-700 font-semibold">Selected</span>
+        </div>
+      )}
 
       {/* Charges Popup */}
       {showChargesPopup && quote.chargeItems && quote.chargeItems.length > 0 && (

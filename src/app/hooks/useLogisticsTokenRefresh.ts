@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useLogisticsStore } from '@/store/logisticsStore';
 
 /**
@@ -8,7 +9,15 @@ import { useLogisticsStore } from '@/store/logisticsStore';
  * Only refreshes if session is active (browser not closed)
  */
 export const useLogisticsTokenRefresh = () => {
-  const { isTokenExpired, refreshToken, isSessionActive, markSessionActive } = useLogisticsStore();
+  const { isTokenExpired, refreshToken, isSessionActive, markSessionActive, hasCredentials } = useLogisticsStore(
+    useShallow((state) => ({
+      isTokenExpired: state.isTokenExpired,
+      refreshToken: state.refreshToken,
+      isSessionActive: state.isSessionActive,
+      markSessionActive: state.markSessionActive,
+      hasCredentials: state.hasCredentials,
+    }))
+  );
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const carriers = ['estes', 'xpo'];
 
@@ -27,6 +36,14 @@ export const useLogisticsTokenRefresh = () => {
       }
 
       for (const carrier of carriers) {
+        // Only attempt refresh if credentials exist
+        if (!hasCredentials(carrier)) {
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`No credentials found for ${carrier}, skipping token refresh`);
+          }
+          continue;
+        }
+        
         // Check if token exists and is expired (older than 10 minutes)
         if (isTokenExpired(carrier, 10)) {
           if (process.env.NODE_ENV === 'development') {
@@ -55,7 +72,7 @@ export const useLogisticsTokenRefresh = () => {
         clearInterval(intervalRef.current);
       }
     };
-  }, [isTokenExpired, refreshToken, isSessionActive, markSessionActive]);
+  }, [isTokenExpired, refreshToken, isSessionActive, markSessionActive, hasCredentials]);
 
   // Also check on window focus (user returns to tab)
   useEffect(() => {
@@ -64,6 +81,11 @@ export const useLogisticsTokenRefresh = () => {
       // Check tokens when user returns to the tab
       carriers.forEach(async (carrier) => {
         try {
+          // Only attempt refresh if credentials exist
+          if (!hasCredentials(carrier)) {
+            return;
+          }
+          
           if (isTokenExpired(carrier, 10)) {
             await refreshToken(carrier).catch((error) => {
               // Silently handle errors - refreshToken already logs them
@@ -86,6 +108,6 @@ export const useLogisticsTokenRefresh = () => {
       window.addEventListener('focus', handleFocus);
       return () => window.removeEventListener('focus', handleFocus);
     }
-  }, [markSessionActive, isTokenExpired, refreshToken]);
+  }, [markSessionActive, isTokenExpired, refreshToken, hasCredentials]);
 };
 

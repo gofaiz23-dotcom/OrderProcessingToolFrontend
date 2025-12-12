@@ -48,6 +48,9 @@ type LogisticsStore = {
   
   // Method to mark session as active
   markSessionActive: () => void;
+  
+  // Method to check if credentials exist for a carrier
+  hasCredentials: (carrier: string) => boolean;
 };
 
 // Session storage keys
@@ -236,12 +239,22 @@ export const useLogisticsStore = create<LogisticsStore>()(
             }
             
             if (process.env.NODE_ENV === 'development') {
-              console.error(`Token refresh failed for ${normalizedCarrier}:`, {
+              // Only log if we have meaningful error information
+              const errorInfo: any = {
                 status: res.status,
                 statusText: res.statusText,
                 errorMessage,
-                responseData,
-              });
+              };
+              
+              // Only include responseData if it exists and has content
+              if (responseData && Object.keys(responseData).length > 0) {
+                errorInfo.responseData = responseData;
+              }
+              
+              // Only log if we have more than just status codes
+              if (errorMessage !== 'Unknown error' || res.status !== 200) {
+                console.error(`Token refresh failed for ${normalizedCarrier}:`, errorInfo);
+              }
             }
             return false;
           }
@@ -320,6 +333,11 @@ export const useLogisticsStore = create<LogisticsStore>()(
             console.error('Failed to mark session as active:', error);
           }
         }
+      },
+      
+      hasCredentials: (carrier: string) => {
+        const credentials = getCredentials(carrier.toLowerCase().trim());
+        return !!(credentials && credentials.username && credentials.password);
       },
       
       getToken: (carrier: string) => {
