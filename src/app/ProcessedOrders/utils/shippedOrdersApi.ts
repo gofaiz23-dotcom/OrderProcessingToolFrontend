@@ -6,6 +6,8 @@ export type ShippedOrder = {
   sku: string;
   orderOnMarketPlace: string;
   status?: string;
+  shippingType?: 'LTL' | 'Parcel' | string;
+  subSKUs?: string[];
   ordersJsonb?: Record<string, unknown>;
   rateQuotesRequestJsonb?: Record<string, unknown>;
   rateQuotesResponseJsonb?: Record<string, unknown>;
@@ -25,6 +27,8 @@ export type CreateShippedOrderPayload = {
   sku: string;
   orderOnMarketPlace: string;
   status?: string;
+  shippingType?: 'LTL' | 'Parcel' | string;
+  subSKUs?: string[];
   ordersJsonb?: Record<string, unknown>;
   rateQuotesRequestJsonb?: Record<string, unknown>;
   rateQuotesResponseJsonb?: Record<string, unknown>;
@@ -246,6 +250,12 @@ export const createShippedOrder = async (payload: CreateShippedOrderPayload): Pr
   if (payload.status !== undefined) {
     formData.append('status', payload.status);
   }
+  if (payload.shippingType !== undefined) {
+    formData.append('shippingType', payload.shippingType);
+  }
+  if (payload.subSKUs !== undefined && payload.subSKUs.length > 0) {
+    formData.append('subSKUs', JSON.stringify(payload.subSKUs));
+  }
   
   if (payload.ordersJsonb) {
     formData.append('ordersJsonb', JSON.stringify(payload.ordersJsonb));
@@ -298,6 +308,12 @@ export const updateShippedOrder = async (
   }
   if (payload.status !== undefined) {
     formData.append('status', payload.status);
+  }
+  if (payload.shippingType !== undefined) {
+    formData.append('shippingType', payload.shippingType);
+  }
+  if (payload.subSKUs !== undefined) {
+    formData.append('subSKUs', JSON.stringify(payload.subSKUs));
   }
   if (payload.ordersJsonb !== undefined) {
     formData.append('ordersJsonb', JSON.stringify(payload.ordersJsonb));

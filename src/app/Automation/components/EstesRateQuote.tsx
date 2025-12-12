@@ -12,10 +12,12 @@ import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
 import { ESTESBOLForm } from './ESTESBOL/ESTESBOLForm';
+import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 
 type EstesRateQuoteProps = {
   order: Order;
   subSKUs?: string[];
+  shippingType?: 'LTL' | 'Parcel' | string;
 };
 
 export type EstesRateQuoteRef = {
@@ -100,7 +102,7 @@ const getTodayDate = () => {
   return `${year}-${month}-${day}`;
 };
 
-export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>(({ order, subSKUs = [] }, ref) => {
+export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>(({ order, subSKUs = [], shippingType }, ref) => {
   const { getToken, isTokenExpired, refreshToken, isSessionActive } = useLogisticsStore();
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<any>(null);
@@ -631,6 +633,42 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
       
       // Log response for debugging
       console.log('✅ Estes Rate Quote Response:', JSON.stringify(data, null, 2));
+
+      // Save rate quote request and response to database
+      try {
+        const sku = getJsonbValue(order.jsonb, 'SKU') || '';
+        const marketplace = order.orderOnMarketPlace || '';
+        
+        if (sku && marketplace) {
+          // Check if order already exists
+          const existingOrders = await getAllShippedOrders({ page: 1, limit: 100 });
+          const existingOrder = existingOrders.orders.find(
+            (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
+          );
+
+          if (existingOrder) {
+            // Update existing order with rate quote data
+            await updateShippedOrder(existingOrder.id, {
+              rateQuotesRequestJsonb: payload,
+              rateQuotesResponseJsonb: data,
+            });
+            console.log('✅ Updated existing order with rate quote data');
+          } else {
+            // Create new order with rate quote data
+            await createShippedOrder({
+              sku,
+              orderOnMarketPlace: marketplace,
+              ordersJsonb: order.jsonb as Record<string, unknown>,
+              rateQuotesRequestJsonb: payload,
+              rateQuotesResponseJsonb: data,
+            });
+            console.log('✅ Created new order with rate quote data');
+          }
+        }
+      } catch (saveError) {
+        console.error('⚠️ Failed to save rate quote to database:', saveError);
+        // Don't throw error - rate quote was successful, just log the save error
+      }
     } catch (err) {
       setError(err);
     } finally {
@@ -1423,6 +1461,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
           <ESTESBOLForm
             order={order}
             subSKUs={subSKUs}
+            shippingType={shippingType}
             quoteData={{
               quote: selectedQuote,
               formData: {

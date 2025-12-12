@@ -18,10 +18,12 @@ import { ESTESReferenceNumbers } from './ESTESReferenceNumbers';
 import { ESTESNotifications } from './ESTESNotifications';
 import { ESTESPickupRequest } from './ESTESPickupRequest';
 import type { Order } from '@/app/types/order';
+import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 
 type ESTESBOLFormProps = {
   order: Order;
   subSKUs?: string[];
+  shippingType?: 'LTL' | 'Parcel' | string;
   quoteData?: {
     quote?: any;
     formData?: any;
@@ -126,7 +128,7 @@ const generateMasterBolNumber = (orderData: Order): string => {
   return `${monthLetter}${marketplaceFirstLetter}-${customerName} ${marketplaceAbbrev}`;
 };
 
-export const ESTESBOLForm = ({ order, subSKUs = [], quoteData, onBack, onSuccess }: ESTESBOLFormProps) => {
+export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onBack, onSuccess }: ESTESBOLFormProps) => {
   const { getToken, isTokenExpired, refreshToken, isSessionActive } = useLogisticsStore();
   const carrier = 'estes';
 
@@ -864,6 +866,68 @@ export const ESTESBOLForm = ({ order, subSKUs = [], quoteData, onBack, onSuccess
       const data = await res.json();
       setResponseData(data);
       setShowResponsePreview(true);
+      
+      // Save BOL response with Shipping Type, SubSKU, and PDF file to database
+      try {
+        const sku = getJsonbValue(order.jsonb, 'SKU') || '';
+        const marketplace = order.orderOnMarketPlace || '';
+        const finalShippingType = shippingType || 'LTL'; // Use provided shipping type or default to LTL
+        
+        if (sku && marketplace) {
+          // Prepare BOL PDF file if available
+          const bolFiles: File[] = [];
+          if (responseData?.data?.images?.bol) {
+            try {
+              const base64String = responseData.data.images.bol;
+              const binaryString = atob(base64String);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+              }
+              const blob = new Blob([bytes], { type: 'application/pdf' });
+              const proNumber = responseData?.data?.referenceNumbers?.pro || 'BOL';
+              const fileName = `BillOfLading_${proNumber}_${Date.now()}.pdf`;
+              const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
+              bolFiles.push(pdfFile);
+            } catch (pdfError) {
+              console.error('⚠️ Failed to create PDF file:', pdfError);
+            }
+          }
+          
+          // Check if order already exists
+          const existingOrders = await getAllShippedOrders({ page: 1, limit: 100 });
+          const existingOrder = existingOrders.orders.find(
+            (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
+          );
+
+          if (existingOrder) {
+            // Update existing order with BOL response, shipping type, subSKUs, and PDF file
+            await updateShippedOrder(existingOrder.id, {
+              bolResponseJsonb: data,
+              shippingType: finalShippingType,
+              subSKUs: subSKUs.length > 0 ? subSKUs : undefined,
+              files: bolFiles.length > 0 ? bolFiles : undefined,
+            });
+            console.log('✅ Updated existing order with BOL response');
+          } else {
+            // Create new order with BOL response, shipping type, subSKUs, and PDF file
+            await createShippedOrder({
+              sku,
+              orderOnMarketPlace: marketplace,
+              ordersJsonb: order.jsonb as Record<string, unknown>,
+              bolResponseJsonb: data,
+              shippingType: finalShippingType,
+              subSKUs: subSKUs.length > 0 ? subSKUs : undefined,
+              files: bolFiles.length > 0 ? bolFiles : undefined,
+            });
+            console.log('✅ Created new order with BOL response');
+          }
+        }
+      } catch (saveError) {
+        console.error('⚠️ Failed to save BOL to database:', saveError);
+        // Don't throw error - BOL creation was successful, just log the save error
+      }
+      
       if (onSuccess) {
         onSuccess(data);
       }
@@ -1284,6 +1348,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], quoteData, onBack, onSuccess
           {showPickupRequest && (
             <div className="mt-8 pt-8 border-t-2 border-slate-300">
               <ESTESPickupRequest
+                order={order}
                 bolData={{
                   originName,
                   originAddress1,

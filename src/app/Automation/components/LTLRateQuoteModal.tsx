@@ -10,6 +10,7 @@ type LTLRateQuoteModalProps = {
   isOpen: boolean;
   order: Order;
   subSKUs?: string[];
+  shippingType?: 'LTL' | 'Parcel' | string;
   onClose: () => void;
 };
 
@@ -17,6 +18,7 @@ export const LTLRateQuoteModal = ({
   isOpen,
   order,
   subSKUs = [],
+  shippingType,
   onClose,
 }: LTLRateQuoteModalProps) => {
   const xpoRef = useRef<XPORateQuoteRef>(null);
@@ -201,7 +203,7 @@ export const LTLRateQuoteModal = ({
                   XPO Rate Quote
                 </h3>
               )}
-              <XPORateQuote ref={xpoRef} order={order} subSKUs={subSKUs} />
+              <XPORateQuote ref={xpoRef} order={order} subSKUs={subSKUs} shippingType={shippingType} />
             </div>
           </div>
 
@@ -217,7 +219,7 @@ export const LTLRateQuoteModal = ({
                   Estes Rate Quote
                 </h3>
               )}
-              <EstesRateQuote ref={estesRef} order={order} subSKUs={subSKUs} />
+              <EstesRateQuote ref={estesRef} order={order} subSKUs={subSKUs} shippingType={shippingType} />
             </div>
           </div>
         </div>
