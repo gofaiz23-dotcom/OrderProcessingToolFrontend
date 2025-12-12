@@ -157,7 +157,76 @@ export const AutomateLogisticModal = ({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-          {orders.map((order) => {
+          {orders.map((order, orderIndex) => {
+            // Color schemes for different orders
+            const colorSchemes = [
+              {
+                // border: 'border-blue-300',
+                bg: 'bg-blue-50/50',
+                cardBg: 'bg-blue-50/30',
+                cardBorder: 'border-blue-200',
+                headerText: 'text-blue-700',
+                accent: 'blue',
+              },
+              {
+                // border: 'border-green-300',
+                bg: 'bg-green-50/50',
+                cardBg: 'bg-green-50/30',
+                cardBorder: 'border-green-200',
+                headerText: 'text-green-700',
+                accent: 'green',
+              },
+              {
+                // border: 'border-purple-300',
+                bg: 'bg-purple-50/50',
+                cardBg: 'bg-purple-50/30',
+                cardBorder: 'border-purple-200',
+                headerText: 'text-purple-700',
+                accent: 'purple',
+              },
+              {
+                // border: 'border-orange-300',
+                bg: 'bg-orange-50/50',
+                cardBg: 'bg-orange-50/30',
+                cardBorder: 'border-orange-200',
+                headerText: 'text-orange-700',
+                accent: 'orange',
+              },
+              {
+                // border: 'border-pink-300',
+                bg: 'bg-pink-50/50',
+                cardBg: 'bg-pink-50/30',
+                cardBorder: 'border-pink-200',
+                headerText: 'text-pink-700',
+                accent: 'pink',
+              },
+              {
+                // border: 'border-cyan-300',
+                bg: 'bg-cyan-50/50',
+                cardBg: 'bg-cyan-50/30',
+                cardBorder: 'border-cyan-200',
+                headerText: 'text-cyan-700',
+                accent: 'cyan',
+              },
+              {
+                // border: 'border-amber-300',
+                bg: 'bg-amber-50/50',
+                cardBg: 'bg-amber-50/30',
+                cardBorder: 'border-amber-200',
+                headerText: 'text-amber-700',
+                accent: 'amber',
+              },
+              {
+                // border: 'border-indigo-300',
+                bg: 'bg-indigo-50/50',
+                cardBg: 'bg-indigo-50/30',
+                cardBorder: 'border-indigo-200',
+                headerText: 'text-indigo-700',
+                accent: 'indigo',
+              },
+            ];
+            
+            const colorScheme = colorSchemes[orderIndex % colorSchemes.length];
             // Extract values from JSONB
             const productName = getJsonbValue(order.jsonb, 'Product Name') || 
                                getJsonbValue(order.jsonb, 'Product') ||
@@ -227,10 +296,10 @@ export const AutomateLogisticModal = ({
               : '-';
 
             return (
-              <div key={order.id} className="space-y-4 border border-slate-200 rounded-lg p-4 sm:p-6 bg-slate-50/50">
+              <div key={order.id} className={`space-y-4 border-2 rounded-lg p-4 sm:p-6 ${colorScheme.bg}`}>
                 {/* Card 1: Product Name, SKU, Price - Full Width */}
-                <div className="w-full bg-white rounded-lg border border-slate-300 p-4 sm:p-6 shadow-sm relative">
-                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">
+                <div className={`w-full ${colorScheme.cardBg} rounded-lg border-2 ${colorScheme.cardBorder} p-4 sm:p-6 shadow-sm relative`}>
+                  <h3 className={`text-xs font-semibold ${colorScheme.headerText} uppercase tracking-wider mb-4`}>
                     Product Information
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
@@ -356,8 +425,8 @@ export const AutomateLogisticModal = ({
                 {/* Cards 2, 3, 4: Order Details, Customer Details, Subtotal - In One Row */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {/* Card 2: Order Details */}
-                  <div className="bg-white rounded-lg border border-slate-300 p-4 sm:p-5 shadow-sm">
-                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">
+                  <div className={`${colorScheme.cardBg} rounded-lg border-2 ${colorScheme.cardBorder} p-4 sm:p-5 shadow-sm`}>
+                    <h3 className={`text-xs font-semibold ${colorScheme.headerText} uppercase tracking-wider mb-4`}>
                       Order Details
                     </h3>
                     <div className="space-y-3">
@@ -487,8 +556,8 @@ export const AutomateLogisticModal = ({
                   </div>
 
                   {/* Card 3: Customer Details */}
-                  <div className="bg-white rounded-lg border border-slate-300 p-4 sm:p-5 shadow-sm">
-                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">
+                  <div className={`${colorScheme.cardBg} rounded-lg border-2 ${colorScheme.cardBorder} p-4 sm:p-5 shadow-sm`}>
+                    <h3 className={`text-xs font-semibold ${colorScheme.headerText} uppercase tracking-wider mb-4`}>
                       Customer Details
                     </h3>
                     <div className="space-y-3">
@@ -552,8 +621,8 @@ export const AutomateLogisticModal = ({
                   </div>
 
                   {/* Card 4: Subtotal */}
-                  <div className="bg-white rounded-lg border border-slate-300 p-4 sm:p-5 shadow-sm">
-                    <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4">
+                  <div className={`${colorScheme.cardBg} rounded-lg border-2 ${colorScheme.cardBorder} p-4 sm:p-5 shadow-sm`}>
+                    <h3 className={`text-xs font-semibold ${colorScheme.headerText} uppercase tracking-wider mb-4`}>
                       Subtotal ({quantity} item{quantity !== '1' ? 's' : ''})
                     </h3>
                     <div className="space-y-3">
