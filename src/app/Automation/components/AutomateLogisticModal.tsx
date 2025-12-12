@@ -74,6 +74,14 @@ export const AutomateLogisticModal = ({
   const [selectedOrderForLTL, setSelectedOrderForLTL] = useState<Order | null>(null);
   // Refs for dropdown click outside detection
   const dropdownRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  // Refs for subSKU input fields
+  const subSKUInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
+  // State to manage subSKUs for each order
+  const [subSKUs, setSubSKUs] = useState<Record<number, string[]>>({});
+  // State to manage input values for each order
+  const [subSKUInputs, setSubSKUInputs] = useState<Record<number, string>>({});
+  // State to manage which order is currently showing input field
+  const [showSubSKUInput, setShowSubSKUInput] = useState<Record<number, boolean>>({});
 
   // Initialize shipping types when orders change
   useEffect(() => {
@@ -85,6 +93,22 @@ export const AutomateLogisticModal = ({
         // Only initialize if not already set
         if (!(order.id in updated)) {
           updated[order.id] = '';
+          hasChanges = true;
+        }
+      });
+      
+      return hasChanges ? updated : prev;
+    });
+    
+    // Initialize subSKUs when orders change
+    setSubSKUs((prev) => {
+      const updated: Record<number, string[]> = { ...prev };
+      let hasChanges = false;
+      
+      orders.forEach((order) => {
+        // Only initialize if not already set
+        if (!(order.id in updated)) {
+          updated[order.id] = [];
           hasChanges = true;
         }
       });
@@ -328,8 +352,8 @@ export const AutomateLogisticModal = ({
                       </div>
                     </div>
                   </div>
-                  {/* Shipping Type Dropdown - Bottom Left */}
-                  <div className="mt-4 sm:mt-5 flex items-end">
+                  {/* Shipping Type Dropdown and SubSKU Section - Bottom Row */}
+                  <div className="mt-4 sm:mt-5 flex items-end gap-4 flex-wrap">
                     <div 
                       className="flex flex-col gap-1 relative w-auto min-w-[140px]"
                       ref={(el) => {
@@ -418,6 +442,138 @@ export const AutomateLogisticModal = ({
                           </button>
                         </div>
                       )}
+                    </div>
+                    {/* SubSKU Section - Right side of Shipping Type */}
+                    <div className="flex flex-col gap-1 flex-1 min-w-[200px]">
+                      <span className="text-xs font-medium text-slate-900">SubSKU</span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {/* Display existing subSKUs */}
+                        {subSKUs[order.id] && subSKUs[order.id].length > 0 && (
+                          <>
+                            {subSKUs[order.id].map((subSku, index) => (
+                              <span key={index} className="inline-flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 px-2 py-1 bg-slate-100 text-slate-900 text-xs font-medium rounded-md">
+                                  {subSku}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSubSKUs((prev) => ({
+                                        ...prev,
+                                        [order.id]: prev[order.id]?.filter((_, i) => i !== index) || [],
+                                      }));
+                                    }}
+                                    className="ml-1 text-slate-600 hover:text-slate-900"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </span>
+                                {index < subSKUs[order.id].length - 1 && (
+                                  <span className="text-slate-600 mx-1">,</span>
+                                )}
+                              </span>
+                            ))}
+                          </>
+                        )}
+                        {/* Input field - shown when Add SubSKU is clicked */}
+                        {showSubSKUInput[order.id] && (
+                          <div className="flex items-center gap-2">
+                            <input
+                              ref={(el) => {
+                                subSKUInputRefs.current[order.id] = el;
+                              }}
+                              type="text"
+                              value={subSKUInputs[order.id] || ''}
+                              onChange={(e) => {
+                                setSubSKUInputs((prev) => ({
+                                  ...prev,
+                                  [order.id]: e.target.value,
+                                }));
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && subSKUInputs[order.id]?.trim()) {
+                                  setSubSKUs((prev) => ({
+                                    ...prev,
+                                    [order.id]: [...(prev[order.id] || []), subSKUInputs[order.id].trim()],
+                                  }));
+                                  setSubSKUInputs((prev) => ({
+                                    ...prev,
+                                    [order.id]: '',
+                                  }));
+                                  // Focus input for next entry
+                                  setTimeout(() => {
+                                    subSKUInputRefs.current[order.id]?.focus();
+                                  }, 0);
+                                } else if (e.key === 'Escape') {
+                                  setShowSubSKUInput((prev) => ({
+                                    ...prev,
+                                    [order.id]: false,
+                                  }));
+                                  setSubSKUInputs((prev) => ({
+                                    ...prev,
+                                    [order.id]: '',
+                                  }));
+                                }
+                              }}
+                              placeholder="Enter SubSKU"
+                              className="px-2 py-1 text-xs text-slate-900 bg-white border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500"
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (subSKUInputs[order.id]?.trim()) {
+                                  setSubSKUs((prev) => ({
+                                    ...prev,
+                                    [order.id]: [...(prev[order.id] || []), subSKUInputs[order.id].trim()],
+                                  }));
+                                  setSubSKUInputs((prev) => ({
+                                    ...prev,
+                                    [order.id]: '',
+                                  }));
+                                  // Focus input for next entry
+                                  setTimeout(() => {
+                                    subSKUInputRefs.current[order.id]?.focus();
+                                  }, 0);
+                                }
+                              }}
+                              className="px-2 py-1 text-xs bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                            >
+                              Add
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowSubSKUInput((prev) => ({
+                                  ...prev,
+                                  [order.id]: false,
+                                }));
+                                setSubSKUInputs((prev) => ({
+                                  ...prev,
+                                  [order.id]: '',
+                                }));
+                              }}
+                              className="px-2 py-1 text-xs bg-slate-200 text-slate-700 rounded-md hover:bg-slate-300 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                        {/* Add SubSKU Button */}
+                        {!showSubSKUInput[order.id] && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowSubSKUInput((prev) => ({
+                                ...prev,
+                                [order.id]: true,
+                              }));
+                            }}
+                            className="px-3 py-1 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
+                          >
+                            Add SubSKU
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -709,6 +865,7 @@ export const AutomateLogisticModal = ({
         <LTLRateQuoteModal
           isOpen={ltlModalOpen}
           order={selectedOrderForLTL}
+          subSKUs={subSKUs[selectedOrderForLTL.id] || []}
           onClose={() => {
             setLtlModalOpen(false);
             // Reset shipping type to default when modal closes

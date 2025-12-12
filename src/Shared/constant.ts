@@ -126,7 +126,6 @@ export const ESTES_AUTOFILL_DATA = {
         "isTurnable": true,
         "lineItems": [
           {
-            "description": "Boxes of widgets",
             "weight": 300,
             "pieces": 5,
             "packagingType": "PLT",
@@ -223,7 +222,6 @@ export const ESTES_BOL_AUTOFILL_DATA = {
         "sub": "03",
         "items": [
           {
-            "description": "kd furniture items -subsku1, subsku2, subsku3",
             "pieces": 3,
             "pieceType": "CARTON"
           }
@@ -492,7 +490,7 @@ export const ESTES_RATE_QUOTE_FORM_DEFAULTS = {
   defaultClass: '250',
   defaultNMFC: '079300',
   defaultSub: '03',
-  defaultDescription: 'Boxes of widgets',
+  defaultDescription: 'KD Furniture Items -',
 } as const;
 
 // XPO Address Book Options
