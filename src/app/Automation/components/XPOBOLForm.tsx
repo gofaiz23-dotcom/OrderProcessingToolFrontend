@@ -27,6 +27,7 @@ import { XPO_SHIPPER_ADDRESS_BOOK, XPO_BOL_DEFAULTS, ESTES_RATE_QUOTE_FORM_DEFAU
 import type { XPOBillOfLadingCommodity, XPOBillOfLadingReference, XPOBillOfLadingFields } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
 import { XPO_BOL_COMMODITY_DEFAULTS } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
 import type { Order } from '@/app/types/order';
+import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 
 type LocationData = {
   searchValue: string;
@@ -47,6 +48,7 @@ type XPOBOLFormProps = {
   order: Order;
   quoteData?: Record<string, unknown>;
   subSKUs?: string[];
+  shippingType?: 'LTL' | 'Parcel' | string;
   onBack?: () => void;
   onSuccess?: (response: Record<string, unknown>) => void;
 };
@@ -69,6 +71,7 @@ export const XPOBOLForm = ({
   order,
   quoteData,
   subSKUs = [],
+  shippingType,
   onBack,
   onSuccess,
 }: XPOBOLFormProps) => {
@@ -986,6 +989,37 @@ export const XPOBOLForm = ({
             if (process.env.NODE_ENV === 'development') {
               console.log('Pickup Request Created:', pickupData);
             }
+            
+            // Update order with pickup response - find by SKU and marketplace
+            try {
+              const sku = getJsonbValue(order.jsonb, 'SKU') || '';
+              const marketplace = order.orderOnMarketPlace || '';
+              
+              if (sku && marketplace) {
+                // Find the order that matches this rate quote
+                const existingOrders = await getAllShippedOrders({ page: 1, limit: 100 });
+                const existingOrder = existingOrders.orders.find(
+                  (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
+                );
+
+                if (existingOrder) {
+                  // Update existing order with pickup response
+                  await updateShippedOrder(existingOrder.id, {
+                    pickupResponseJsonb: {
+                      pickupRequestPayload: finalPickupPayload,
+                      pickupData,
+                      response: pickupData,
+                    },
+                  });
+                  console.log('✅ Updated existing order with pickup response');
+                } else {
+                  console.warn('⚠️ Could not find order to update with pickup response');
+                }
+              }
+            } catch (saveError) {
+              console.error('⚠️ Failed to save pickup response to database:', saveError);
+              // Don't throw error - pickup request was successful, just log the save error
+            }
           }
         } catch (pickupErr) {
           // Log the error but don't fail the entire flow - BOL was created successfully
@@ -1063,6 +1097,53 @@ export const XPOBOLForm = ({
       } catch (pdfError) {
         console.error('Error calling download-bol-pdf API:', pdfError);
         // Don't throw error - BOL creation was successful, just log the PDF download error
+      }
+
+      // Save BOL response with Shipping Type, SubSKU, and PDF file to database
+      try {
+        const sku = getJsonbValue(order.jsonb, 'SKU') || '';
+        const marketplace = order.orderOnMarketPlace || '';
+        const finalShippingType = shippingType || 'LTL'; // Use provided shipping type or default to LTL
+        
+        if (sku && marketplace) {
+          // Prepare BOL PDF file if available
+          const bolFiles: File[] = [];
+          if (pdfFile) {
+            bolFiles.push(pdfFile);
+          }
+          
+          // Check if order already exists
+          const existingOrders = await getAllShippedOrders({ page: 1, limit: 100 });
+          const existingOrder = existingOrders.orders.find(
+            (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
+          );
+
+          if (existingOrder) {
+            // Update existing order with BOL response, shipping type, subSKUs, and PDF file
+            await updateShippedOrder(existingOrder.id, {
+              bolResponseJsonb: data,
+              shippingType: finalShippingType,
+              subSKUs: subSKUs.length > 0 ? subSKUs : undefined,
+              files: bolFiles.length > 0 ? bolFiles : undefined,
+            });
+            console.log('✅ Updated existing order with BOL response');
+          } else {
+            // Create new order with BOL response, shipping type, subSKUs, and PDF file
+            await createShippedOrder({
+              sku,
+              orderOnMarketPlace: marketplace,
+              ordersJsonb: order.jsonb as Record<string, unknown>,
+              bolResponseJsonb: data,
+              shippingType: finalShippingType,
+              subSKUs: subSKUs.length > 0 ? subSKUs : undefined,
+              files: bolFiles.length > 0 ? bolFiles : undefined,
+            });
+            console.log('✅ Created new order with BOL response');
+          }
+        }
+      } catch (saveError) {
+        console.error('⚠️ Failed to save BOL to database:', saveError);
+        // Don't throw error - BOL creation was successful, just log the save error
       }
 
       if (onSuccess) {

@@ -345,6 +345,39 @@ export const ProcessedOrderDetailsModal = ({
                       <label className="text-xs text-black">Marketplace</label>
                       <p className="text-sm font-medium text-black">{displayOrder.orderOnMarketPlace}</p>
                     </div>
+                    {displayOrder.shippingType && (
+                      <div>
+                        <label className="text-xs text-black">Shipping Type</label>
+                        <p className="text-sm font-medium text-black">
+                          <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${
+                            displayOrder.shippingType === 'LTL'
+                              ? 'bg-blue-100 text-blue-800'
+                              : displayOrder.shippingType === 'Parcel'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-slate-100 text-slate-800'
+                          }`}>
+                            {displayOrder.shippingType}
+                          </span>
+                        </p>
+                      </div>
+                    )}
+                    {displayOrder.subSKUs && displayOrder.subSKUs.length > 0 && (
+                      <div>
+                        <label className="text-xs text-black">SubSKUs</label>
+                        <p className="text-sm font-medium text-black">
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {displayOrder.subSKUs.map((subSKU, idx) => (
+                              <span
+                                key={idx}
+                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
+                              >
+                                {subSKU}
+                              </span>
+                            ))}
+                          </div>
+                        </p>
+                      </div>
+                    )}
                     <div>
                       <label className="text-xs text-black">Status</label>
                       <p className="text-sm font-medium text-black">

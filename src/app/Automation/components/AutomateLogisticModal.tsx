@@ -866,6 +866,7 @@ export const AutomateLogisticModal = ({
           isOpen={ltlModalOpen}
           order={selectedOrderForLTL}
           subSKUs={subSKUs[selectedOrderForLTL.id] || []}
+          shippingType={shippingTypes[selectedOrderForLTL.id] || 'LTL'}
           onClose={() => {
             setLtlModalOpen(false);
             // Reset shipping type to default when modal closes

@@ -708,6 +708,12 @@ export const ProcessedOrdersList = ({
                       Marketplace
                     </th>
                     <th className="px-3 sm:px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Shipping Type
+                    </th>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      SubSKUs
+                    </th>
+                    <th className="px-3 sm:px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
                       Status
                     </th>
                     <th className="px-3 sm:px-6 py-3 text-left text-xs font-bold text-slate-700 uppercase tracking-wider">
@@ -749,6 +755,35 @@ export const ProcessedOrdersList = ({
                         <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-100 text-purple-800">
                           {order.orderOnMarketPlace}
                         </span>
+                      </td>
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${
+                          order.shippingType === 'LTL'
+                            ? 'bg-blue-100 text-blue-800'
+                            : order.shippingType === 'Parcel'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-slate-100 text-slate-800'
+                        }`}>
+                          {order.shippingType || '-'}
+                        </span>
+                      </td>
+                      <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-slate-900">
+                          {order.subSKUs && order.subSKUs.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {order.subSKUs.map((subSKU, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
+                                >
+                                  {subSKU}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${
