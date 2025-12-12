@@ -1254,7 +1254,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         // Map lineItems to items
         const items: CommodityItem[] = (unit.lineItems || []).map((item, itemIndex) => ({
           id: `${Date.now()}-${index}-${itemIndex}`,
-          description: item.description,
+          description: 'description' in item ? (item as { description?: string }).description || '' : '',
         }));
 
         return {
@@ -1270,7 +1270,7 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           nmfc: unit.lineItems?.[0]?.nmfc || '',
           sub: unit.lineItems?.[0]?.nmfcSub || '',
           hazardous: unit.lineItems?.[0]?.isHazardous || false,
-          description: unit.lineItems?.[0]?.description || '', // Set description from first lineItem
+          description: (unit.lineItems?.[0] && 'description' in unit.lineItems[0]) ? (unit.lineItems[0] as { description?: string }).description || '' : '', // Set description from first lineItem
           items,
         };
       });
