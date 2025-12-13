@@ -28,8 +28,8 @@ export default function CreateOrderPage() {
         jsonb: payload.jsonb,
       };
       await createNewOrder(createPayload);
-      // Redirect to all orders page after successful creation
-      router.push('/orders/all');
+      // Redirect to walmart orders page after successful creation
+      router.push('/orders/walmart');
     } catch (err) {
       setError(err);
       console.error('Error creating order:', err);
@@ -39,7 +39,7 @@ export default function CreateOrderPage() {
   };
 
   const handleCancel = useCallback(() => {
-    router.push('/orders/all');
+    router.push('/orders/walmart');
   }, [router]);
 
   return (

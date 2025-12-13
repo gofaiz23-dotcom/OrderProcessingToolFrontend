@@ -10,7 +10,7 @@ export default function Home() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/orders/all');
+      router.push('/orders/walmart');
     } else {
       router.push('/UserAuthentication/dashboard');
     }

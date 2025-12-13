@@ -67,36 +67,12 @@ export const useWalmartStore = create<WalmartStore>()(
             return false;
           }
           
-          // Get credentials from environment variables (must be NEXT_PUBLIC_ prefixed for client-side access)
-          const clientId = process.env.NEXT_PUBLIC_WALMART_CLIENT_ID;
-          const clientSecret = process.env.NEXT_PUBLIC_WALMART_CLIENT_SECRET;
-          
-          if (!clientId || !clientSecret) {
-            if (process.env.NODE_ENV === 'development') {
-              console.error('⚠️ Walmart credentials not configured. Please set NEXT_PUBLIC_WALMART_CLIENT_ID and NEXT_PUBLIC_WALMART_CLIENT_SECRET in .env.local');
-            }
-            return false;
-          }
-          
-          // Generate unique correlation ID
-          const correlationId = `walmart-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-          
-          // Prepare request body
-          const body = new URLSearchParams({
-            grant_type: 'client_credentials',
-          });
-          
-          // Call Walmart API directly
-          const res = await fetch('https://marketplace.walmartapis.com/v3/token', {
-            method: 'POST',
+          // Call backend API to get token
+          const res = await fetch('/api/walmart-api/auth', {
+            method: 'GET',
             headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'WM_SVC.NAME': 'Walmart Marketplace',
-              'WM_QOS.CORRELATION_ID': correlationId,
-              // Basic Authentication
-              'Authorization': `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+              'Content-Type': 'application/json',
             },
-            body: body.toString(),
           }).catch((fetchError) => {
             if (process.env.NODE_ENV === 'development') {
               console.warn('Network error refreshing Walmart token:', fetchError.message || 'Failed to fetch');
@@ -104,42 +80,34 @@ export const useWalmartStore = create<WalmartStore>()(
             throw fetchError;
           });
           
-          // Read response as text (XML format)
-          const responseText = await res.text();
+          const data = await res.json();
           
-          if (!res.ok) {
+          if (!res.ok || !data.success) {
             if (process.env.NODE_ENV === 'development') {
               console.error('Token refresh failed:', {
                 status: res.status,
                 statusText: res.statusText,
-                response: responseText,
+                response: data,
               });
             }
             return false;
           }
           
-          // Parse XML response
-          const accessTokenMatch = responseText.match(/<accessToken>(.*?)<\/accessToken>/);
-          const accessToken = accessTokenMatch ? accessTokenMatch[1] : null;
-          
-          const tokenTypeMatch = responseText.match(/<tokenType>(.*?)<\/tokenType>/);
-          const tokenType = tokenTypeMatch ? tokenTypeMatch[1] : 'Bearer';
-          
-          const expiresInMatch = responseText.match(/<expiresIn>(.*?)<\/expiresIn>/);
-          const expiresIn = expiresInMatch ? parseInt(expiresInMatch[1], 10) : 900;
+          // Backend returns: { success: true, data: { accessToken, tokenType, expiresIn } }
+          const { accessToken, tokenType, expiresIn } = data.data;
           
           if (!accessToken || typeof accessToken !== 'string' || accessToken.trim() === '') {
             if (process.env.NODE_ENV === 'development') {
-              console.error('No valid token received during refresh. Response:', responseText);
+              console.error('No valid token received during refresh. Response:', data);
             }
             return false;
           }
           
           // Update token in store
-          get().setToken(accessToken, tokenType, expiresIn);
+          get().setToken(accessToken, tokenType || 'Bearer', expiresIn || 900);
           
           if (process.env.NODE_ENV === 'development') {
-            console.log('✅ Walmart token refreshed successfully');
+            console.log('✅ Walmart token refreshed successfully via backend API');
           }
           
           return true;

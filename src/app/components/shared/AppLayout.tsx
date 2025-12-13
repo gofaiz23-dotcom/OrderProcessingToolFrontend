@@ -273,21 +273,34 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                     {/* Marketplace Sub-items */}
                                     {isOrdersExpanded && (
                                         <div className="ml-4 sm:ml-6 mt-1 space-y-0.5">
-                                            {/* All Orders option */}
-                                            <Link href="/orders/all" onClick={() => setIsMobileMenuOpen(false)}>
+                                            {/* Walmart Orders */}
+                                            <Link href="/orders/walmart" onClick={() => setIsMobileMenuOpen(false)}>
                                                 <div
                                                     className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
-                                                        hasActiveOrdersItem && !searchParams?.get('marketplace')
+                                                        pathname === '/orders/walmart'
                                                             ? 'bg-blue-50 text-blue-700'
                                                             : 'text-slate-600 hover:bg-slate-50'
                                                     }`}
                                                 >
-                                                    <span className="text-xs sm:text-sm font-medium">All Orders</span>
+                                                    <span className="text-xs sm:text-sm font-medium">Walmart Orders</span>
+                                                </div>
+                                            </Link>
+                                            
+                                            {/* All Other Orders (Amazon, etc.) */}
+                                            <Link href="/orders/all" onClick={() => setIsMobileMenuOpen(false)}>
+                                                <div
+                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
+                                                        pathname === '/orders/all'
+                                                            ? 'bg-blue-50 text-blue-700'
+                                                            : 'text-slate-600 hover:bg-slate-50'
+                                                    }`}
+                                                >
+                                                    <span className="text-xs sm:text-sm font-medium">All Other Orders</span>
                                                 </div>
                                             </Link>
                                             
                                             {/* Marketplace options */}
-                                            {MARKETPLACES.map((marketplace) => {
+                                            {MARKETPLACES.filter(m => m !== 'Walmart').map((marketplace) => {
                                                 const isActive = hasActiveOrdersItem && searchParams?.get('marketplace') === marketplace;
                                                 
                                                 return (
@@ -304,26 +317,10 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                                             }`}
                                                         >
                                                             <span className="text-xs sm:text-sm font-medium">{marketplace}</span>
-                                            </div>
-                                        </Link>
-                                    );
-                                })}
-                                            
-                                            {/* Walmart Orders option */}
-                                            <Link 
-                                                href="/orders/walmart"
-                                                onClick={() => setIsMobileMenuOpen(false)}
-                                            >
-                                                <div
-                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
-                                                        pathname === '/orders/walmart'
-                                                            ? 'bg-blue-50 text-blue-700'
-                                                            : 'text-slate-600 hover:bg-slate-50'
-                                                    }`}
-                                                >
-                                                    <span className="text-xs sm:text-sm font-medium">Walmart Orders</span>
-                                                </div>
-                                            </Link>
+                                                        </div>
+                                                    </Link>
+                                                );
+                                            })}
                                         </div>
                                     )}
                                 </div>

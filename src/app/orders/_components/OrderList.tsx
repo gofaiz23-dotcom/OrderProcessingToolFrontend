@@ -35,10 +35,13 @@ type OrderListProps = {
   onOrderSelect: (order: Order) => void;
   onOrderDelete: (id: number) => Promise<void>;
   onOrderEdit?: (order: Order) => void;
-  onCreateNew: () => void;
-  onImportFile: (file: File) => Promise<void>;
+  onCreateNew?: () => void;
+  onImportFile?: (file: File) => Promise<void>;
   onOpenEditModal?: (order: Order) => void;
   onBulkDelete?: (ids: number[]) => Promise<void>;
+  hideTitle?: boolean;
+  hideSearch?: boolean;
+  fullWidth?: boolean; // Remove padding and background for full-width display
 };
 
 export const OrderList = ({
@@ -65,6 +68,9 @@ export const OrderList = ({
   onImportFile,
   onOpenEditModal,
   onBulkDelete,
+  hideTitle = false,
+  hideSearch = false,
+  fullWidth = false,
 }: OrderListProps) => {
   const router = useRouter();
   const { getToken, isTokenExpired, isSessionActive } = useLogisticsStore();
@@ -237,7 +243,9 @@ export const OrderList = ({
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
       const newSelectedIds = new Set(selectedOrderIds);
-      displayOrders.forEach((order) => newSelectedIds.add(order.id));
+      displayOrders.forEach((order) => {
+        newSelectedIds.add(order.id);
+      });
       setSelectedOrderIds(newSelectedIds);
     } else {
       const newSelectedIds = new Set(selectedOrderIds);
@@ -259,16 +267,28 @@ export const OrderList = ({
     setSelectedOrderIds(new Set());
   };
 
-  // Handle bulk delete click
+  // Handle bulk delete click - filter out Walmart orders
   const handleBulkDeleteClick = () => {
     const idsToDelete = Array.from(selectedOrderIds);
     if (idsToDelete.length === 0) return;
+
+    // Filter out Walmart orders - they cannot be deleted
+    const nonWalmartOrderIds = idsToDelete.filter((id) => {
+      const order = orders.find((o) => o.id === id);
+      return order && order.orderOnMarketPlace !== 'Walmart';
+    });
+
+    if (nonWalmartOrderIds.length === 0) {
+      // All selected orders are Walmart orders, show a message
+      alert('Walmart orders cannot be deleted. Please select non-Walmart orders to delete.');
+      return;
+    }
 
     setDeleteModalState({
         isOpen: true,
         type: 'bulk',
         orderId: null,
-        orderIds: idsToDelete,
+        orderIds: nonWalmartOrderIds,
         loading: false,
       });
   };
@@ -339,153 +359,161 @@ export const OrderList = ({
   }
 
   return (
-    <div className="flex h-full flex-col bg-white overflow-hidden p-0 sm:p-4 lg:p-6 min-h-0">
-      {/* Page Title */}
-      <div className="px-3 pt-3 pb-2 sm:px-0 sm:pt-0 sm:pb-0 flex-shrink-0 border-b border-slate-200 sm:border-0 mb-2 sm:mb-4 lg:mb-6">
-        <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-slate-900">Orders</h1>
-      </div>
-
-      {/* Search and Action Buttons */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between mb-2 sm:mb-4 lg:mb-6 relative z-40 px-3 sm:px-0 flex-shrink-0">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2 sm:gap-3 flex-1 flex-wrap">
-          <label className="flex flex-col gap-1 flex-1 sm:flex-initial min-w-0">
-            <span className="text-xs font-medium text-slate-900 hidden sm:block">Search</span>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search orders..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && onSearch) {
-                    e.preventDefault();
-                    onSearch();
-                  }
-                }}
-                className="w-full sm:w-48 pl-9 pr-3 py-2.5 sm:py-1.5 border border-slate-300 bg-white text-slate-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition-colors"
-              />
-            </div>
-          </label>
-          {onDateFilterChange && onStartDateChange && onEndDateChange && (
-            <DateFilter
-              dateFilter={dateFilter}
-              startDate={startDate}
-              endDate={endDate}
-              onDateFilterChange={onDateFilterChange}
-              onStartDateChange={onStartDateChange}
-              onEndDateChange={onEndDateChange}
-            />
-          )}
-          {onSearch && (
-            <button
-              onClick={onSearch}
-              disabled={loading}
-              className="px-4 py-2.5 sm:py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center justify-center gap-2 w-full sm:w-auto"
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="hidden sm:inline">Searching...</span>
-                  <span className="sm:hidden">Searching</span>
-                </>
-              ) : (
-                'Search'
-              )}
-            </button>
-          )}
-          {(searchQuery || (dateFilter !== 'all' && onClearSearch)) && onClearSearch && (
-            <button
-              onClick={onClearSearch}
-              className="px-4 py-2.5 sm:py-1.5 text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors text-sm w-full sm:w-auto"
-              title="Clear filters"
-            >
-              Clear
-            </button>
-          )}
+    <div className={`flex h-full flex-col bg-white overflow-hidden min-h-0 ${fullWidth ? 'p-0' : 'p-0 sm:p-4 lg:p-6'}`}>
+      {/* Page Title - Only show if not hidden */}
+      {!hideTitle && (
+        <div className="px-3 pt-3 pb-2 sm:px-0 sm:pt-0 sm:pb-0 flex-shrink-0 border-b border-slate-200 sm:border-0 mb-2 sm:mb-4 lg:mb-6">
+          <h1 className="text-lg sm:text-2xl lg:text-3xl font-bold text-slate-900">Orders</h1>
         </div>
+      )}
 
-        {/* Right Side Buttons */}
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto">
-          {/* Automate Logistic Button - Show when one or more orders are selected */}
-          {selectedOrderIds.size > 0 && (
+      {/* Search and Date Filter Section - Only show if search/date props are provided and not hidden */}
+      {!hideSearch && (searchQuery !== undefined || onDateFilterChange || onSearch) && (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between mb-2 sm:mb-4 lg:mb-6 relative z-40 px-3 sm:px-0 flex-shrink-0">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2 sm:gap-3 flex-1 flex-wrap">
+            {!hideSearch && searchQuery !== undefined && (
+              <label className="flex flex-col gap-1 flex-1 sm:flex-initial min-w-0">
+                <span className="text-xs font-medium text-slate-900 hidden sm:block">Search</span>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="Search orders..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && onSearch) {
+                        e.preventDefault();
+                        onSearch();
+                      }
+                    }}
+                    className="w-full sm:w-48 pl-9 pr-3 py-2.5 sm:py-1.5 border border-slate-300 bg-white text-slate-900 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition-colors"
+                  />
+                </div>
+              </label>
+            )}
+            {onDateFilterChange && onStartDateChange && onEndDateChange && (
+              <DateFilter
+                dateFilter={dateFilter}
+                startDate={startDate}
+                endDate={endDate}
+                onDateFilterChange={onDateFilterChange}
+                onStartDateChange={onStartDateChange}
+                onEndDateChange={onEndDateChange}
+              />
+            )}
+            {onSearch && (
+              <button
+                onClick={onSearch}
+                disabled={loading}
+                className="px-4 py-2.5 sm:py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-sm flex items-center justify-center gap-2 w-full sm:w-auto"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span className="hidden sm:inline">Searching...</span>
+                    <span className="sm:hidden">Searching</span>
+                  </>
+                ) : (
+                  'Search'
+                )}
+              </button>
+            )}
+            {(searchQuery || (dateFilter !== 'all' && onClearSearch)) && onClearSearch && (
+              <button
+                onClick={onClearSearch}
+                className="px-4 py-2.5 sm:py-1.5 text-slate-600 bg-white border border-slate-300 rounded-md hover:bg-slate-50 transition-colors text-sm w-full sm:w-auto"
+                title="Clear filters"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Action Buttons - Always visible */}
+      <div className={`flex flex-col sm:flex-row gap-2 sm:gap-3 justify-end mb-2 sm:mb-4 lg:mb-6 relative z-40 flex-shrink-0 ${fullWidth ? 'px-4' : 'px-3 sm:px-0'}`}>
+        {/* Automate Logistic Button - Show when one or more orders are selected */}
+        {selectedOrderIds.size > 0 && (
+          <button
+            onClick={() => {
+              setShowAutomateLogisticModal(true);
+            }}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-slate-700 rounded-md border border-slate-300 hover:bg-slate-50 transition-colors text-sm font-medium shadow-sm"
+          >
+            <Truck className="h-4 w-4" />
+            <span>Automate Logistic</span>
+          </button>
+        )}
+
+        {/* Logistics Dropdown Button - Show only when exactly one order is selected */}
+        {selectedOrderIds.size === 1 && (
+          <div className="relative w-full sm:w-auto" ref={logisticsDropdownRef}>
             <button
-              onClick={() => {
-                setShowAutomateLogisticModal(true);
-              }}
+              onClick={() => setShowLogisticsDropdown(!showLogisticsDropdown)}
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-slate-700 rounded-md border border-slate-300 hover:bg-slate-50 transition-colors text-sm font-medium shadow-sm"
             >
               <Truck className="h-4 w-4" />
-              <span>Automate Logistic</span>
+              <span>Logistics</span>
+              <ChevronDown className={`h-4 w-4 transition-transform ${showLogisticsDropdown ? 'rotate-180' : ''}`} />
             </button>
-          )}
 
-          {/* Logistics Dropdown Button - Show only when exactly one order is selected */}
-          {selectedOrderIds.size === 1 && (
-            <div className="relative w-full sm:w-auto" ref={logisticsDropdownRef}>
-              <button
-                onClick={() => setShowLogisticsDropdown(!showLogisticsDropdown)}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-slate-700 rounded-md border border-slate-300 hover:bg-slate-50 transition-colors text-sm font-medium shadow-sm"
-              >
-                <Truck className="h-4 w-4" />
-                <span>Logistics</span>
-                <ChevronDown className={`h-4 w-4 transition-transform ${showLogisticsDropdown ? 'rotate-180' : ''}`} />
-              </button>
-
-              {/* Logistics Dropdown Menu */}
-              {showLogisticsDropdown && (
-                <div className="absolute right-0 mt-2 w-full sm:w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-[60]">
-                  {LOGISTICS_CARRIERS.map((carrier) => {
-                    // Get the selected order
-                    const selectedOrderId = Array.from(selectedOrderIds)[0];
-                    const selectedOrder = orders.find(order => order.id === selectedOrderId);
-                    
-                    return (
-                      <button
-                        key={carrier}
-                        onClick={() => {
-                          if (selectedOrder) {
-                            // Store order data in sessionStorage before checking token
-                            // This ensures the order info is available after login
-                            sessionStorage.setItem('selectedOrderForLogistics', JSON.stringify({
-                              id: selectedOrder.id,
-                              orderOnMarketPlace: selectedOrder.orderOnMarketPlace,
-                              jsonb: selectedOrder.jsonb,
-                            }));
-                            
-                            // Check if logistics token exists and is valid for this carrier
-                            const normalizedCarrier = carrier.toLowerCase();
-                            const logisticsToken = getToken(normalizedCarrier);
-                            const tokenExpired = logisticsToken ? isTokenExpired(normalizedCarrier, 10) : true;
-                            const sessionActive = isSessionActive();
-                            
-                            // If no token, or token expired and session not active, show login popup
-                            if (!logisticsToken || (tokenExpired && !sessionActive)) {
-                              // Token doesn't exist or expired with no active session, show logistics login popup and preserve the action
-                              setPendingLogisticsAction({ carrier, order: selectedOrder });
-                              setSelectedCarrier(carrier);
-                              setShowLogisticsAuthModal(true);
-                              setShowLogisticsDropdown(false);
-                              return; // Don't proceed until user is logged in to logistics
-                            }
-                            
-                            // User is logged in to logistics, proceed with redirect to rate quote page
-                            handleLogisticsRedirect(carrier, selectedOrder);
+            {/* Logistics Dropdown Menu */}
+            {showLogisticsDropdown && (
+              <div className="absolute right-0 mt-2 w-full sm:w-48 bg-white border border-slate-200 rounded-lg shadow-xl z-[60]">
+                {LOGISTICS_CARRIERS.map((carrier) => {
+                  // Get the selected order
+                  const selectedOrderId = Array.from(selectedOrderIds)[0];
+                  const selectedOrder = orders.find(order => order.id === selectedOrderId);
+                  
+                  return (
+                    <button
+                      key={carrier}
+                      onClick={() => {
+                        if (selectedOrder) {
+                          // Store order data in sessionStorage before checking token
+                          // This ensures the order info is available after login
+                          sessionStorage.setItem('selectedOrderForLogistics', JSON.stringify({
+                            id: selectedOrder.id,
+                            orderOnMarketPlace: selectedOrder.orderOnMarketPlace,
+                            jsonb: selectedOrder.jsonb,
+                          }));
+                          
+                          // Check if logistics token exists and is valid for this carrier
+                          const normalizedCarrier = carrier.toLowerCase();
+                          const logisticsToken = getToken(normalizedCarrier);
+                          const tokenExpired = logisticsToken ? isTokenExpired(normalizedCarrier, 10) : true;
+                          const sessionActive = isSessionActive();
+                          
+                          // If no token, or token expired and session not active, show login popup
+                          if (!logisticsToken || (tokenExpired && !sessionActive)) {
+                            // Token doesn't exist or expired with no active session, show logistics login popup and preserve the action
+                            setPendingLogisticsAction({ carrier, order: selectedOrder });
+                            setSelectedCarrier(carrier);
+                            setShowLogisticsAuthModal(true);
+                            setShowLogisticsDropdown(false);
+                            return; // Don't proceed until user is logged in to logistics
                           }
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
-                      >
-                        <Truck className="h-4 w-4 text-slate-500" />
-                        {carrier}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
+                          
+                          // User is logged in to logistics, proceed with redirect to rate quote page
+                          handleLogisticsRedirect(carrier, selectedOrder);
+                        }
+                      }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors text-left"
+                    >
+                      <Truck className="h-4 w-4 text-slate-500" />
+                      {carrier}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
-          {/* Add New Button with Dropdown */}
+        {/* Add New Button with Dropdown - Only show if onCreateNew is provided */}
+        {onCreateNew && (
           <div className="relative w-full sm:w-auto" ref={dropdownRef}>
             <button
               onClick={() => setShowDropdown(!showDropdown)}
@@ -528,27 +556,35 @@ export const OrderList = ({
               className="hidden"
             />
           </div>
+        )}
 
-          {/* Bulk Delete Button - Show only when orders are selected */}
-          {selectedOrderIds.size > 0 && (
+        {/* Bulk Delete Button - Show only when non-Walmart orders are selected */}
+        {(() => {
+          // Count non-Walmart selected orders
+          const nonWalmartSelectedCount = Array.from(selectedOrderIds).filter((id) => {
+            const order = orders.find((o) => o.id === id);
+            return order && order.orderOnMarketPlace !== 'Walmart';
+          }).length;
+          
+          return nonWalmartSelectedCount > 0 && (
             <button
               onClick={handleBulkDeleteClick}
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-red-600 rounded-md border border-red-300 hover:bg-red-50 transition-colors text-sm font-medium shadow-sm"
             >
               <Trash2 className="h-4 w-4" />
-              <span> ({selectedOrderIds.size})</span>
+              <span> ({nonWalmartSelectedCount})</span>
             </button>
-          )}
+          );
+        })()}
 
-          {/* Export Button */}
-          <button
-            onClick={() => exportOrdersToCSV(displayOrders)}
-            disabled={displayOrders.length === 0}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-slate-700 rounded-md border border-slate-300 hover:bg-slate-50 transition-colors text-sm font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Download className="h-4 w-4" />
-          </button>
-        </div>
+        {/* Export Button */}
+        <button
+          onClick={() => exportOrdersToCSV(displayOrders)}
+          disabled={displayOrders.length === 0}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-slate-700 rounded-md border border-slate-300 hover:bg-slate-50 transition-colors text-sm font-medium shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Download className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Orders Table */}
@@ -594,7 +630,13 @@ export const OrderList = ({
                           scope="col"
                           className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50"
                         >
-                          ID
+                          SKU
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50"
+                        >
+                          PO#
                         </th>
                         <th
                           scope="col"
@@ -607,13 +649,19 @@ export const OrderList = ({
                           scope="col"
                           className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50"
                         >
-                          PO#
+                          Amount
                         </th>
                         <th
                           scope="col"
                           className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50"
                         >
-                          SKU
+                          Date
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50 hidden sm:table-cell"
+                        >
+                          ID
                         </th>
                         <th
                           scope="col"
@@ -653,6 +701,32 @@ export const OrderList = ({
                       const orderNumber = getJsonbValue(order.jsonb, 'Order#');
                       const customerName = getJsonbValue(order.jsonb, 'Customer Name');
                       const trackingNumber = getJsonbValue(order.jsonb, 'Tracking Number');
+                      const amount = getJsonbValue(order.jsonb, 'Price') || getJsonbValue(order.jsonb, 'Item Cost') || getJsonbValue(order.jsonb, 'Amount') || '-';
+                      
+                      // Format order date - try from jsonb first, then createdAt
+                      let orderDate = '-';
+                      const jsonbOrderDate = getJsonbValue(order.jsonb, 'Order Date');
+                      if (jsonbOrderDate && jsonbOrderDate !== '-') {
+                        try {
+                          const date = new Date(jsonbOrderDate);
+                          if (!isNaN(date.getTime())) {
+                            orderDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+                          } else {
+                            orderDate = jsonbOrderDate;
+                          }
+                        } catch {
+                          orderDate = jsonbOrderDate;
+                        }
+                      } else if (order.createdAt) {
+                        try {
+                          const date = new Date(order.createdAt);
+                          if (!isNaN(date.getTime())) {
+                            orderDate = date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+                          }
+                        } catch {
+                          orderDate = '-';
+                        }
+                      }
                       
                       return (
                         <tr
@@ -676,12 +750,16 @@ export const OrderList = ({
                               />
                             </div>
                           </td>
-                          {/* Order ID Column */}
+                          {/* SKU Column */}
                           <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
-                            <div className={`text-xs sm:text-sm font-semibold ${
-                              isSelected ? 'text-blue-600' : 'text-slate-900'
-                            }`}>
-                              #{order.id}
+                            <div className="text-xs sm:text-sm text-slate-900 font-medium">
+                              {sku}
+                            </div>
+                          </td>
+                          {/* PO# Column */}
+                          <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
+                            <div className="text-xs sm:text-sm text-slate-900 font-medium">
+                              {poNumber}
                             </div>
                           </td>
                           {/* Marketplace Column */}
@@ -690,16 +768,27 @@ export const OrderList = ({
                               {order.orderOnMarketPlace}
                             </span>
                           </td>
-                          {/* PO# Column */}
+                          {/* Amount Column */}
                           <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
                             <div className="text-xs sm:text-sm text-slate-900 font-medium">
-                              {poNumber}
+                              {amount !== '-' ? (() => {
+                                const numAmount = parseFloat(amount);
+                                return isNaN(numAmount) ? amount : `$${numAmount.toFixed(2)}`;
+                              })() : amount}
                             </div>
                           </td>
-                          {/* SKU Column */}
+                          {/* Date Column */}
                           <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
-                            <div className="text-xs sm:text-sm text-slate-900 font-medium">
-                              {sku}
+                            <div className="text-xs sm:text-sm text-slate-900">
+                              {orderDate}
+                            </div>
+                          </td>
+                          {/* Order ID Column - Hidden on mobile */}
+                          <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap hidden sm:table-cell">
+                            <div className={`text-xs sm:text-sm font-semibold ${
+                              isSelected ? 'text-blue-600' : 'text-slate-900'
+                            }`}>
+                              #{order.id}
                             </div>
                           </td>
                           {/* Order# Column */}
@@ -739,30 +828,52 @@ export const OrderList = ({
                               >
                                 <Info className="h-4 w-4" />
                               </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (onOpenEditModal) {
-                                    onOpenEditModal(order);
-                                  } else {
-                                    setSelectedOrderForEdit(order);
-                                  }
-                                }}
-                                className="inline-flex items-center justify-center p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-100 rounded-md transition-colors"
-                                title="Edit order"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSingleDeleteClick(order.id);
-                                }}
-                                className="inline-flex items-center justify-center p-2 text-red-600 hover:text-red-700 hover:bg-red-100 rounded-md transition-colors"
-                                title="Delete order"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              {/* Edit Button - Disabled for Walmart orders */}
+                              {order.orderOnMarketPlace === 'Walmart' ? (
+                                <button
+                                  disabled
+                                  className="inline-flex items-center justify-center p-2 text-slate-400 cursor-not-allowed rounded-md transition-colors"
+                                  title="This order is synced from Walmart API and cannot be edited"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onOpenEditModal) {
+                                      onOpenEditModal(order);
+                                    } else {
+                                      setSelectedOrderForEdit(order);
+                                    }
+                                  }}
+                                  className="inline-flex items-center justify-center p-2 text-blue-600 hover:text-blue-700 hover:bg-blue-100 rounded-md transition-colors"
+                                  title="Edit order"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </button>
+                              )}
+                              {/* Delete Button - Disabled for Walmart orders */}
+                              {order.orderOnMarketPlace === 'Walmart' ? (
+                                <button
+                                  disabled
+                                  className="inline-flex items-center justify-center p-2 text-slate-400 cursor-not-allowed rounded-md transition-colors"
+                                  title="This order is synced from Walmart API and cannot be deleted"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSingleDeleteClick(order.id);
+                                  }}
+                                  className="inline-flex items-center justify-center p-2 text-red-600 hover:text-red-700 hover:bg-red-100 rounded-md transition-colors"
+                                  title="Delete order"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>

@@ -33,7 +33,7 @@ export default function LoginPage() {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/orders/all');
+      router.push('/orders/walmart');
     }
   }, [isAuthenticated, router]);
 
@@ -71,7 +71,7 @@ export default function LoginPage() {
         setUsername('');
         setPassword('');
         // Redirect to orders page
-        router.push('/orders/all');
+        router.push('/orders/walmart');
         router.refresh();
       } else {
         setError('Invalid username or password');

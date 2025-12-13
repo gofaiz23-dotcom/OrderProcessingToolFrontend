@@ -17,6 +17,10 @@ export const useWalmartTokenRefresh = () => {
   const credentialsConfiguredRef = useRef<boolean | null>(null); // null = unknown, true = configured, false = not configured
 
   useEffect(() => {
+    // Only run on client side
+    if (typeof window === 'undefined') {
+      return;
+    }
     // Function to refresh/fetch token (overrides old token in Zustand store)
     const fetchOrRefreshToken = async (isInitialLoad: boolean = false) => {
       // Skip if we know credentials aren't configured
@@ -48,31 +52,21 @@ export const useWalmartTokenRefresh = () => {
       
       const success = await refreshToken();
       
-      // Check if failure was due to missing credentials
+      // Check if failure was due to backend API error
       if (!success) {
-        // Check if credentials are configured by checking environment variables
-        const clientId = process.env.NEXT_PUBLIC_WALMART_CLIENT_ID;
-        const clientSecret = process.env.NEXT_PUBLIC_WALMART_CLIENT_SECRET;
-        
-        if (!clientId || !clientSecret) {
-          credentialsConfiguredRef.current = false;
-          if (process.env.NODE_ENV === 'development') {
-            console.warn('⚠️ Walmart credentials not configured. Skipping automatic token refresh. Please set NEXT_PUBLIC_WALMART_CLIENT_ID and NEXT_PUBLIC_WALMART_CLIENT_SECRET in .env.local');
-          }
-          return;
-        }
-        
         const isConfiguredForLog = credentialsConfiguredRef.current;
         if (process.env.NODE_ENV === 'development' && (isConfiguredForLog === true || isConfiguredForLog === null)) {
-          console.warn('Failed to refresh Walmart token');
+          console.warn('Failed to refresh Walmart token via backend API');
         }
+        // Don't mark as not configured - backend handles credentials
+        credentialsConfiguredRef.current = null; // Reset to unknown
       } else {
         credentialsConfiguredRef.current = true; // Mark as configured on success
         if (process.env.NODE_ENV === 'development') {
           if (isInitialLoad) {
-            console.log('✅ Walmart token fetched and stored successfully');
+            console.log('✅ Walmart token fetched and stored successfully via backend');
           } else {
-            console.log('✅ Walmart token refreshed and stored in Zustand');
+            console.log('✅ Walmart token refreshed and stored in Zustand via backend');
           }
         }
       }
