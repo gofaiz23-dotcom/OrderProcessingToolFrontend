@@ -14,6 +14,7 @@ import {
   removeCachedOrder,
   type CachedOrderData,
 } from '../utils/ltlOrderCache';
+import { getAllShippedOrders, type ShippedOrder } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 
 type AutomateLogisticModalProps = {
   isOpen: boolean;
@@ -102,7 +103,113 @@ export const AutomateLogisticModal = ({
   // Track saved orders to prevent duplicate saves
   const [savedOrders, setSavedOrders] = useState<Record<number, boolean>>({});
   const [savingOrders, setSavingOrders] = useState<Record<number, boolean>>({});
+  // Track existing shipped orders by SKU
+  const [existingShippedOrders, setExistingShippedOrders] = useState<Record<string, ShippedOrder>>({});
+  // Track original subSKUs to detect changes
+  const [originalSubSKUs, setOriginalSubSKUs] = useState<Record<number, string[]>>({});
   
+
+  // Function to find existing shipped order by SKU
+  const findExistingShippedOrder = useCallback(async (sku: string): Promise<ShippedOrder | null> => {
+    if (!sku || sku === '-') return null;
+    
+    try {
+      const result = await getAllShippedOrders({
+        page: 1,
+        limit: 10,
+        search: sku,
+      });
+      
+      // Find exact SKU match
+      const matchedOrder = result.orders.find((order: ShippedOrder) => 
+        order.sku && order.sku.toLowerCase().trim() === sku.toLowerCase().trim()
+      );
+      
+      return matchedOrder || null;
+    } catch (error) {
+      console.error('Error finding existing shipped order:', error);
+      return null;
+    }
+  }, []);
+
+  // Check for existing shipped orders when orders change
+  useEffect(() => {
+    const checkExistingOrders = async () => {
+      const existingMap: Record<string, ShippedOrder> = {};
+      const newOriginalSubSKUs: Record<number, string[]> = {};
+      
+      for (const order of orders) {
+        const sku = getJsonbValue(order.jsonb, 'SKU');
+        if (sku && sku !== '-') {
+          const existingOrder = await findExistingShippedOrder(sku);
+          if (existingOrder) {
+            existingMap[sku] = existingOrder;
+            
+            // Extract shiptypes and subSKUs from existing order
+            let shippingType: 'LTL' | 'Parcel' | '' = '';
+            let subSKUsList: string[] = [];
+            
+            // Get shipping type
+            if (existingOrder.shippingType) {
+              shippingType = existingOrder.shippingType as 'LTL' | 'Parcel';
+            } else if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
+              const ordersData = existingOrder.ordersJsonb as any;
+              const shiptypes = ordersData?.shiptypes || ordersData?.shippingType;
+              if (shiptypes === 'LTL' || shiptypes === 'Parcel') {
+                shippingType = shiptypes;
+              }
+            }
+            
+            // Get subSKUs
+            if (existingOrder.subSKUs && Array.isArray(existingOrder.subSKUs) && existingOrder.subSKUs.length > 0) {
+              subSKUsList = existingOrder.subSKUs;
+            } else if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
+              const ordersData = existingOrder.ordersJsonb as any;
+              const subSKUsValue = ordersData?.subSKUs || ordersData?.subSKU;
+              
+              if (Array.isArray(subSKUsValue)) {
+                subSKUsList = subSKUsValue;
+              } else if (typeof subSKUsValue === 'string' && subSKUsValue.trim()) {
+                subSKUsList = subSKUsValue.split(',').map(s => s.trim()).filter(s => s.length > 0);
+              }
+            }
+            
+            // Pre-populate if we have data
+            if (shippingType || subSKUsList.length > 0) {
+              setShippingTypes((prev) => ({
+                ...prev,
+                [order.id]: shippingType || prev[order.id] || '',
+              }));
+              
+              setSubSKUs((prev) => {
+                const updated = { ...prev };
+                if (subSKUsList.length > 0) {
+                  updated[order.id] = subSKUsList;
+                  newOriginalSubSKUs[order.id] = [...subSKUsList];
+                }
+                return updated;
+              });
+              
+              // Mark as already saved if it has both shiptypes and subSKUs
+              if (shippingType && subSKUsList.length > 0) {
+                setSavedOrders((prev) => ({
+                  ...prev,
+                  [order.id]: true,
+                }));
+              }
+            }
+          }
+        }
+      }
+      
+      setExistingShippedOrders(existingMap);
+      setOriginalSubSKUs((prev) => ({ ...prev, ...newOriginalSubSKUs }));
+    };
+    
+    if (isOpen && orders.length > 0) {
+      checkExistingOrders();
+    }
+  }, [isOpen, orders, findExistingShippedOrder]);
 
   // Initialize shipping types when orders change - Set Parcel as default for multiple orders
   useEffect(() => {
@@ -142,10 +249,20 @@ export const AutomateLogisticModal = ({
     });
   }, [orders]);
 
+  // Function to check if subSKUs have changed
+  const hasSubSKUsChanged = useCallback((orderId: number, currentSubSKUs: string[]): boolean => {
+    const original = originalSubSKUs[orderId] || [];
+    if (original.length !== currentSubSKUs.length) return true;
+    
+    const originalSorted = [...original].sort().join(',');
+    const currentSorted = [...currentSubSKUs].sort().join(',');
+    return originalSorted !== currentSorted;
+  }, [originalSubSKUs]);
+
   // Function to save order data to cache (for LTL) or directly (for Parcel)
   const saveOrderData = useCallback(async (order: Order) => {
     // Prevent duplicate saves
-    if (savedOrders[order.id] || savingOrders[order.id]) {
+    if (savingOrders[order.id]) {
       return;
     }
 
@@ -164,6 +281,49 @@ export const AutomateLogisticModal = ({
 
     if (subSKUList.length === 0) {
       return;
+    }
+
+    // Check if order already exists with shiptypes and subSKUs
+    const existingOrder = existingShippedOrders[sku];
+    
+    if (existingOrder) {
+      // Get existing shiptypes and subSKUs
+      let existingShippingType: string | null = null;
+      let existingSubSKUs: string[] = [];
+      
+      if (existingOrder.shippingType) {
+        existingShippingType = existingOrder.shippingType;
+      } else if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
+        const ordersData = existingOrder.ordersJsonb as any;
+        existingShippingType = ordersData?.shiptypes || ordersData?.shippingType || null;
+      }
+      
+      if (existingOrder.subSKUs && Array.isArray(existingOrder.subSKUs) && existingOrder.subSKUs.length > 0) {
+        existingSubSKUs = existingOrder.subSKUs;
+      } else if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
+        const ordersData = existingOrder.ordersJsonb as any;
+        const subSKUsValue = ordersData?.subSKUs || ordersData?.subSKU;
+        
+        if (Array.isArray(subSKUsValue)) {
+          existingSubSKUs = subSKUsValue;
+        } else if (typeof subSKUsValue === 'string' && subSKUsValue.trim()) {
+          existingSubSKUs = subSKUsValue.split(',').map(s => s.trim()).filter(s => s.length > 0);
+        }
+      }
+      
+      // Check if shiptypes or subSKUs have changed
+      const shiptypesChanged = existingShippingType !== shippingType;
+      const subSKUsChanged = hasSubSKUsChanged(order.id, subSKUList);
+      
+      // If nothing changed, skip update
+      if (!shiptypesChanged && !subSKUsChanged && existingShippingType && existingSubSKUs.length > 0) {
+        setSavedOrders((prev) => ({ ...prev, [order.id]: true }));
+        setToastMessage('Order already has shiptypes and subSKUs. No update needed.');
+        setShowToast(true);
+        return;
+      }
+      
+      // If changed, we'll update below (continue to update logic)
     }
 
     setSavingOrders((prev) => ({ ...prev, [order.id]: true }));
@@ -209,29 +369,31 @@ export const AutomateLogisticModal = ({
         setToastMessage('Order data saved to cache (LTL)');
         setShowToast(true);
       } else {
-        // For Parcel: Save directly to backend
-        const response = await fetch(buildApiUrl('/Logistics/shipped-orders'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            sku: sku,
-            orderOnMarketPlace: order.orderOnMarketPlace,
-            ordersJsonb: ordersJsonb,
-          }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ message: 'Failed to save order data' }));
-          throw new Error(errorData.message || 'Failed to save order data');
-        }
-
-        const result = await response.json();
-        const logisticsOrderId = result.data?.id || result.id;
-
-        // If order was created, also save to cache for future updates
+        // For Parcel: Check if order exists, if yes update, otherwise create
+        let logisticsOrderId = existingOrder?.id;
+        
         if (logisticsOrderId) {
+          // Update existing order
+          const response = await fetch(buildApiUrl(`/Logistics/shipped-orders/${logisticsOrderId}`), {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sku: sku,
+              orderOnMarketPlace: order.orderOnMarketPlace,
+              ordersJsonb: ordersJsonb,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Failed to update order data' }));
+            throw new Error(errorData.message || 'Failed to update order data');
+          }
+
+          const result = await response.json();
+          
+          // Update cache
           const existingCached = getCachedOrder(order.id);
           if (existingCached) {
             updateCachedOrder(order.id, { logisticsShippedOrderId: logisticsOrderId });
@@ -246,14 +408,60 @@ export const AutomateLogisticModal = ({
               logisticsShippedOrderId: logisticsOrderId,
             });
           }
+
+          // Mark order as saved
+          setSavedOrders((prev) => ({ ...prev, [order.id]: true }));
+
+          // Show success toast
+          setToastMessage('Order data updated');
+          setShowToast(true);
+        } else {
+          // Create new order
+          const response = await fetch(buildApiUrl('/Logistics/shipped-orders'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sku: sku,
+              orderOnMarketPlace: order.orderOnMarketPlace,
+              ordersJsonb: ordersJsonb,
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: 'Failed to save order data' }));
+            throw new Error(errorData.message || 'Failed to save order data');
+          }
+
+          const result = await response.json();
+          const logisticsOrderId = result.data?.id || result.id;
+
+          // If order was created, also save to cache for future updates
+          if (logisticsOrderId) {
+            const existingCached = getCachedOrder(order.id);
+            if (existingCached) {
+              updateCachedOrder(order.id, { logisticsShippedOrderId: logisticsOrderId });
+            } else {
+              updateCachedOrder(order.id, {
+                orderId: order.id,
+                sku: sku,
+                orderOnMarketPlace: order.orderOnMarketPlace,
+                ordersJsonb: ordersJsonb,
+                shippingType: shippingType,
+                subSKUs: subSKUList,
+                logisticsShippedOrderId: logisticsOrderId,
+              });
+            }
+          }
+
+          // Mark order as saved
+          setSavedOrders((prev) => ({ ...prev, [order.id]: true }));
+
+          // Show success toast
+          setToastMessage('Order data saved');
+          setShowToast(true);
         }
-
-        // Mark order as saved
-        setSavedOrders((prev) => ({ ...prev, [order.id]: true }));
-
-        // Show success toast
-        setToastMessage('Order data saved');
-        setShowToast(true);
       }
     } catch (error) {
       console.error('Error saving order data:', error);
@@ -266,7 +474,7 @@ export const AutomateLogisticModal = ({
         return updated;
       });
     }
-  }, [shippingTypes, subSKUs, savedOrders, savingOrders]);
+  }, [shippingTypes, subSKUs, savedOrders, savingOrders, existingShippedOrders, hasSubSKUsChanged]);
 
   // Function to update cache with rate quotes and BOL data (wrapper for utility)
   const updateOrderCache = useCallback((orderId: number, updates: Partial<CachedOrderData>) => {
@@ -477,23 +685,67 @@ export const AutomateLogisticModal = ({
   }, [updateOrderCache, updateOrderFromCache]);
 
   // Auto-save when both shippingType and subSKUs are filled (only for single orders)
+  // Also auto-update when subSKUs or shiptypes change for existing orders
   useEffect(() => {
     // Only auto-save for single orders, not for multiple orders
     if (orders.length === 1) {
       orders.forEach((order) => {
         const shippingType = shippingTypes[order.id];
         const subSKUList = subSKUs[order.id] || [];
+        const sku = getJsonbValue(order.jsonb, 'SKU');
+        const existingOrder = sku && sku !== '-' ? existingShippedOrders[sku] : null;
 
-        // Check if both are filled and order hasn't been saved yet
-        if (shippingType && subSKUList.length > 0 && !savedOrders[order.id] && !savingOrders[order.id]) {
-          // Small delay to ensure state is updated
-          setTimeout(() => {
-            saveOrderData(order);
-          }, 300);
+        // Check if both are filled
+        if (shippingType && subSKUList.length > 0 && !savingOrders[order.id]) {
+          // Check if order exists and data has changed
+          if (existingOrder) {
+            // Get existing shiptypes and subSKUs
+            let existingShippingType: string | null = null;
+            let existingSubSKUs: string[] = [];
+            
+            if (existingOrder.shippingType) {
+              existingShippingType = existingOrder.shippingType;
+            } else if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
+              const ordersData = existingOrder.ordersJsonb as any;
+              existingShippingType = ordersData?.shiptypes || ordersData?.shippingType || null;
+            }
+            
+            if (existingOrder.subSKUs && Array.isArray(existingOrder.subSKUs) && existingOrder.subSKUs.length > 0) {
+              existingSubSKUs = existingOrder.subSKUs;
+            } else if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
+              const ordersData = existingOrder.ordersJsonb as any;
+              const subSKUsValue = ordersData?.subSKUs || ordersData?.subSKU;
+              
+              if (Array.isArray(subSKUsValue)) {
+                existingSubSKUs = subSKUsValue;
+              } else if (typeof subSKUsValue === 'string' && subSKUsValue.trim()) {
+                existingSubSKUs = subSKUsValue.split(',').map(s => s.trim()).filter(s => s.length > 0);
+              }
+            }
+            
+            // Check if shiptypes or subSKUs have changed
+            const shiptypesChanged = existingShippingType !== shippingType;
+            const subSKUsChanged = hasSubSKUsChanged(order.id, subSKUList);
+            
+            if (shiptypesChanged || subSKUsChanged) {
+              // Data has changed, automatically update
+              setTimeout(() => {
+                saveOrderData(order);
+              }, 500);
+            } else if (!savedOrders[order.id]) {
+              // Data hasn't changed but not marked as saved, mark as saved
+              setSavedOrders((prev) => ({ ...prev, [order.id]: true }));
+            }
+          } else if (!savedOrders[order.id]) {
+            // New order, save it
+            setTimeout(() => {
+              saveOrderData(order);
+            }, 300);
+          }
         }
       });
     }
-  }, [shippingTypes, subSKUs, orders, savedOrders, savingOrders, saveOrderData]);
+  }, [shippingTypes, subSKUs, orders, savedOrders, savingOrders, saveOrderData, existingShippedOrders, hasSubSKUsChanged]);
 
   // Function to save all orders in bulk and open ParcelModal
   const handleProcessToFedex = useCallback(async () => {
@@ -925,6 +1177,19 @@ export const AutomateLogisticModal = ({
                                   ...prev,
                                   [order.id]: 'Parcel',
                                 }));
+                                // If order exists and shiptypes changed, auto-update
+                                const sku = getJsonbValue(order.jsonb, 'SKU');
+                                const existingOrder = sku && sku !== '-' ? existingShippedOrders[sku] : null;
+                                if (existingOrder && subSKUs[order.id] && subSKUs[order.id].length > 0) {
+                                  // Auto-update when shiptypes change
+                                  setTimeout(() => {
+                                    saveOrderData(order).then(() => {
+                                      setSelectedOrderForParcel(order);
+                                      setParcelModalOpen(true);
+                                    });
+                                  }, 300);
+                                  return;
+                                }
                               }
                               setOpenDropdowns((prev) => ({
                                 ...prev,
@@ -949,6 +1214,9 @@ export const AutomateLogisticModal = ({
                             type="button"
                             onClick={async () => {
                               const newValue = 'LTL';
+                              const sku = getJsonbValue(order.jsonb, 'SKU');
+                              const existingOrder = sku && sku !== '-' ? existingShippedOrders[sku] : null;
+                              
                               setShippingTypes((prev) => ({
                                 ...prev,
                                 [order.id]: newValue,
@@ -958,8 +1226,14 @@ export const AutomateLogisticModal = ({
                                 [order.id]: false,
                               }));
                               
-                              // Save order data when LTL is selected
-                              await saveOrderData(order);
+                              // If order exists and shiptypes changed, auto-update
+                              if (existingOrder && subSKUs[order.id] && subSKUs[order.id].length > 0) {
+                                // Auto-update when shiptypes change
+                                await saveOrderData(order);
+                              } else {
+                                // Save order data when LTL is selected
+                                await saveOrderData(order);
+                              }
                               
                               // Open LTL rate quote modal when LTL is selected
                               setSelectedOrderForLTL(order);
@@ -987,12 +1261,23 @@ export const AutomateLogisticModal = ({
                                   {subSku}
                                   <button
                                     type="button"
-                                    onClick={() => {
-                                      setSubSKUs((prev) => ({
-                                        ...prev,
-                                        [order.id]: prev[order.id]?.filter((_, i) => i !== index) || [],
-                                      }));
-                                    }}
+                              onClick={() => {
+                                setSubSKUs((prev) => {
+                                  const updated = {
+                                    ...prev,
+                                    [order.id]: prev[order.id]?.filter((_, i) => i !== index) || [],
+                                  };
+                                  // If subSKUs changed, mark as not saved
+                                  if (hasSubSKUsChanged(order.id, updated[order.id] || [])) {
+                                    setSavedOrders((prev) => {
+                                      const updated = { ...prev };
+                                      delete updated[order.id];
+                                      return updated;
+                                    });
+                                  }
+                                  return updated;
+                                });
+                              }}
                                     className="ml-1 text-slate-600 hover:text-slate-900"
                                   >
                                     <X className="h-3 w-3" />
@@ -1022,10 +1307,21 @@ export const AutomateLogisticModal = ({
                               }}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && subSKUInputs[order.id]?.trim()) {
-                                  setSubSKUs((prev) => ({
-                                    ...prev,
-                                    [order.id]: [...(prev[order.id] || []), subSKUInputs[order.id].trim()],
-                                  }));
+                                  setSubSKUs((prev) => {
+                                    const updated = {
+                                      ...prev,
+                                      [order.id]: [...(prev[order.id] || []), subSKUInputs[order.id].trim()],
+                                    };
+                                    // If subSKUs changed, mark as not saved
+                                    if (hasSubSKUsChanged(order.id, updated[order.id] || [])) {
+                                      setSavedOrders((prev) => {
+                                        const updated = { ...prev };
+                                        delete updated[order.id];
+                                        return updated;
+                                      });
+                                    }
+                                    return updated;
+                                  });
                                   setSubSKUInputs((prev) => ({
                                     ...prev,
                                     [order.id]: '',
@@ -1053,10 +1349,21 @@ export const AutomateLogisticModal = ({
                               type="button"
                               onClick={() => {
                                 if (subSKUInputs[order.id]?.trim()) {
-                                  setSubSKUs((prev) => ({
-                                    ...prev,
-                                    [order.id]: [...(prev[order.id] || []), subSKUInputs[order.id].trim()],
-                                  }));
+                                  setSubSKUs((prev) => {
+                                    const updated = {
+                                      ...prev,
+                                      [order.id]: [...(prev[order.id] || []), subSKUInputs[order.id].trim()],
+                                    };
+                                    // If subSKUs changed, mark as not saved
+                                    if (hasSubSKUsChanged(order.id, updated[order.id] || [])) {
+                                      setSavedOrders((prev) => {
+                                        const updated = { ...prev };
+                                        delete updated[order.id];
+                                        return updated;
+                                      });
+                                    }
+                                    return updated;
+                                  });
                                   setSubSKUInputs((prev) => ({
                                     ...prev,
                                     [order.id]: '',

@@ -11,6 +11,7 @@ import { LOGISTICS_CARRIERS } from '@/Shared/constant';
 import { DateFilter } from '@/app/components/shared/DateFilter';
 import { useLogisticsStore } from '@/store/logisticsStore';
 import { AutomateLogisticModal } from '@/app/Automation/components/AutomateLogisticModal';
+import { createSKULookupMap, getSKUData, type SKULookupData } from '@/app/utils/Orders/shippedOrdersLookup';
 
 type DateFilterOption = 'all' | 'today' | 'thisWeek' | 'specificDate' | 'custom';
 
@@ -104,6 +105,27 @@ export const OrderList = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
   const logisticsDropdownRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // SKU lookup map for shiptypes and subSKUs
+  const [skuLookupMap, setSkuLookupMap] = useState<Map<string, SKULookupData>>(new Map());
+  const [loadingSkuLookup, setLoadingSkuLookup] = useState(false);
+
+  // Fetch SKU lookup data on component mount
+  useEffect(() => {
+    const fetchSkuLookup = async () => {
+      setLoadingSkuLookup(true);
+      try {
+        const lookupMap = await createSKULookupMap();
+        setSkuLookupMap(lookupMap);
+      } catch (error) {
+        console.error('Error fetching SKU lookup data:', error);
+      } finally {
+        setLoadingSkuLookup(false);
+      }
+    };
+    
+    fetchSkuLookup();
+  }, []);
 
   // Use pagination from backend if available, otherwise use client-side pagination for search
   const currentPage = pagination?.page ?? currentPageProp;
@@ -631,6 +653,18 @@ export const OrderList = ({
                           scope="col"
                           className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50"
                         >
+                          Ship Type
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50"
+                        >
+                          SubSKUs
+                        </th>
+                        <th
+                          scope="col"
+                          className="px-2 sm:px-3 lg:px-6 py-2.5 sm:py-3 text-left text-[10px] sm:text-xs font-bold text-slate-700 uppercase tracking-wider bg-slate-50"
+                        >
                           PO#
                         </th>
                         <th
@@ -698,6 +732,11 @@ export const OrderList = ({
                       const trackingNumber = getJsonbValue(order.jsonb, 'Tracking Number');
                       const amount = getJsonbValue(order.jsonb, 'Price') || getJsonbValue(order.jsonb, 'Item Cost') || getJsonbValue(order.jsonb, 'Amount') || '-';
                       
+                      // Get shiptypes and subSKUs from shipped orders lookup
+                      const skuData = getSKUData(sku !== '-' ? sku : null, skuLookupMap);
+                      const shippingType = skuData?.shippingType || null;
+                      const subSKUs = skuData?.subSKUs || [];
+                      
                       // Format order date - try from jsonb first, then createdAt
                       let orderDate = '-';
                       const jsonbOrderDate = getJsonbValue(order.jsonb, 'Order Date');
@@ -750,6 +789,44 @@ export const OrderList = ({
                             <div className="text-xs sm:text-sm text-slate-900 font-medium">
                               {sku}
                             </div>
+                          </td>
+                          {/* Ship Type Column */}
+                          <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
+                            {shippingType ? (
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${
+                                shippingType === 'LTL'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : shippingType === 'Parcel'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-slate-100 text-slate-800'
+                              }`}>
+                                {shippingType}
+                              </span>
+                            ) : (
+                              <span className="text-xs sm:text-sm text-slate-400">-</span>
+                            )}
+                          </td>
+                          {/* SubSKUs Column */}
+                          <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
+                            {subSKUs.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {subSKUs.slice(0, 3).map((subSKU, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
+                                  >
+                                    {subSKU}
+                                  </span>
+                                ))}
+                                {subSKUs.length > 3 && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700">
+                                    +{subSKUs.length - 3}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs sm:text-sm text-slate-400">-</span>
+                            )}
                           </td>
                           {/* PO# Column */}
                           <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap">
