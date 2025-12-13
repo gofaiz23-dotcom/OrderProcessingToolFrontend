@@ -6,6 +6,7 @@ import { createEstesPickupRequest, type EstesPickupData } from '@/app/api/3plGig
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 import type { Order } from '@/app/types/order';
+import { dispatchPickupData } from '../../utils/ltlOrderCache';
 
 type Shipment = {
   id: string;
@@ -304,6 +305,15 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
       const response = await createEstesPickupRequest(pickupData, showBrowser, browserType);
       setAutomationId(response.automation_id);
       setSuccess(true);
+      
+      // Dispatch event for cache update (for LTL orders)
+      if (order?.id) {
+        dispatchPickupData(order.id, {
+          automationId: response.automation_id,
+          pickupData,
+          response,
+        });
+      }
       
       // Update order with pickup response - find by SKU and marketplace
       if (order) {

@@ -1,9 +1,19 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
-import { X, ChevronDown } from 'lucide-react';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { X, ChevronDown, CheckCircle2, Loader2 } from 'lucide-react';
 import type { Order } from '@/app/types/order';
 import { LTLRateQuoteModal } from './LTLRateQuoteModal';
+import { ParcelModal } from './ParcelModal';
+import { Toast } from '@/app/orders/_components/Toast';
+import { buildApiUrl } from '../../../../BaseUrl';
+import {
+  getCachedOrders,
+  getCachedOrder,
+  updateCachedOrder,
+  removeCachedOrder,
+  type CachedOrderData,
+} from '../utils/ltlOrderCache';
 
 type AutomateLogisticModalProps = {
   isOpen: boolean;
@@ -72,6 +82,9 @@ export const AutomateLogisticModal = ({
   // State to manage LTL rate quote modal
   const [ltlModalOpen, setLtlModalOpen] = useState(false);
   const [selectedOrderForLTL, setSelectedOrderForLTL] = useState<Order | null>(null);
+  // State to manage Parcel modal
+  const [parcelModalOpen, setParcelModalOpen] = useState(false);
+  const [selectedOrderForParcel, setSelectedOrderForParcel] = useState<Order | null>(null);
   // Refs for dropdown click outside detection
   const dropdownRefs = useRef<Record<number, HTMLDivElement | null>>({});
   // Refs for subSKU input fields
@@ -82,16 +95,28 @@ export const AutomateLogisticModal = ({
   const [subSKUInputs, setSubSKUInputs] = useState<Record<number, string>>({});
   // State to manage which order is currently showing input field
   const [showSubSKUInput, setShowSubSKUInput] = useState<Record<number, boolean>>({});
+  // State for toast notification
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
+  const [savingAllOrders, setSavingAllOrders] = useState(false);
+  // Track saved orders to prevent duplicate saves
+  const [savedOrders, setSavedOrders] = useState<Record<number, boolean>>({});
+  const [savingOrders, setSavingOrders] = useState<Record<number, boolean>>({});
+  
 
-  // Initialize shipping types when orders change
+  // Initialize shipping types when orders change - Set Parcel as default for multiple orders
   useEffect(() => {
     setShippingTypes((prev) => {
       const updated: Record<number, 'LTL' | 'Parcel' | ''> = { ...prev };
       let hasChanges = false;
       
       orders.forEach((order) => {
-        // Only initialize if not already set
-        if (!(order.id in updated)) {
+        // Set Parcel as default for all orders when multiple orders are selected
+        if (orders.length > 1 && (!(order.id in updated) || updated[order.id] === '')) {
+          updated[order.id] = 'Parcel';
+          hasChanges = true;
+        } else if (orders.length === 1 && !(order.id in updated)) {
+          // Single order - don't set default
           updated[order.id] = '';
           hasChanges = true;
         }
@@ -116,6 +141,454 @@ export const AutomateLogisticModal = ({
       return hasChanges ? updated : prev;
     });
   }, [orders]);
+
+  // Function to save order data to cache (for LTL) or directly (for Parcel)
+  const saveOrderData = useCallback(async (order: Order) => {
+    // Prevent duplicate saves
+    if (savedOrders[order.id] || savingOrders[order.id]) {
+      return;
+    }
+
+    const sku = getJsonbValue(order.jsonb, 'SKU');
+    const shippingType = shippingTypes[order.id];
+    const subSKUList = subSKUs[order.id] || [];
+
+    // Validation
+    if (!sku || sku === '-') {
+      return;
+    }
+
+    if (!shippingType) {
+      return;
+    }
+
+    if (subSKUList.length === 0) {
+      return;
+    }
+
+    setSavingOrders((prev) => ({ ...prev, [order.id]: true }));
+
+    try {
+      // Prepare ordersJsonb with original order data plus shiptypes and subSKUs
+      const ordersJsonb = {
+        ...(order.jsonb as Record<string, unknown>),
+        shiptypes: shippingType,
+        subSKUs: subSKUList.join(', '), // Comma-separated string
+      };
+
+      // For LTL: Save to cache instead of immediately posting
+      if (shippingType === 'LTL') {
+        // Get existing cached order or create new
+        const existingCached = getCachedOrder(order.id);
+        
+        // Update or create cache entry
+        if (existingCached) {
+          updateCachedOrder(order.id, {
+            sku: sku,
+            orderOnMarketPlace: order.orderOnMarketPlace,
+            ordersJsonb: ordersJsonb,
+            shippingType: shippingType,
+            subSKUs: subSKUList,
+          });
+        } else {
+          // Create new cache entry using utility
+          updateCachedOrder(order.id, {
+            orderId: order.id,
+            sku: sku,
+            orderOnMarketPlace: order.orderOnMarketPlace,
+            ordersJsonb: ordersJsonb,
+            shippingType: shippingType,
+            subSKUs: subSKUList,
+          });
+        }
+
+        // Mark order as saved (to cache)
+        setSavedOrders((prev) => ({ ...prev, [order.id]: true }));
+
+        // Show success toast
+        setToastMessage('Order data saved to cache (LTL)');
+        setShowToast(true);
+      } else {
+        // For Parcel: Save directly to backend
+        const response = await fetch(buildApiUrl('/Logistics/shipped-orders'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sku: sku,
+            orderOnMarketPlace: order.orderOnMarketPlace,
+            ordersJsonb: ordersJsonb,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ message: 'Failed to save order data' }));
+          throw new Error(errorData.message || 'Failed to save order data');
+        }
+
+        const result = await response.json();
+        const logisticsOrderId = result.data?.id || result.id;
+
+        // If order was created, also save to cache for future updates
+        if (logisticsOrderId) {
+          const existingCached = getCachedOrder(order.id);
+          if (existingCached) {
+            updateCachedOrder(order.id, { logisticsShippedOrderId: logisticsOrderId });
+          } else {
+            updateCachedOrder(order.id, {
+              orderId: order.id,
+              sku: sku,
+              orderOnMarketPlace: order.orderOnMarketPlace,
+              ordersJsonb: ordersJsonb,
+              shippingType: shippingType,
+              subSKUs: subSKUList,
+              logisticsShippedOrderId: logisticsOrderId,
+            });
+          }
+        }
+
+        // Mark order as saved
+        setSavedOrders((prev) => ({ ...prev, [order.id]: true }));
+
+        // Show success toast
+        setToastMessage('Order data saved');
+        setShowToast(true);
+      }
+    } catch (error) {
+      console.error('Error saving order data:', error);
+      setToastMessage(error instanceof Error ? error.message : 'Failed to save order data');
+      setShowToast(true);
+    } finally {
+      setSavingOrders((prev) => {
+        const updated = { ...prev };
+        delete updated[order.id];
+        return updated;
+      });
+    }
+  }, [shippingTypes, subSKUs, savedOrders, savingOrders]);
+
+  // Function to update cache with rate quotes and BOL data (wrapper for utility)
+  const updateOrderCache = useCallback((orderId: number, updates: Partial<CachedOrderData>) => {
+    updateCachedOrder(orderId, updates);
+  }, []);
+
+  // Function to find existing logistics order by sku and orderOnMarketPlace
+  const findExistingLogisticsOrder = useCallback(async (sku: string, orderOnMarketPlace: string): Promise<number | null> => {
+    try {
+      const response = await fetch(buildApiUrl(`/Logistics/shipped-orders?sku=${encodeURIComponent(sku)}&orderOnMarketPlace=${encodeURIComponent(orderOnMarketPlace)}&limit=1`));
+      if (response.ok) {
+        const data = await response.json();
+        if (data.orders && data.orders.length > 0) {
+          return data.orders[0].id;
+        }
+      }
+      return null;
+    } catch (err) {
+      console.error('Error finding existing order:', err);
+      return null;
+    }
+  }, []);
+
+  // Function to update order from cache (called when BOL/pickup is ready)
+  const updateOrderFromCache = useCallback(async (orderId: number) => {
+    try {
+      const cachedOrder = getCachedOrder(orderId);
+      if (!cachedOrder) return;
+
+      // Get logistics order ID - if not exists, try to find existing or create new
+      let logisticsOrderId = cachedOrder.logisticsShippedOrderId;
+
+      if (!logisticsOrderId) {
+        // Try to find existing order first
+        const existingId = await findExistingLogisticsOrder(cachedOrder.sku, cachedOrder.orderOnMarketPlace);
+        
+        if (existingId) {
+          logisticsOrderId = existingId;
+          updateOrderCache(orderId, { logisticsShippedOrderId: logisticsOrderId });
+        } else {
+          // Create order if not found
+          const createResponse = await fetch(buildApiUrl('/Logistics/shipped-orders'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              sku: cachedOrder.sku,
+              orderOnMarketPlace: cachedOrder.orderOnMarketPlace,
+              ordersJsonb: cachedOrder.ordersJsonb,
+            }),
+          });
+
+          if (!createResponse.ok) {
+            throw new Error('Failed to create order');
+          }
+
+          const createResult = await createResponse.json();
+          logisticsOrderId = createResult.data?.id || createResult.id;
+          
+          // Update cache with logistics order ID
+          updateOrderCache(orderId, { logisticsShippedOrderId: logisticsOrderId });
+        }
+      }
+
+      // Prepare FormData for update with files
+      const formData = new FormData();
+      
+      // Add files if available
+      if (cachedOrder.xpoBolFiles) {
+        cachedOrder.xpoBolFiles.forEach((file: File) => {
+          formData.append('files', file);
+        });
+      }
+      if (cachedOrder.estesBolFiles) {
+        cachedOrder.estesBolFiles.forEach((file: File) => {
+          formData.append('files', file);
+        });
+      }
+
+      // Prepare JSONB data - merge all data and clear rate quotes responses
+      const finalOrdersJsonb = {
+        ...cachedOrder.ordersJsonb,
+        shiptypes: cachedOrder.shippingType,
+        subSKUs: cachedOrder.subSKUs.join(', '),
+      };
+
+      // Prepare rateQuotesResponseJsonb - combine XPO and Estes requests only (clear responses as requested)
+      const rateQuotesResponseJsonb: Record<string, unknown> = {};
+      if (cachedOrder.xpoRateQuoteRequest) {
+        rateQuotesResponseJsonb.xpo = {
+          request: cachedOrder.xpoRateQuoteRequest,
+        };
+      }
+      if (cachedOrder.estesRateQuoteRequest) {
+        rateQuotesResponseJsonb.estes = {
+          request: cachedOrder.estesRateQuoteRequest,
+        };
+      }
+
+      // Prepare bolResponseJsonb - combine XPO and Estes
+      const bolResponseJsonb: Record<string, unknown> = {};
+      if (cachedOrder.xpoBolResponse) {
+        bolResponseJsonb.xpo = cachedOrder.xpoBolResponse;
+      }
+      if (cachedOrder.estesBolResponse) {
+        bolResponseJsonb.estes = cachedOrder.estesBolResponse;
+      }
+
+      // Add JSON fields to FormData
+      formData.append('ordersJsonb', JSON.stringify(finalOrdersJsonb));
+      if (Object.keys(rateQuotesResponseJsonb).length > 0) {
+        formData.append('rateQuotesResponseJsonb', JSON.stringify(rateQuotesResponseJsonb));
+      }
+      if (Object.keys(bolResponseJsonb).length > 0) {
+        formData.append('bolResponseJsonb', JSON.stringify(bolResponseJsonb));
+      }
+      if (cachedOrder.pickupResponseJsonb) {
+        formData.append('pickupResponseJsonb', JSON.stringify(cachedOrder.pickupResponseJsonb));
+      }
+
+      // Update order
+      const updateResponse = await fetch(buildApiUrl(`/Logistics/shipped-orders/${logisticsOrderId}`), {
+        method: 'PUT',
+        body: formData,
+      });
+
+      if (!updateResponse.ok) {
+        const errorData = await updateResponse.json().catch(() => ({ message: 'Failed to update order' }));
+        throw new Error(errorData.message || 'Failed to update order');
+      }
+
+      // If pickup data was saved successfully, clear cache for this order
+      if (cachedOrder.pickupResponseJsonb) {
+        removeCachedOrder(orderId);
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error updating order from cache:', error);
+      throw error;
+    }
+  }, [updateOrderCache, findExistingLogisticsOrder]);
+
+  // Listen for events from XPO/Estes components to update cache
+  useEffect(() => {
+    const handleRateQuoteData = (e: CustomEvent) => {
+      const { orderId, carrier, request, response } = e.detail;
+      if (carrier === 'xpo') {
+        updateOrderCache(orderId, {
+          xpoRateQuoteRequest: request,
+          xpoRateQuoteResponse: response,
+        });
+      } else if (carrier === 'estes') {
+        updateOrderCache(orderId, {
+          estesRateQuoteRequest: request,
+          estesRateQuoteResponse: response,
+        });
+      }
+    };
+
+    const handleBOLData = (e: CustomEvent) => {
+      const { orderId, carrier, bolResponse, bolFiles } = e.detail;
+      if (carrier === 'xpo') {
+        updateOrderCache(orderId, {
+          xpoBolResponse: bolResponse,
+          xpoBolFiles: bolFiles,
+        });
+        // Update order when BOL is ready
+        updateOrderFromCache(orderId).catch(err => console.error('Error updating order:', err));
+      } else if (carrier === 'estes') {
+        updateOrderCache(orderId, {
+          estesBolResponse: bolResponse,
+          estesBolFiles: bolFiles,
+        });
+        // Update order when BOL is ready
+        updateOrderFromCache(orderId).catch(err => console.error('Error updating order:', err));
+      }
+    };
+
+    const handlePickupData = (e: CustomEvent) => {
+      const { orderId, pickupResponse } = e.detail;
+      updateOrderCache(orderId, {
+        pickupResponseJsonb: pickupResponse,
+      });
+      // Update order when pickup is ready, then clear cache
+      updateOrderFromCache(orderId)
+        .then(() => {
+          setToastMessage('Order updated successfully. Cache cleared.');
+          setShowToast(true);
+        })
+        .catch(err => {
+          console.error('Error updating order with pickup data:', err);
+          setToastMessage('Failed to update order with pickup data');
+          setShowToast(true);
+        });
+    };
+
+    window.addEventListener('rateQuoteData' as any, handleRateQuoteData as EventListener);
+    window.addEventListener('bolData' as any, handleBOLData as EventListener);
+    window.addEventListener('pickupData' as any, handlePickupData as EventListener);
+
+    return () => {
+      window.removeEventListener('rateQuoteData' as any, handleRateQuoteData as EventListener);
+      window.removeEventListener('bolData' as any, handleBOLData as EventListener);
+      window.removeEventListener('pickupData' as any, handlePickupData as EventListener);
+    };
+  }, [updateOrderCache, updateOrderFromCache]);
+
+  // Auto-save when both shippingType and subSKUs are filled (only for single orders)
+  useEffect(() => {
+    // Only auto-save for single orders, not for multiple orders
+    if (orders.length === 1) {
+      orders.forEach((order) => {
+        const shippingType = shippingTypes[order.id];
+        const subSKUList = subSKUs[order.id] || [];
+
+        // Check if both are filled and order hasn't been saved yet
+        if (shippingType && subSKUList.length > 0 && !savedOrders[order.id] && !savingOrders[order.id]) {
+          // Small delay to ensure state is updated
+          setTimeout(() => {
+            saveOrderData(order);
+          }, 300);
+        }
+      });
+    }
+  }, [shippingTypes, subSKUs, orders, savedOrders, savingOrders, saveOrderData]);
+
+  // Function to save all orders in bulk and open ParcelModal
+  const handleProcessToFedex = useCallback(async () => {
+    setSavingAllOrders(true);
+
+    const ordersToSave = [];
+
+    for (const order of orders) {
+      const sku = getJsonbValue(order.jsonb, 'SKU');
+      const shippingType = shippingTypes[order.id] || 'Parcel';
+      const subSKUList = subSKUs[order.id] || [];
+
+      if (!sku || sku === '-') {
+        setToastMessage(`Order ${order.id}: SKU is required`);
+        setShowToast(true);
+        setSavingAllOrders(false);
+        return;
+      }
+
+      if (!shippingType) {
+        setToastMessage(`Order ${order.id}: Shipping type is required`);
+        setShowToast(true);
+        setSavingAllOrders(false);
+        return;
+      }
+
+      if (subSKUList.length === 0) {
+        setToastMessage(`Order ${order.id}: SubSKU is required`);
+        setShowToast(true);
+        setSavingAllOrders(false);
+        return;
+      }
+
+      // Validate orderOnMarketPlace
+      if (!order.orderOnMarketPlace || order.orderOnMarketPlace.trim() === '') {
+        setToastMessage(`Order ${order.id}: Order on Marketplace is required`);
+        setShowToast(true);
+        setSavingAllOrders(false);
+        return;
+      }
+
+      const ordersJsonb = {
+        ...(order.jsonb as Record<string, unknown>),
+        shiptypes: shippingType,
+        subSKUs: subSKUList.join(', '),
+      };
+
+      ordersToSave.push({
+        sku: sku.trim(),
+        orderOnMarketPlace: order.orderOnMarketPlace.trim(),
+        ordersJsonb: ordersJsonb,
+      });
+    }
+
+    try {
+      const response = await fetch(buildApiUrl('/Logistics/shipped-orders'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(ordersToSave),
+      });
+
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonError) {
+        // If response is not JSON, get text instead
+        const text = await response.text();
+        throw new Error(text || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      if (!response.ok) {
+        // Handle error response
+        const errorMessage = result?.message || result?.error || `HTTP ${response.status}: ${response.statusText}`;
+        throw new Error(errorMessage);
+      }
+
+      // Success response
+      const successMessage = result?.message || `Successfully saved ${result?.created || ordersToSave.length} order(s)`;
+      setToastMessage(successMessage);
+      setShowToast(true);
+
+      // Open ParcelModal after successful save
+      setSelectedOrderForParcel(orders[0]);
+      setParcelModalOpen(true);
+    } catch (error) {
+      console.error('Error saving orders:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to save orders';
+      setToastMessage(errorMessage);
+      setShowToast(true);
+    } finally {
+      setSavingAllOrders(false);
+    }
+  }, [orders, shippingTypes, subSKUs]);
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -171,12 +644,43 @@ export const AutomateLogisticModal = ({
           <h2 className="text-lg sm:text-xl font-bold text-slate-900">
             Automate Logistic - {orders.length} Order{orders.length !== 1 ? 's' : ''} Selected
           </h2>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-full text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            {/* Process to Fedex Button - Show when all orders have SubSKU and shippingType */}
+            {(() => {
+              const allOrdersComplete = orders.length > 1 && orders.every(order => {
+                const shippingType = shippingTypes[order.id];
+                const subSKUList = subSKUs[order.id] || [];
+                return shippingType && subSKUList.length > 0;
+              });
+              
+              return allOrdersComplete ? (
+                <button
+                  type="button"
+                  onClick={handleProcessToFedex}
+                  disabled={savingAllOrders}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2 font-medium text-sm disabled:bg-slate-300 disabled:cursor-not-allowed"
+                >
+                  {savingAllOrders ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={16} />
+                      <span>Process to Fedex</span>
+                    </>
+                  )}
+                </button>
+              ) : null;
+            })()}
+            <button
+              onClick={onClose}
+              className="p-2 rounded-full text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -364,12 +868,17 @@ export const AutomateLogisticModal = ({
                       <button
                         type="button"
                         onClick={() => {
+                          // Only allow opening if SubSKU is added
+                          if (!subSKUs[order.id] || subSKUs[order.id].length === 0) {
+                            return;
+                          }
                           setOpenDropdowns((prev) => ({
                             ...prev,
                             [order.id]: !prev[order.id],
                           }));
                         }}
-                        className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-left text-xs font-medium text-slate-900 hover:bg-slate-50 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all"
+                        disabled={!subSKUs[order.id] || subSKUs[order.id].length === 0}
+                        className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-left text-xs font-medium text-slate-900 hover:bg-slate-50 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-400 disabled:hover:bg-slate-100"
                       >
                         {shippingTypes[order.id] || 'Shipping Type'}
                         <span className="float-right mt-0.5">
@@ -402,14 +911,33 @@ export const AutomateLogisticModal = ({
                           <button
                             type="button"
                             onClick={() => {
-                              setShippingTypes((prev) => ({
-                                ...prev,
-                                [order.id]: 'Parcel',
-                              }));
+                              // Set Parcel for all orders when multiple orders are selected
+                              if (orders.length > 1) {
+                                setShippingTypes((prev) => {
+                                  const updated = { ...prev };
+                                  orders.forEach((o) => {
+                                    updated[o.id] = 'Parcel';
+                                  });
+                                  return updated;
+                                });
+                              } else {
+                                setShippingTypes((prev) => ({
+                                  ...prev,
+                                  [order.id]: 'Parcel',
+                                }));
+                              }
                               setOpenDropdowns((prev) => ({
                                 ...prev,
                                 [order.id]: false,
                               }));
+                              
+                              // For single order, save and open modal
+                              if (orders.length === 1) {
+                                saveOrderData(order).then(() => {
+                                  setSelectedOrderForParcel(order);
+                                  setParcelModalOpen(true);
+                                });
+                              }
                             }}
                             className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${
                               shippingTypes[order.id] === 'Parcel' ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
@@ -419,7 +947,7 @@ export const AutomateLogisticModal = ({
                           </button>
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                               const newValue = 'LTL';
                               setShippingTypes((prev) => ({
                                 ...prev,
@@ -429,6 +957,9 @@ export const AutomateLogisticModal = ({
                                 ...prev,
                                 [order.id]: false,
                               }));
+                              
+                              // Save order data when LTL is selected
+                              await saveOrderData(order);
                               
                               // Open LTL rate quote modal when LTL is selected
                               setSelectedOrderForLTL(order);
@@ -869,12 +1400,37 @@ export const AutomateLogisticModal = ({
           shippingType={shippingTypes[selectedOrderForLTL.id] || 'LTL'}
           onClose={() => {
             setLtlModalOpen(false);
-            // Reset shipping type to default when modal closes
+            // Don't reset shipping type - keep it as LTL
+            setSelectedOrderForLTL(null);
+          }}
+        />
+      )}
+
+      {/* Parcel Modal */}
+      <ParcelModal
+        isOpen={parcelModalOpen}
+        orders={orders}
+        onClose={() => {
+          setParcelModalOpen(false);
+          // Reset shipping type to default when modal closes
+          if (selectedOrderForParcel) {
             setShippingTypes((prev) => ({
               ...prev,
-              [selectedOrderForLTL.id]: '',
+              [selectedOrderForParcel.id]: '',
             }));
-            setSelectedOrderForLTL(null);
+          }
+          setSelectedOrderForParcel(null);
+        }}
+      />
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <Toast
+          message={toastMessage}
+          isVisible={showToast}
+          onClose={() => {
+            setShowToast(false);
+            setTimeout(() => setToastMessage(null), 300);
           }}
         />
       )}

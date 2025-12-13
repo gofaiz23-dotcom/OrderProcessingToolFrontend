@@ -29,10 +29,10 @@ export const Toast = ({ message, isVisible, onClose, duration = 3000 }: ToastPro
 
   return (
     <div
-      className={`fixed top-4 right-4 z-50 pointer-events-none transition-all duration-300 ${
+      className={`fixed bottom-4 left-[240px] sm:left-[272px] z-50 pointer-events-none transition-all duration-300 ${
         isAnimating && isVisible 
           ? 'opacity-100 translate-x-0' 
-          : 'opacity-0 translate-x-full'
+          : 'opacity-0 -translate-x-full'
       }`}
     >
       <div

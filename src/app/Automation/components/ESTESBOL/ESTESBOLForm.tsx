@@ -19,6 +19,7 @@ import { ESTESNotifications } from './ESTESNotifications';
 import { ESTESPickupRequest } from './ESTESPickupRequest';
 import type { Order } from '@/app/types/order';
 import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
+import { dispatchBOLData } from '../../utils/ltlOrderCache';
 
 type ESTESBOLFormProps = {
   order: Order;
@@ -899,6 +900,9 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           const existingOrder = existingOrders.orders.find(
             (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
           );
+
+          // Dispatch event for cache update (for LTL orders)
+          dispatchBOLData(order.id, 'estes', data, bolFiles.length > 0 ? bolFiles : undefined);
 
           if (existingOrder) {
             // Update existing order with BOL response, shipping type, subSKUs, and PDF file
