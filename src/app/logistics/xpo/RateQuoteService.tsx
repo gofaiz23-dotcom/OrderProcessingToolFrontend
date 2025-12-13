@@ -9,7 +9,6 @@ import { useLogisticsStore } from '@/store/logisticsStore';
 import { buildXPORateQuoteRequestBody } from './utils/requestBuilder';
 import { XPOQuoteCard } from './components/XPOQuoteCard';
 import { QuoteResultsPage } from './components/QuoteResultsPage';
-import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
 import type { XPORateQuoteCommodity } from '@/app/api/ShippingUtil/xpo/RateQuoteField';
 import { XPO_RATE_QUOTE_COMMODITY_DEFAULTS, XPO_PAYMENT_TERM_OPTIONS, XPO_PACKAGE_CODE_OPTIONS, XPO_WEIGHT_UNIT_OPTIONS, XPO_DIMENSIONS_UNIT_OPTIONS, XPO_ROLE_OPTIONS, XPO_PICKUP_SERVICES, XPO_DELIVERY_SERVICES, XPO_PREMIUM_SERVICES, XPO_COUNTRY_OPTIONS } from '@/app/api/ShippingUtil/xpo/RateQuoteField';
 import { StepIndicator } from './components/StepIndicator';
@@ -35,10 +34,9 @@ type XPORateQuoteServiceProps = {
 
 export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderData }: XPORateQuoteServiceProps) => {
   const searchParams = useSearchParams();
-  const { getToken } = useLogisticsStore();
+  const { getToken, autoLogin } = useLogisticsStore();
   const [storedToken, setStoredToken] = useState<string>('');
   const [isMounted, setIsMounted] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [loadingOrderData, setLoadingOrderData] = useState(false);
   const [toasts, setToasts] = useState<Array<{ id: string; message: string; type?: 'success' | 'error' | 'info' }>>([]);
   const [currentOrderId, setCurrentOrderId] = useState<number | undefined>(undefined);
@@ -1505,10 +1503,41 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
     }
     
     const normalizedCarrier = carrier.toLowerCase();
-    const currentToken = getToken(normalizedCarrier) || storedToken;
+    let currentToken = getToken(normalizedCarrier) || storedToken;
+    
+    // If no token, trigger auto-login and wait for it
     if (!currentToken) {
-      setIsAuthModalOpen(true);
-      return;
+      setLoading(true);
+      setError(new Error('Logging in automatically...'));
+      
+      try {
+        // Trigger auto-login
+        const loginSuccess = await autoLogin(normalizedCarrier);
+        
+        if (loginSuccess) {
+          // Wait a bit for token to be stored
+          await new Promise(resolve => setTimeout(resolve, 500));
+          currentToken = getToken(normalizedCarrier) || storedToken;
+          
+          if (!currentToken) {
+            setError(new Error('Auto-login completed but token not found. Please try again.'));
+            setLoading(false);
+            return;
+          }
+          
+          // Update stored token
+          setStoredToken(currentToken);
+          setError(null);
+        } else {
+          setError(new Error('Auto-login failed. Please check your credentials in .env.local file.'));
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        setError(new Error(`Auto-login error: ${err instanceof Error ? err.message : 'Unknown error'}`));
+        setLoading(false);
+        return;
+      }
     }
 
     setLoading(true);
@@ -1710,8 +1739,7 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
 
       if (!res.ok) {
         if (res.status === 401) {
-          setIsAuthModalOpen(true);
-          setError(new Error('Your session has expired. Please login again.'));
+          setError(new Error('Your session has expired. Auto-login will refresh your token shortly.'));
           setLoading(false);
           return;
         }
@@ -1825,7 +1853,7 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
         err.message.includes('expired') ||
         err.message.includes('invalid token')
       )) {
-        setIsAuthModalOpen(true);
+        // Auto-login will handle token refresh
       }
       setError(err);
     } finally {
@@ -3342,20 +3370,6 @@ export const XPORateQuoteService = ({ carrier, token, orderData: initialOrderDat
             </div>
           ) : null}
 
-          {/* Logistics Authentication Modal */}
-          <LogisticsAuthModal
-            isOpen={isAuthModalOpen}
-            onClose={() => {
-              setIsAuthModalOpen(false);
-              const normalizedCarrier = carrier.toLowerCase();
-              const updatedToken = getToken(normalizedCarrier);
-              if (updatedToken) {
-                setStoredToken(updatedToken);
-                setError(null);
-              }
-            }}
-            carrier={carrier}
-          />
 
           {/* Quote Results Page - Show below the form when quote is retrieved */}
           {showQuoteResultsPage && response && (() => {

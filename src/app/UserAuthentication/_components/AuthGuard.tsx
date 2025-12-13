@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/app/UserAuthentication/store/authStore';
+import { useLogisticsTokenRefresh } from '@/app/hooks/useLogisticsTokenRefresh';
 import { ReactNode } from 'react';
 
 type AuthGuardProps = {
@@ -20,6 +21,9 @@ export function AuthGuard({ children }: AuthGuardProps) {
   const setHasHydrated = useAuthStore((state) => state.setHasHydrated);
   const [mounted, setMounted] = useState(false);
   const [isRedirecting, setIsRedirecting] = useState(false);
+  
+  // Auto-login to XPO and Estes using .env.local credentials
+  useLogisticsTokenRefresh();
 
   // Mark component as mounted (client-side only)
   useEffect(() => {

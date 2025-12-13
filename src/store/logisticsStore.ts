@@ -37,6 +37,9 @@ type LogisticsStore = {
   // Method to refresh token automatically
   refreshToken: (carrier: string) => Promise<boolean>;
   
+  // Method to auto-login using .env.local credentials
+  autoLogin: (carrier: string) => Promise<boolean>;
+  
   // Methods to clear tokens
   clearToken: (carrier: string) => void;
   clearEstesToken: () => void;
@@ -308,6 +311,168 @@ export const useLogisticsStore = create<LogisticsStore>()(
               console.warn(`Network error refreshing token for ${normalizedCarrier}:`, errorMessage);
             } else {
               console.error(`Error refreshing token for ${normalizedCarrier}:`, error);
+            }
+          }
+          
+          return false;
+        }
+      },
+      
+      autoLogin: async (carrier: string): Promise<boolean> => {
+        const normalizedCarrier = carrier.toLowerCase().trim();
+        
+        // Get credentials from .env.local
+        let username: string | undefined;
+        let password: string | undefined;
+        
+        if (normalizedCarrier === 'estes') {
+          username = process.env.NEXT_PUBLIC_ESTES_USERNAME;
+          password = process.env.NEXT_PUBLIC_ESTES_PASSWORD;
+        } else if (normalizedCarrier === 'xpo' || normalizedCarrier === 'expo') {
+          username = process.env.NEXT_PUBLIC_XPO_USERNAME;
+          password = process.env.NEXT_PUBLIC_XPO_PASSWORD;
+        }
+        
+        // If no credentials in env, try to get from sessionStorage (fallback)
+        if (!username || !password) {
+          const credentials = getCredentials(normalizedCarrier);
+          if (credentials && credentials.username && credentials.password) {
+            username = credentials.username;
+            password = credentials.password;
+          } else {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn(`No credentials found in .env.local or sessionStorage for ${normalizedCarrier}. Cannot auto-login.`);
+            }
+            return false;
+          }
+        }
+        
+        try {
+          const shippingCompany = normalizedCarrier;
+          
+          // Check if we're in a browser environment
+          if (typeof window === 'undefined' || typeof fetch === 'undefined') {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn(`Cannot auto-login for ${normalizedCarrier}: fetch not available`);
+            }
+            return false;
+          }
+          
+          const res = await fetch(buildApiUrl('/Logistics/Authenticate'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+              username, 
+              password,
+              shippingCompany,
+            }),
+          }).catch((fetchError) => {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn(`Network error auto-logging in for ${normalizedCarrier}:`, fetchError.message || 'Failed to fetch');
+            }
+            throw fetchError;
+          });
+          
+          let responseData: any = null;
+          let responseText: string | null = null;
+          
+          try {
+            const contentType = res.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              responseData = await res.json();
+            } else {
+              responseText = await res.text();
+              if (responseText && (responseText.trim().startsWith('{') || responseText.trim().startsWith('['))) {
+                try {
+                  responseData = JSON.parse(responseText);
+                } catch {
+                  // Keep as text if parsing fails
+                }
+              }
+            }
+          } catch (parseError) {
+            try {
+              responseText = await res.text();
+            } catch (textError) {
+              if (process.env.NODE_ENV === 'development') {
+                console.warn(`Could not read response body for ${normalizedCarrier}:`, textError);
+              }
+            }
+          }
+          
+          if (!res.ok) {
+            let errorMessage = res.statusText || 'Unknown error';
+            
+            if (responseData) {
+              errorMessage = responseData.message || 
+                            responseData.error || 
+                            responseData.data?.message ||
+                            responseData.errorMessage ||
+                            (typeof responseData === 'string' ? responseData : JSON.stringify(responseData));
+            } else if (responseText) {
+              errorMessage = responseText;
+            }
+            
+            if (process.env.NODE_ENV === 'development') {
+              console.error(`Auto-login failed for ${normalizedCarrier}:`, {
+                status: res.status,
+                statusText: res.statusText,
+                errorMessage,
+              });
+            }
+            return false;
+          }
+          
+          const data = responseData;
+          
+          if (!data) {
+            if (process.env.NODE_ENV === 'development') {
+              console.error(`No response data received for ${normalizedCarrier} during auto-login`);
+            }
+            return false;
+          }
+          
+          // Extract token from response
+          const token = data.data?.token || 
+                        data.data?.accessToken || 
+                        data.data?.access_token || 
+                        data.token || 
+                        data.accessToken || 
+                        data.access_token ||
+                        data.data?.access_token;
+          
+          const shippingCompanyName = data.shippingCompanyName || shippingCompany;
+          
+          if (!token || typeof token !== 'string' || token.trim() === '') {
+            if (process.env.NODE_ENV === 'development') {
+              console.error(`No valid token received during auto-login for ${normalizedCarrier}`);
+            }
+            return false;
+          }
+          
+          // Store token in Zustand
+          get().setToken(normalizedCarrier, token, shippingCompanyName);
+          
+          // Store credentials in sessionStorage for future refreshes
+          get().setCredentials(normalizedCarrier, username, password);
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`✅ Auto-login successful for ${normalizedCarrier}`);
+          }
+          
+          return true;
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          
+          if (process.env.NODE_ENV === 'development') {
+            if (errorMessage.includes('Failed to fetch') || 
+                errorMessage.includes('NetworkError') ||
+                errorMessage.includes('Network request failed')) {
+              console.warn(`Network error auto-logging in for ${normalizedCarrier}:`, errorMessage);
+            } else {
+              console.error(`Error auto-logging in for ${normalizedCarrier}:`, error);
             }
           }
           

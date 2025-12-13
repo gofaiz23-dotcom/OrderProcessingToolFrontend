@@ -10,7 +10,6 @@ import { buildApiUrl } from '../../../../BaseUrl';
 import { ESTES_ACCOUNTS, ESTES_RATE_QUOTE_DEFAULTS, ESTES_RATE_QUOTE_FORM_DEFAULTS, ESTES_ADDRESS_BOOK } from '@/Shared/constant';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
-import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
 import { ESTESBOLForm } from './ESTESBOL/ESTESBOLForm';
 import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 
@@ -103,13 +102,12 @@ const getTodayDate = () => {
 };
 
 export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>(({ order, subSKUs = [], shippingType }, ref) => {
-  const { getToken, isTokenExpired, refreshToken, isSessionActive } = useLogisticsStore();
+  const { getToken, isTokenExpired, refreshToken, isSessionActive, autoLogin } = useLogisticsStore();
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<any>(null);
   const [error, setError] = useState<unknown>(null);
   const [storedToken, setStoredToken] = useState<string>('');
   const [isMounted, setIsMounted] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [showAccountInfo, setShowAccountInfo] = useState(true);
   const [requestPayload, setRequestPayload] = useState<any>(null);
   const [showPayload, setShowPayload] = useState(false);
@@ -532,21 +530,87 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
               setStoredToken(refreshedToken);
             }
           } else {
-            setIsAuthModalOpen(true);
+            // Refresh failed, trigger auto-login
+            setError(new Error('Logging in automatically...'));
+            try {
+              const loginSuccess = await autoLogin(normalizedCarrier);
+              if (loginSuccess) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+                currentToken = getToken(normalizedCarrier) || storedToken;
+                if (currentToken) {
+                  setStoredToken(currentToken);
+                  setError(null);
+                } else {
+                  setError(new Error('Auto-login completed but token not found. Please try again.'));
+                  setLoading(false);
+                  return;
+                }
+              } else {
+                setError(new Error('Auto-login failed. Please check your credentials in .env.local file.'));
+                setLoading(false);
+                return;
+              }
+            } catch (err) {
+              setError(new Error(`Auto-login error: ${err instanceof Error ? err.message : 'Unknown error'}`));
+              setLoading(false);
+              return;
+            }
+          }
+        } else {
+          // No session, trigger auto-login
+          setError(new Error('Logging in automatically...'));
+          try {
+            const loginSuccess = await autoLogin(normalizedCarrier);
+            if (loginSuccess) {
+              await new Promise(resolve => setTimeout(resolve, 500));
+              currentToken = getToken(normalizedCarrier) || storedToken;
+              if (currentToken) {
+                setStoredToken(currentToken);
+                setError(null);
+              } else {
+                setError(new Error('Auto-login completed but token not found. Please try again.'));
+                setLoading(false);
+                return;
+              }
+            } else {
+              setError(new Error('Auto-login failed. Please check your credentials in .env.local file.'));
+              setLoading(false);
+              return;
+            }
+          } catch (err) {
+            setError(new Error(`Auto-login error: ${err instanceof Error ? err.message : 'Unknown error'}`));
             setLoading(false);
             return;
           }
-        } else {
-          setIsAuthModalOpen(true);
-          setLoading(false);
-          return;
         }
       }
 
       if (!currentToken) {
-        setIsAuthModalOpen(true);
-        setLoading(false);
-        return;
+        // Still no token, trigger auto-login
+        setError(new Error('Logging in automatically...'));
+        try {
+          const loginSuccess = await autoLogin(normalizedCarrier);
+          if (loginSuccess) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            currentToken = getToken(normalizedCarrier) || storedToken;
+            if (currentToken) {
+              setStoredToken(currentToken);
+              setError(null);
+            } else {
+              setError(new Error('Auto-login completed but token not found. Please try again.'));
+              setLoading(false);
+              return;
+            }
+          } else {
+            setError(new Error('Auto-login failed. Please check your credentials in .env.local file.'));
+            setLoading(false);
+            return;
+          }
+        } catch (err) {
+          setError(new Error(`Auto-login error: ${err instanceof Error ? err.message : 'Unknown error'}`));
+          setLoading(false);
+          return;
+        }
       }
 
       const requestBody = buildRequestBody();
@@ -587,7 +651,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
 
       if (!res.ok) {
         if (res.status === 401) {
-          setIsAuthModalOpen(true);
+          setError(new Error('Your session has expired. Auto-login will refresh your token shortly.'));
           setLoading(false);
           return;
         }
@@ -1323,37 +1387,6 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
 
       </form>
 
-      {/* Submit Button - Outside dropdown */}
-      <div className="flex justify-end">
-        {response && response.data?.data && response.data.data.length > 0 && response.data.data.some((q: any) => q.rateFound && q.quoteRate?.totalCharges && parseFloat(q.quoteRate.totalCharges) > 0) ? (
-          <button
-            type="button"
-            onClick={() => {
-              console.log('Create BOL clicked, showBOLForm will be set to true', { selectedQuote, showBOLForm });
-              setShowBOLForm(true);
-            }}
-            className="px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm flex items-center justify-center gap-2"
-          >
-            Create BOL
-          </button>
-        ) : (
-      <button
-            type="button"
-        onClick={handleGetQuote}
-            disabled={!isMounted || loading}
-            className="px-4 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold text-sm disabled:bg-green-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-      >
-        {loading ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Getting Quote...
-          </>
-        ) : (
-              'GET QUOTE'
-        )}
-      </button>
-        )}
-      </div>
 
       {/* Error Display */}
       {error && (
@@ -1440,20 +1473,6 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
         </div>
       )}
 
-      {/* Logistics Authentication Modal */}
-      <LogisticsAuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => {
-          setIsAuthModalOpen(false);
-          const normalizedCarrier = 'estes';
-          const updatedToken = getToken(normalizedCarrier);
-          if (updatedToken) {
-            setStoredToken(updatedToken);
-            setError(null);
-          }
-        }}
-        carrier="estes"
-      />
 
       {/* BOL Form - Show when Create BOL is clicked */}
       {showBOLForm && (
