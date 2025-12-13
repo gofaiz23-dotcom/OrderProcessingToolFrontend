@@ -1,16 +1,13 @@
 'use client';
 
-import { Suspense, useState, useEffect, useCallback, useMemo } from 'react';
+import { Suspense, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { OrderList } from '../_components';
 import { getWalmartOrders } from '@/app/api/walmart-api/orders';
 import type { Order, PaginationMeta } from '@/app/types/order';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { Loader2 } from 'lucide-react';
-import { DateFilter } from '@/app/components/shared/DateFilter';
 import { useWalmartTokenRefresh } from '@/app/hooks/useWalmartTokenRefresh';
-
-type DateFilterOption = 'all' | 'today' | 'thisWeek' | 'specificDate' | 'custom';
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 100; // Walmart API default
@@ -23,8 +20,7 @@ function WalmartOrdersPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const [allOrders, setAllOrders] = useState<Order[]>([]); // Store all fetched orders
-  const [orders, setOrders] = useState<Order[]>([]); // Filtered and paginated orders
+  const [orders, setOrders] = useState<Order[]>([]);
   const [pagination, setPagination] = useState<PaginationMeta | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,10 +31,12 @@ function WalmartOrdersPageContent() {
   const [customerOrderId, setCustomerOrderId] = useState('');
   const [purchaseOrderId, setPurchaseOrderId] = useState('');
   const [status, setStatus] = useState('');
-  const [dateFilter, setDateFilter] = useState<DateFilterOption>('all');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [createdStartDate, setCreatedStartDate] = useState('');
+  const [createdEndDate, setCreatedEndDate] = useState('');
+  const [limit, setLimit] = useState<string>('100'); // Can be '10', '50', '100', or custom number
+  const [customLimit, setCustomLimit] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const isInitialMount = useRef(true);
 
   // Get pagination params from URL
   const currentPage = useMemo(() => {
@@ -47,11 +45,29 @@ function WalmartOrdersPageContent() {
     return isNaN(pageNum) || pageNum < 1 ? DEFAULT_PAGE : pageNum;
   }, [searchParams]);
 
-  const limit = useMemo(() => {
-    const limitParam = searchParams?.get('limit');
-    const limitNum = limitParam ? parseInt(limitParam, 10) : DEFAULT_LIMIT;
-    return isNaN(limitNum) || limitNum < 1 || limitNum > 200 ? DEFAULT_LIMIT : limitNum;
-  }, [searchParams]);
+  // Calculate the actual limit value - use default if not set
+  const actualLimit = useMemo(() => {
+    if (limit === 'custom') {
+      if (!customLimit) return DEFAULT_LIMIT; // Use default if custom limit not set
+      const customLimitNum = parseInt(customLimit, 10);
+      return isNaN(customLimitNum) || customLimitNum < 1 ? DEFAULT_LIMIT : customLimitNum;
+    }
+    const limitNum = parseInt(limit, 10);
+    return isNaN(limitNum) || limitNum < 1 ? DEFAULT_LIMIT : limitNum;
+  }, [limit, customLimit]);
+
+  // Check if dates are selected to enable/disable limit dropdown
+  const areDatesSelected = createdStartDate && createdEndDate;
+
+  // Check if date range exceeds 180 days (approximately 6 months)
+  const dateRangeExceeds180Days = useMemo(() => {
+    if (!createdStartDate || !createdEndDate) return false;
+    const start = new Date(createdStartDate);
+    const end = new Date(createdEndDate);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 180;
+  }, [createdStartDate, createdEndDate]);
 
   // Update URL params when page changes
   const updatePageInUrl = useCallback((page: number) => {
@@ -65,66 +81,22 @@ function WalmartOrdersPageContent() {
     router.push(`${pathname}${queryString ? `?${queryString}` : ''}`);
   }, [searchParams, router, pathname]);
 
-  // Helper to get date range for filters
-  // Walmart API expects dates in YYYY-MM-DD format (UTC)
-  // createdStartDate and createdEndDate filter by orderDate (when order was created)
-  const getDateRange = useCallback(() => {
-    // Helper to format date as YYYY-MM-DD in UTC
-    const formatDateUTC = (date: Date) => {
-      const year = date.getUTCFullYear();
-      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(date.getUTCDate()).padStart(2, '0');
-      return `${year}-${month}-${day}`;
-    };
-    
-    if (dateFilter === 'today') {
-      // Get today's date in UTC
-      const now = new Date();
-      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-      const todayStr = formatDateUTC(todayUTC);
-      
-      return {
-        start: todayStr,
-        end: todayStr, // Same day for start and end
-      };
-    } else if (dateFilter === 'thisWeek') {
-      // Get start of week (Sunday) in UTC
-      const now = new Date();
-      const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-      const dayOfWeek = todayUTC.getUTCDay();
-      const weekStart = new Date(todayUTC);
-      weekStart.setUTCDate(todayUTC.getUTCDate() - dayOfWeek);
-      
-      const weekEnd = new Date(todayUTC);
-      
-      return {
-        start: formatDateUTC(weekStart),
-        end: formatDateUTC(weekEnd),
-      };
-    } else if (dateFilter === 'specificDate' && startDate) {
-      // Validate and format the date
-      if (startDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        return {
-          start: startDate,
-          end: startDate,
-        };
-      }
-      return null;
-    } else if (dateFilter === 'custom' && startDate && endDate) {
-      // Validate and format the dates
-      if (startDate.match(/^\d{4}-\d{2}-\d{2}$/) && endDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        // Ensure end date is not before start date
-        if (new Date(endDate) >= new Date(startDate)) {
-          return {
-            start: startDate,
-            end: endDate,
-          };
-        }
-      }
-      return null;
+  // Helper to format date to ISO 8601 format (YYYY-MM-DDTHH:mm:ssZ)
+  const formatDateToISO = (dateString: string): string => {
+    if (!dateString) return '';
+    // If date string is already in YYYY-MM-DD format, add time portion
+    if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      return `${dateString}T00:00:00Z`;
     }
-    return null;
-  }, [dateFilter, startDate, endDate]);
+    // If it's already in ISO format, return as is
+    if (dateString.includes('T')) {
+      return dateString;
+    }
+    // Try to parse and format
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return '';
+    return date.toISOString();
+  };
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -132,26 +104,32 @@ function WalmartOrdersPageContent() {
     try {
       console.log('🔄 Fetching Walmart orders...', {
         page: currentPage,
-        limit,
+        limit: actualLimit,
         filters: {
           sku,
           customerOrderId,
           purchaseOrderId,
           status,
+          createdStartDate,
+          createdEndDate,
         },
       });
       
-      // Build query params - DO NOT include date filters (we'll filter client-side)
+      // Build query params - include date filters only if both dates are set
       const queryParams: any = {
-        page: 1, // Always fetch from page 1, we'll paginate client-side
-        limit: 200, // Fetch more orders to allow client-side filtering
+        page: currentPage,
+        limit: actualLimit,
         sku: sku || undefined,
         customerOrderId: customerOrderId || undefined,
         purchaseOrderId: purchaseOrderId || undefined,
         status: status || undefined,
       };
-      
-      // DO NOT send date filters to API - we'll filter client-side
+
+      // Only include date filters if both dates are selected
+      if (createdStartDate && createdEndDate) {
+        queryParams.createdStartDate = formatDateToISO(createdStartDate);
+        queryParams.createdEndDate = formatDateToISO(createdEndDate);
+      }
       
       const result = await getWalmartOrders(queryParams);
       
@@ -171,122 +149,71 @@ function WalmartOrdersPageContent() {
       
       if (!result.orders || result.orders.length === 0) {
         console.warn('⚠️ No orders returned from API');
-        setAllOrders([]);
+        setOrders([]);
+        setPagination(result.pagination || null);
       } else {
-        // Store all fetched orders (will be filtered and paginated client-side)
-        setAllOrders(result.orders);
+        setOrders(result.orders);
+        setPagination(result.pagination || null);
       }
     } catch (err) {
       setError(err);
       console.error('❌ Error loading Walmart orders:', err);
+      setOrders([]);
+      setPagination(null);
     } finally {
       setLoading(false);
     }
   }, [
-    sku,
-    customerOrderId,
-    purchaseOrderId,
-    status,
-  ]);
-
-  // Fetch orders from API when non-date filters change
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchOrders();
-    }, 500);
-
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
     currentPage,
-    limit,
+    actualLimit,
     sku,
     customerOrderId,
     purchaseOrderId,
     status,
+    createdStartDate,
+    createdEndDate,
   ]);
 
-  // Apply client-side date filtering when date filters change
+  // Fetch orders on initial mount and when page changes (for pagination)
   useEffect(() => {
-    if (allOrders.length === 0) return;
-    
-    const dateRange = getDateRange();
-    let filteredOrders = allOrders;
-    
-    if (dateRange && dateRange.start && dateRange.end) {
-      console.log('📅 Applying client-side date filter:', dateRange);
-      
-      filteredOrders = allOrders.filter((order: Order) => {
-        // Get order date from jsonb or createdAt
-        const jsonb = order.jsonb;
-        let orderDateValue: string | null = null;
-        
-        if (jsonb && typeof jsonb === 'object' && !Array.isArray(jsonb) && 'Order Date' in jsonb) {
-          const orderDateFromJsonb = jsonb['Order Date'];
-          orderDateValue = orderDateFromJsonb ? String(orderDateFromJsonb) : null;
-        }
-        
-        // Use jsonb value or fallback to createdAt
-        const orderDateStr = orderDateValue || (order.createdAt ? String(order.createdAt) : null);
-        if (!orderDateStr) return false;
-        
-        try {
-          // Parse order date (could be ISO string or date string)
-          const orderDate = new Date(orderDateStr);
-          if (isNaN(orderDate.getTime())) return false;
-          
-          // Extract date part (YYYY-MM-DD)
-          const orderDateOnly = orderDate.toISOString().split('T')[0];
-          
-          // Check if order date is within range (inclusive)
-          const isInRange = orderDateOnly >= dateRange.start && orderDateOnly <= dateRange.end;
-          
-          return isInRange;
-        } catch (error) {
-          console.error('Error parsing order date:', orderDateStr, error);
-          return false;
-        }
-      });
-      
-      console.log(`📊 Filtered orders: ${filteredOrders.length} out of ${allOrders.length}`);
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      fetchOrders();
+    } else {
+      // Page changed - fetch new page
+      const timer = setTimeout(() => {
+        fetchOrders();
+      }, 100);
+      return () => clearTimeout(timer);
     }
-    
-    // Apply pagination to filtered results
-    const startIndex = (currentPage - 1) * limit;
-    const endIndex = startIndex + limit;
-    const paginatedOrders = filteredOrders.slice(startIndex, endIndex);
-    
-    setOrders(paginatedOrders);
-    
-    // Update pagination with filtered count
-    setPagination({
-      page: currentPage,
-      limit: limit,
-      totalCount: filteredOrders.length,
-      totalPages: Math.ceil(filteredOrders.length / limit),
-      hasNextPage: endIndex < filteredOrders.length,
-      hasPreviousPage: currentPage > 1,
-    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allOrders, dateFilter, startDate, endDate, currentPage, limit]);
+  }, [currentPage]); // Watch page changes
 
   const handleSearch = useCallback(() => {
-    fetchOrders();
-  }, [fetchOrders]);
+    // Reset to page 1 when searching with filters, then fetch
+    if (currentPage !== DEFAULT_PAGE) {
+      updatePageInUrl(DEFAULT_PAGE);
+      // fetchOrders will be called automatically when page changes via useEffect
+    } else {
+      // Already on page 1, fetch directly
+      fetchOrders();
+    }
+  }, [fetchOrders, currentPage, updatePageInUrl]);
 
   const handleClearSearch = useCallback(() => {
     setSku('');
     setCustomerOrderId('');
     setPurchaseOrderId('');
     setStatus('');
-    setDateFilter('all');
-    setStartDate('');
-    setEndDate('');
-    fetchOrders();
-  }, [fetchOrders]);
+    setCreatedStartDate('');
+    setCreatedEndDate('');
+    setLimit('100');
+    setCustomLimit('');
+  }, []);
 
   const handlePageChange = useCallback((page: number) => {
     updatePageInUrl(page);
+    // fetchOrders will be called automatically when currentPage changes via useEffect
   }, [updatePageInUrl]);
 
   const handleOrderSelect = useCallback((order: Order) => {
@@ -362,61 +289,120 @@ function WalmartOrdersPageContent() {
 
       {/* Walmart API Filters Panel - Collapsible */}
       {showFilters && (
-        <div className="flex-shrink-0 bg-white border-b border-slate-200 p-3 space-y-2">
+        <div className="flex-shrink-0 bg-white border-b border-slate-200 p-3 space-y-3">
+          {/* First Row - Existing Filters */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-          {/* SKU */}
-          <div>
-            <label className="block text-xs font-medium text-slate-900 mb-0.5">SKU</label>
-            <input
-              type="text"
-              value={sku}
-              onChange={(e) => setSku(e.target.value)}
-              placeholder="Product SKU"
-              className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            {/* SKU */}
+            <div>
+              <label className="block text-xs font-medium text-slate-900 mb-0.5">SKU</label>
+              <input
+                type="text"
+                value={sku}
+                onChange={(e) => setSku(e.target.value)}
+                placeholder="Product SKU"
+                className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Purchase Order ID */}
+            <div>
+              <label className="block text-xs font-medium text-slate-900 mb-0.5">Purchase Order ID</label>
+              <input
+                type="text"
+                value={purchaseOrderId}
+                onChange={(e) => setPurchaseOrderId(e.target.value)}
+                placeholder="Purchase Order ID"
+                className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Status */}
+            <div>
+              <label className="block text-xs font-medium text-slate-900 mb-0.5">Status</label>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Statuses</option>
+                <option value="Created">Created</option>
+                <option value="Acknowledged">Acknowledged</option>
+                <option value="Shipped">Shipped</option>
+                <option value="Delivered">Delivered</option>
+                <option value="Cancelled">Cancelled</option>
+              </select>
+            </div>
           </div>
 
-          {/* Purchase Order ID */}
-          <div>
-            <label className="block text-xs font-medium text-slate-900 mb-0.5">Purchase Order ID</label>
-            <input
-              type="text"
-              value={purchaseOrderId}
-              onChange={(e) => setPurchaseOrderId(e.target.value)}
-              placeholder="Purchase Order ID"
-              className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          {/* Second Row - API-based Date Filters and Limit */}
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+              {/* Created Start Date */}
+              <div>
+                <label className="block text-xs font-medium text-slate-900 mb-0.5">Start Date</label>
+                <input
+                  type="date"
+                  value={createdStartDate}
+                  onChange={(e) => setCreatedStartDate(e.target.value)}
+                  className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
 
-          {/* Status */}
-          <div>
-            <label className="block text-xs font-medium text-slate-900 mb-0.5">Status</label>
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Statuses</option>
-              <option value="Created">Created</option>
-              <option value="Acknowledged">Acknowledged</option>
-              <option value="Shipped">Shipped</option>
-              <option value="Delivered">Delivered</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </div>
+              {/* Created End Date */}
+              <div>
+                <label className="block text-xs font-medium text-slate-900 mb-0.5">End Date</label>
+                <input
+                  type="date"
+                  value={createdEndDate}
+                  onChange={(e) => setCreatedEndDate(e.target.value)}
+                  min={createdStartDate || undefined}
+                  className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
 
-          {/* Date Filter */}
-          <div>
-            <DateFilter
-              dateFilter={dateFilter}
-              startDate={startDate}
-              endDate={endDate}
-              onDateFilterChange={setDateFilter}
-              onStartDateChange={setStartDate}
-              onEndDateChange={setEndDate}
-            />
+              {/* Limit Dropdown */}
+              <div>
+                <label className="block text-xs font-medium text-slate-900 mb-0.5">Limit</label>
+                <select
+                  value={limit}
+                  onChange={(e) => setLimit(e.target.value)}
+                  disabled={!areDatesSelected}
+                  className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
+                >
+                  <option value="10">10</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+
+              {/* Custom Limit Input - Only show when "custom" is selected */}
+              {limit === 'custom' && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-900 mb-0.5">Custom Limit</label>
+                  <input
+                    type="number"
+                    value={customLimit}
+                    onChange={(e) => setCustomLimit(e.target.value)}
+                    placeholder="Enter limit"
+                    min="1"
+                    disabled={!areDatesSelected}
+                    className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-100 disabled:cursor-not-allowed disabled:text-slate-500"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Date Range Validation Message */}
+            {dateRangeExceeds180Days && areDatesSelected && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-yellow-50 border border-yellow-200 rounded-md">
+                <span className="text-yellow-600 text-xs">⚠️</span>
+                <span className="text-xs text-yellow-700 font-medium">
+                  Date range should not exceed 180 days (approximately 6 months). Please select a shorter date range.
+                </span>
+              </div>
+            )}
           </div>
-        </div>
         </div>
       )}
 

@@ -757,32 +757,75 @@ export const ProcessedOrdersList = ({
                         </span>
                       </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${
-                          order.shippingType === 'LTL'
-                            ? 'bg-blue-100 text-blue-800'
-                            : order.shippingType === 'Parcel'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-slate-100 text-slate-800'
-                        }`}>
-                          {order.shippingType || '-'}
-                        </span>
+                        {(() => {
+                          // Try to get shipping type from direct field first
+                          let shippingType = order.shippingType;
+                          
+                          // If not found, try to extract from ordersJsonb
+                          if (!shippingType && order.ordersJsonb && typeof order.ordersJsonb === 'object') {
+                            const ordersData = order.ordersJsonb as any;
+                            shippingType = ordersData?.shiptypes || 
+                                          ordersData?.shippingType || 
+                                          ordersData?.ShippingType ||
+                                          ordersData?.shipType ||
+                                          ordersData?.ShipType;
+                          }
+                          
+                          return (
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold ${
+                              shippingType === 'LTL'
+                                ? 'bg-blue-100 text-blue-800'
+                                : shippingType === 'Parcel'
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-slate-100 text-slate-800'
+                            }`}>
+                              {shippingType || '-'}
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-slate-900">
-                          {order.subSKUs && order.subSKUs.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {order.subSKUs.map((subSKU, idx) => (
-                                <span
-                                  key={idx}
-                                  className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
-                                >
-                                  {subSKU}
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-slate-400">-</span>
-                          )}
+                          {(() => {
+                            // Try to get subSKUs from direct field first
+                            let subSKUs: string[] = [];
+                            
+                            if (order.subSKUs && Array.isArray(order.subSKUs) && order.subSKUs.length > 0) {
+                              subSKUs = order.subSKUs;
+                            } else if (order.ordersJsonb && typeof order.ordersJsonb === 'object') {
+                              // If not found, try to extract from ordersJsonb
+                              const ordersData = order.ordersJsonb as any;
+                              const subSKUsValue = ordersData?.subSKUs || 
+                                                  ordersData?.subSKU || 
+                                                  ordersData?.SubSKUs ||
+                                                  ordersData?.SubSKU;
+                              
+                              // Handle both array and string formats
+                              if (Array.isArray(subSKUsValue)) {
+                                subSKUs = subSKUsValue;
+                              } else if (typeof subSKUsValue === 'string' && subSKUsValue.trim()) {
+                                // If it's a string, try to split by comma or use as single value
+                                subSKUs = subSKUsValue.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                              }
+                            }
+                            
+                            if (subSKUs.length > 0) {
+                              return (
+                                <div className="flex flex-wrap gap-1">
+                                  {subSKUs.map((subSKU, idx) => (
+                                    <span
+                                      key={idx}
+                                      className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800"
+                                    >
+                                      {subSKU}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            } else {
+                              return <span className="text-slate-400">-</span>;
+                            }
+                          })()}
                         </div>
                       </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
