@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function OrdersPage() {
-  redirect('/orders/all');
+  redirect('/orders/walmart');
 }

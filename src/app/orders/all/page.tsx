@@ -13,7 +13,7 @@ import {
 import { parseCSVFile, parseExcelFile } from '@/app/utils/Orders/fileParser';
 import type { Order, CreateOrderPayload, UpdateOrderPayload, PaginationMeta } from '@/app/types/order';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
-import { Loader2, Search } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { DateFilter } from '@/app/components/shared/DateFilter';
 
 type DateFilterOption = 'all' | 'today' | 'thisWeek' | 'specificDate' | 'custom';
@@ -233,10 +233,12 @@ function AllOrdersPageContent() {
       });
       
       // Store all fetched orders for client-side filtering
-      setAllOrders(result.orders);
+      // Exclude Walmart orders (they should only be shown in /orders/walmart)
+      const nonWalmartOrders = result.orders.filter(order => order.orderOnMarketPlace !== 'Walmart');
+      setAllOrders(nonWalmartOrders);
       
-      // Apply client-side filtering (search + date)
-      applyFilters(result.orders, searchQuery);
+      // Apply client-side filtering (search + date) on non-Walmart orders
+      applyFilters(nonWalmartOrders, searchQuery);
       
       setPagination(result.pagination);
     } catch (err) {
@@ -531,3 +533,4 @@ export default function AllOrdersPage() {
     </Suspense>
   );
 }
+

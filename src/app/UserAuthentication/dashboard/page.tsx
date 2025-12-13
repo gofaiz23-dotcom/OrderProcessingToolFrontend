@@ -13,7 +13,7 @@ export default function DashboardPage() {
   useEffect(() => {
     // If user is authenticated, redirect to orders page
     if (isAuthenticated) {
-      router.push('/orders/all');
+      router.push('/orders/walmart');
     }
   }, [isAuthenticated, router]);
 
