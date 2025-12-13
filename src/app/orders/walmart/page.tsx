@@ -38,16 +38,6 @@ function WalmartOrdersPageContent() {
   const [dateFilter, setDateFilter] = useState<DateFilterOption>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [fromExpectedShipDate, setFromExpectedShipDate] = useState('');
-  const [toExpectedShipDate, setToExpectedShipDate] = useState('');
-  const [lastModifiedStartDate, setLastModifiedStartDate] = useState('');
-  const [lastModifiedEndDate, setLastModifiedEndDate] = useState('');
-  const [shipNodeType, setShipNodeType] = useState('');
-  const [shippingProgramType, setShippingProgramType] = useState('');
-  const [orderType, setOrderType] = useState('');
-  const [productInfo, setProductInfo] = useState(false);
-  const [replacementInfo, setReplacementInfo] = useState(false);
-  const [incentiveInfo, setIncentiveInfo] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
   // Get pagination params from URL
@@ -159,16 +149,6 @@ function WalmartOrdersPageContent() {
         customerOrderId: customerOrderId || undefined,
         purchaseOrderId: purchaseOrderId || undefined,
         status: status || undefined,
-        fromExpectedShipDate: fromExpectedShipDate || undefined,
-        toExpectedShipDate: toExpectedShipDate || undefined,
-        lastModifiedStartDate: lastModifiedStartDate || undefined,
-        lastModifiedEndDate: lastModifiedEndDate || undefined,
-        shipNodeType: shipNodeType || undefined,
-        shippingProgramType: shippingProgramType || undefined,
-        orderType: orderType || undefined,
-        productInfo: productInfo || undefined,
-        replacementInfo: replacementInfo || undefined,
-        incentiveInfo: incentiveInfo || undefined,
       };
       
       // DO NOT send date filters to API - we'll filter client-side
@@ -207,16 +187,6 @@ function WalmartOrdersPageContent() {
     customerOrderId,
     purchaseOrderId,
     status,
-    fromExpectedShipDate,
-    toExpectedShipDate,
-    lastModifiedStartDate,
-    lastModifiedEndDate,
-    shipNodeType,
-    shippingProgramType,
-    orderType,
-    productInfo,
-    replacementInfo,
-    incentiveInfo,
   ]);
 
   // Fetch orders from API when non-date filters change
@@ -234,16 +204,6 @@ function WalmartOrdersPageContent() {
     customerOrderId,
     purchaseOrderId,
     status,
-    fromExpectedShipDate,
-    toExpectedShipDate,
-    lastModifiedStartDate,
-    lastModifiedEndDate,
-    shipNodeType,
-    shippingProgramType,
-    orderType,
-    productInfo,
-    replacementInfo,
-    incentiveInfo,
   ]);
 
   // Apply client-side date filtering when date filters change
@@ -258,7 +218,16 @@ function WalmartOrdersPageContent() {
       
       filteredOrders = allOrders.filter((order: Order) => {
         // Get order date from jsonb or createdAt
-        const orderDateStr = order.jsonb?.['Order Date'] || order.createdAt;
+        const jsonb = order.jsonb;
+        let orderDateValue: string | null = null;
+        
+        if (jsonb && typeof jsonb === 'object' && !Array.isArray(jsonb) && 'Order Date' in jsonb) {
+          const orderDateFromJsonb = jsonb['Order Date'];
+          orderDateValue = orderDateFromJsonb ? String(orderDateFromJsonb) : null;
+        }
+        
+        // Use jsonb value or fallback to createdAt
+        const orderDateStr = orderDateValue || (order.createdAt ? String(order.createdAt) : null);
         if (!orderDateStr) return false;
         
         try {
@@ -313,16 +282,6 @@ function WalmartOrdersPageContent() {
     setDateFilter('all');
     setStartDate('');
     setEndDate('');
-    setFromExpectedShipDate('');
-    setToExpectedShipDate('');
-    setLastModifiedStartDate('');
-    setLastModifiedEndDate('');
-    setShipNodeType('');
-    setShippingProgramType('');
-    setOrderType('');
-    setProductInfo(false);
-    setReplacementInfo(false);
-    setIncentiveInfo(false);
     fetchOrders();
   }, [fetchOrders]);
 
@@ -446,50 +405,6 @@ function WalmartOrdersPageContent() {
             </select>
           </div>
 
-          {/* Ship Node Type */}
-          <div>
-            <label className="block text-xs font-medium text-slate-900 mb-0.5">Ship Node Type</label>
-            <select
-              value={shipNodeType}
-              onChange={(e) => setShipNodeType(e.target.value)}
-              className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Types</option>
-              <option value="SellerFulfilled">Seller Fulfilled</option>
-              <option value="WFSFulfilled">WFS Fulfilled</option>
-              <option value="3PLFulfilled">3PL Fulfilled</option>
-            </select>
-          </div>
-
-          {/* Shipping Program Type */}
-          <div>
-            <label className="block text-xs font-medium text-slate-900 mb-0.5">Shipping Program</label>
-            <select
-              value={shippingProgramType}
-              onChange={(e) => setShippingProgramType(e.target.value)}
-              className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Programs</option>
-              <option value="TWO_DAY">Two Day</option>
-              <option value="ONE_DAY">One Day</option>
-            </select>
-          </div>
-
-          {/* Order Type */}
-          <div>
-            <label className="block text-xs font-medium text-slate-900 mb-0.5">Order Type</label>
-            <select
-              value={orderType}
-              onChange={(e) => setOrderType(e.target.value)}
-              className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Types</option>
-              <option value="REGULAR">Regular</option>
-              <option value="REPLACEMENT">Replacement</option>
-              <option value="PREORDER">Preorder</option>
-            </select>
-          </div>
-
           {/* Date Filter */}
           <div>
             <DateFilter
@@ -500,79 +415,6 @@ function WalmartOrdersPageContent() {
               onStartDateChange={setStartDate}
               onEndDateChange={setEndDate}
             />
-          </div>
-
-          {/* Expected Ship Date Range */}
-          <div>
-            <label className="block text-xs font-medium text-slate-900 mb-0.5">Expected Ship Date From</label>
-            <input
-              type="date"
-              value={fromExpectedShipDate}
-              onChange={(e) => setFromExpectedShipDate(e.target.value)}
-              className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-900 mb-0.5">Expected Ship Date To</label>
-            <input
-              type="date"
-              value={toExpectedShipDate}
-              onChange={(e) => setToExpectedShipDate(e.target.value)}
-              className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* Last Modified Date Range */}
-          <div>
-            <label className="block text-xs font-medium text-slate-900 mb-0.5">Last Modified From</label>
-            <input
-              type="date"
-              value={lastModifiedStartDate}
-              onChange={(e) => setLastModifiedStartDate(e.target.value)}
-              className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-900 mb-0.5">Last Modified To</label>
-            <input
-              type="date"
-              value={lastModifiedEndDate}
-              onChange={(e) => setLastModifiedEndDate(e.target.value)}
-              className="w-full px-2 py-1.5 border border-slate-300 rounded-md text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {/* Checkboxes */}
-          <div className="space-y-1">
-            <label className="flex items-center gap-1.5 text-xs text-slate-900">
-              <input
-                type="checkbox"
-                checked={productInfo}
-                onChange={(e) => setProductInfo(e.target.checked)}
-                className="h-3.5 w-3.5 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
-              />
-              <span className="text-[10px]">Product Info</span>
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-slate-900">
-              <input
-                type="checkbox"
-                checked={replacementInfo}
-                onChange={(e) => setReplacementInfo(e.target.checked)}
-                className="h-3.5 w-3.5 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
-              />
-              <span className="text-[10px]">Replacement</span>
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-slate-900">
-              <input
-                type="checkbox"
-                checked={incentiveInfo}
-                onChange={(e) => setIncentiveInfo(e.target.checked)}
-                className="h-3.5 w-3.5 text-blue-600 focus:ring-blue-500 border-slate-300 rounded"
-              />
-              <span className="text-[10px]">Incentive</span>
-            </label>
           </div>
         </div>
         </div>
