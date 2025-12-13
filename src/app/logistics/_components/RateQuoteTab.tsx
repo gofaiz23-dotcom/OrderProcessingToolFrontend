@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
 import { useLogisticsStore } from '@/store/logisticsStore';
 import { getAllLogisticsShippedOrders } from '@/app/api/LogisticsApi/LogisticsShippedOrders';
 
@@ -12,17 +11,11 @@ type RateQuoteTabProps = {
 
 export const RateQuoteTab = ({ carrier, token }: RateQuoteTabProps) => {
   const { getToken } = useLogisticsStore();
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [rateQuoteData, setRateQuoteData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const storedToken = getToken(carrier) || token;
 
-  // Check authentication on mount and when token changes
-  useEffect(() => {
-    if (!storedToken) {
-      setIsAuthModalOpen(true);
-    }
-  }, [storedToken, carrier]);
+  // Auto-login will handle authentication
 
   // Fetch rate quote data if authenticated
   useEffect(() => {
@@ -56,18 +49,9 @@ export const RateQuoteTab = ({ carrier, token }: RateQuoteTabProps) => {
     fetchRateQuoteData();
   }, [storedToken]);
 
-  // If no token, show white screen with login modal (user can't access until login)
+  // If no token, show white screen (auto-login will handle authentication)
   if (!storedToken) {
-    return (
-      <>
-        <div className="w-full h-full bg-white" />
-        <LogisticsAuthModal
-          isOpen={isAuthModalOpen}
-          onClose={() => setIsAuthModalOpen(false)}
-          carrier={carrier}
-        />
-      </>
-    );
+    return <div className="w-full h-full bg-white" />;
   }
 
   // If loading, show white screen

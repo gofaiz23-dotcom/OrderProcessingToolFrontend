@@ -10,7 +10,6 @@ import type { XPORateQuoteCommodity } from '@/app/api/ShippingUtil/xpo/RateQuote
 import { XPO_RATE_QUOTE_DEFAULTS, XPO_SHIPPER_ADDRESS_BOOK, US_STATES_OPTIONS, FREIGHT_CLASS_OPTIONS, XPO_DEFAULT_DELIVERY_SERVICES, ESTES_RATE_QUOTE_FORM_DEFAULTS } from '@/Shared/constant';
 import { XPO_PAYMENT_TERM_OPTIONS, XPO_PACKAGE_CODE_OPTIONS, XPO_ROLE_OPTIONS, XPO_DELIVERY_SERVICES, XPO_PICKUP_SERVICES, XPO_PREMIUM_SERVICES, XPO_COUNTRY_OPTIONS } from '@/app/api/ShippingUtil/xpo/RateQuoteField';
 import { EXCESSIVE_LENGTH_OPTIONS, ADDITIONAL_COMMODITY_OPTIONS } from '@/Shared/constant';
-import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
 import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 import { XPOQuoteCard } from '@/app/logistics/xpo/components/XPOQuoteCard';
 import { XPOBOLForm } from './XPOBOLForm';
@@ -128,11 +127,10 @@ const parseAddressString = (addressStr: string): { streetAddress: string; addres
 };
 
 export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ order, subSKUs = [], shippingType }, ref) => {
-  const { getToken } = useLogisticsStore();
+  const { getToken, autoLogin } = useLogisticsStore();
   const [loading, setLoading] = useState(false);
   const [quotes, setQuotes] = useState<any[]>([]);
   const [error, setError] = useState<unknown>(null);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [storedToken, setStoredToken] = useState<string>('');
   const [response, setResponse] = useState<any>(null);
   const [requestPayload, setRequestPayload] = useState<any>(null);
@@ -398,10 +396,37 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
       e.preventDefault();
     }
     
-    const currentToken = getToken('xpo') || storedToken;
+    let currentToken = getToken('xpo') || storedToken;
+    
+    // If no token, trigger auto-login and wait for it
     if (!currentToken) {
-      setIsAuthModalOpen(true);
-      return;
+      setLoading(true);
+      setError(null);
+      setError(new Error('Logging in automatically...'));
+      
+      try {
+        const loginSuccess = await autoLogin('xpo');
+        if (loginSuccess) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          currentToken = getToken('xpo') || storedToken;
+          if (currentToken) {
+            setStoredToken(currentToken);
+            setError(null);
+          } else {
+            setError(new Error('Auto-login completed but token not found. Please try again.'));
+            setLoading(false);
+            return;
+          }
+        } else {
+          setError(new Error('Auto-login failed. Please check your credentials in .env.local file.'));
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        setError(new Error(`Auto-login error: ${err instanceof Error ? err.message : 'Unknown error'}`));
+        setLoading(false);
+        return;
+      }
     }
 
     setLoading(true);
@@ -536,8 +561,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
 
       if (!res.ok) {
         if (res.status === 401) {
-          setIsAuthModalOpen(true);
-          throw new Error('Your session has expired. Please login again.');
+          throw new Error('Your session has expired. Auto-login will refresh your token shortly.');
         }
         
         let errorMessage = `Rate quote failed: ${res.statusText}`;
@@ -1470,36 +1494,6 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
         )}
       </div>
 
-      {/* Submit Button - Outside dropdown */}
-      <div className="flex justify-end">
-        {quotes.length > 0 && quotes.some(q => q.rateFound !== false && q.quoteRate?.totalCharges && parseFloat(q.quoteRate.totalCharges) > 0) ? (
-          <button
-            type="button"
-            onClick={() => {
-              setShowBOLForm(true);
-            }}
-            className="px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-semibold flex items-center justify-center gap-2"
-          >
-            Create BOL
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={loading}
-            className="px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors text-sm font-semibold flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Getting Quote...
-              </>
-            ) : (
-              'Get Rate Quote'
-            )}
-          </button>
-        )}
-      </div>
 
       {/* Quotes Display */}
       {quotes.length > 0 && (
@@ -1615,18 +1609,6 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
       )}
 
 
-      {/* Auth Modal */}
-      {isAuthModalOpen && (
-        <LogisticsAuthModal
-          isOpen={isAuthModalOpen}
-          onClose={() => {
-            setIsAuthModalOpen(false);
-            const token = getToken('xpo') || '';
-            setStoredToken(token);
-          }}
-          carrier="xpo"
-        />
-      )}
     </div>
   );
 });

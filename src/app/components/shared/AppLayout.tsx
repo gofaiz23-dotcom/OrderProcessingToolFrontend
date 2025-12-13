@@ -7,7 +7,6 @@ import { ReactNode, useState, useEffect, useRef } from 'react';
 import { Inbox, Send, PencilLine, RefreshCcw, Mail, ChevronDown, ChevronRight, ShoppingCart, Truck, PackageSearch, Users, LogOut, User, Menu, X, FileSpreadsheet, BarChart3, Folder, Package } from 'lucide-react';
 import API_BASE_URL from '../../../../BaseUrl';
 import { MARKETPLACES, LOGISTICS_CARRIERS } from '@/Shared/constant';
-import { LogisticsAuthModal } from './LogisticsAuthModal';
 import { useLogisticsStore } from '@/store/logisticsStore';
 import { useAuthStore } from '@/app/UserAuthentication/store/authStore';
 import { useWalmartTokenRefresh } from '@/app/hooks/useWalmartTokenRefresh';
@@ -34,7 +33,6 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const router = useRouter();
-    const { getToken } = useLogisticsStore();
     const { user, logout } = useAuthStore();
     
     // Auto-refresh Walmart token every 10 minutes
@@ -45,8 +43,6 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
     const [isLogisticsExpanded, setIsLogisticsExpanded] = useState(false);
     const [isProcessedOrdersExpanded, setIsProcessedOrdersExpanded] = useState(false);
     const [is3plGlobalExpanded, setIs3plGlobalExpanded] = useState(false);
-    const [selectedCarrier, setSelectedCarrier] = useState<string | null>(null);
-    const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const ordersDropdownRef = useRef<HTMLDivElement>(null);
     const logisticsDropdownRef = useRef<HTMLDivElement>(null);
@@ -101,43 +97,27 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
         }
     }, [pathname]);
 
-    // Close orders dropdown when clicking outside or when navigating
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            const target = event.target as HTMLElement;
-            // Check if click is on a link or inside a link
-            const isLink = target.closest('a[href]');
-            
-            // If clicking on a link, allow navigation to proceed but close dropdowns
-            if (isLink) {
-                if (isOrdersExpanded) setIsOrdersExpanded(false);
-                if (isLogisticsExpanded) setIsLogisticsExpanded(false);
-                if (isProcessedOrdersExpanded) setIsProcessedOrdersExpanded(false);
-                return; // Don't prevent link navigation
-            }
-            
-            // For non-link clicks, close dropdowns if clicking outside
-            if (ordersDropdownRef.current && !ordersDropdownRef.current.contains(target)) {
-                setIsOrdersExpanded(false);
-            }
-            if (logisticsDropdownRef.current && !logisticsDropdownRef.current.contains(target)) {
-                setIsLogisticsExpanded(false);
-            }
-            if (processedOrdersDropdownRef.current && !processedOrdersDropdownRef.current.contains(target)) {
-                setIsProcessedOrdersExpanded(false);
-            }
-            if (threePlGlobalDropdownRef.current && !threePlGlobalDropdownRef.current.contains(target)) {
-                setIs3plGlobalExpanded(false);
-            }
-        };
-
-        if (isOrdersExpanded || isLogisticsExpanded || isProcessedOrdersExpanded || is3plGlobalExpanded) {
-            document.addEventListener('click', handleClickOutside);
-            return () => {
-                document.removeEventListener('click', handleClickOutside);
-            };
-        }
-    }, [isOrdersExpanded, isLogisticsExpanded, isProcessedOrdersExpanded, is3plGlobalExpanded]);
+    // Allow multiple dropdowns to be open simultaneously
+    // Dropdowns only close when user navigates to a new page or explicitly toggles them
+    const handleDropdownToggle = (dropdownType: 'orders' | 'logistics' | 'processedOrders' | '3plGlobal' | 'email') => {
+        // Just toggle the selected dropdown - don't close others
+        if (dropdownType === 'orders') setIsOrdersExpanded(!isOrdersExpanded);
+        if (dropdownType === 'logistics') setIsLogisticsExpanded(!isLogisticsExpanded);
+        if (dropdownType === 'processedOrders') setIsProcessedOrdersExpanded(!isProcessedOrdersExpanded);
+        if (dropdownType === '3plGlobal') setIs3plGlobalExpanded(!is3plGlobalExpanded);
+        if (dropdownType === 'email') setIsEmailExpanded(!isEmailExpanded);
+    };
+    
+    // Close dropdowns only when navigation actually happens
+    const handleNavigation = (callback?: () => void) => {
+        setIsMobileMenuOpen(false);
+        // Close dropdowns when navigating to a new page
+        setIsOrdersExpanded(false);
+        setIsLogisticsExpanded(false);
+        setIsProcessedOrdersExpanded(false);
+        setIs3plGlobalExpanded(false);
+        if (callback) callback();
+    };
 
     const hasActiveEmailItem = emailSubItems.some(item => isActivePath(pathname, item.href));
     const hasActiveOrdersItem = pathname?.startsWith('/orders');
@@ -200,8 +180,8 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                 {/* Email Section - Collapsible */}
                                 <div>
                                     <button
-                                        onClick={() => setIsEmailExpanded(!isEmailExpanded)}
-                                        className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-colors ${
+                                        onClick={() => handleDropdownToggle('email')}
+                                        className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-all duration-200 ease-in-out ${
                                             hasActiveEmailItem
                                                 ? 'bg-blue-50 text-blue-700'
                                                 : 'text-slate-700 hover:bg-slate-50'
@@ -212,22 +192,26 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                             className={`flex-shrink-0 ${hasActiveEmailItem ? 'text-blue-600' : 'text-slate-400'}`}
                                         />
                                         <span className="text-xs sm:text-sm font-medium flex-1 text-left">Email</span>
-                                        {isEmailExpanded ? (
-                                            <ChevronDown size={16} className="text-slate-400 flex-shrink-0" />
-                                        ) : (
-                                            <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
-                                        )}
+                                        <ChevronDown 
+                                            size={16} 
+                                            className={`text-slate-400 flex-shrink-0 transition-transform duration-300 ease-in-out ${
+                                                isEmailExpanded ? 'rotate-0' : '-rotate-90'
+                                            }`} 
+                                        />
                                     </button>
 
                                     {/* Email Sub-items */}
-                                    {isEmailExpanded && (
-                                        <div className="ml-4 sm:ml-6 mt-1 space-y-0.5">
-                                            {emailSubItems.map((item) => {
+                                    <div 
+                                        className={`ml-4 sm:ml-6 mt-1 space-y-0.5 overflow-hidden transition-all duration-300 ease-in-out ${
+                                            isEmailExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                                        }`}
+                                    >
+                                        {isEmailExpanded && emailSubItems.map((item) => {
                                                 const Icon = item.icon;
                                                 const isActive = isActivePath(pathname, item.href);
 
                                                 return (
-                                                    <Link key={item.href} href={item.href} onClick={() => setIsMobileMenuOpen(false)}>
+                                                    <Link key={item.href} href={item.href} onClick={() => handleNavigation()}>
                                                         <div
                                                             className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
                                                                 isActive
@@ -244,15 +228,14 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                                     </Link>
                                                 );
                                             })}
-                                        </div>
-                                    )}
+                                    </div>
                                 </div>
 
                                 {/* Orders Section - Collapsible with Marketplace Dropdown */}
                                 <div ref={ordersDropdownRef}>
                                     <button
-                                        onClick={() => setIsOrdersExpanded(!isOrdersExpanded)}
-                                        className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-colors ${
+                                        onClick={() => handleDropdownToggle('orders')}
+                                        className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-all duration-200 ease-in-out ${
                                             hasActiveOrdersItem
                                                         ? 'bg-blue-50 text-blue-700'
                                                         : 'text-slate-700 hover:bg-slate-50'
@@ -263,23 +246,29 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                             className={`flex-shrink-0 ${hasActiveOrdersItem ? 'text-blue-600' : 'text-slate-400'}`}
                                                 />
                                         <span className="text-xs sm:text-sm font-medium flex-1 text-left">Orders</span>
-                                        {isOrdersExpanded ? (
-                                            <ChevronDown size={16} className="text-slate-400 flex-shrink-0" />
-                                        ) : (
-                                            <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
-                                        )}
+                                        <ChevronDown 
+                                            size={16} 
+                                            className={`text-slate-400 flex-shrink-0 transition-transform duration-300 ease-in-out ${
+                                                isOrdersExpanded ? 'rotate-0' : '-rotate-90'
+                                            }`} 
+                                        />
                                     </button>
 
                                     {/* Marketplace Sub-items */}
-                                    {isOrdersExpanded && (
-                                        <div className="ml-4 sm:ml-6 mt-1 space-y-0.5">
+                                    <div 
+                                        className={`ml-4 sm:ml-6 mt-1 space-y-0.5 overflow-hidden transition-all duration-300 ease-in-out ${
+                                            isOrdersExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                                        }`}
+                                    >
+                                        {isOrdersExpanded && (
+                                            <>
                                             {/* Walmart Orders */}
-                                            <Link href="/orders/walmart" onClick={() => setIsMobileMenuOpen(false)}>
+                                            <Link href="/orders/walmart" onClick={() => handleNavigation()}>
                                                 <div
-                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
+                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-all duration-200 ease-in-out ${
                                                         pathname === '/orders/walmart'
                                                             ? 'bg-blue-50 text-blue-700'
-                                                            : 'text-slate-600 hover:bg-slate-50'
+                                                            : 'text-slate-600 hover:bg-slate-50 hover:translate-x-1'
                                                     }`}
                                                 >
                                                     <span className="text-xs sm:text-sm font-medium">Walmart Orders</span>
@@ -287,12 +276,12 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                             </Link>
                                             
                                             {/* All Other Orders (Amazon, etc.) */}
-                                            <Link href="/orders/all" onClick={() => setIsMobileMenuOpen(false)}>
+                                            <Link href="/orders/all" onClick={() => handleNavigation()}>
                                                 <div
-                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
-                                                        pathname === '/orders/all'
+                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-all duration-200 ease-in-out ${
+                                                        pathname === '/orders/all' && !searchParams?.get('marketplace')
                                                             ? 'bg-blue-50 text-blue-700'
-                                                            : 'text-slate-600 hover:bg-slate-50'
+                                                            : 'text-slate-600 hover:bg-slate-50 hover:translate-x-1'
                                                     }`}
                                                 >
                                                     <span className="text-xs sm:text-sm font-medium">All Other Orders</span>
@@ -300,20 +289,21 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                             </Link>
                                             
                                             {/* Marketplace options */}
-                                            {MARKETPLACES.filter(m => m !== 'Walmart').map((marketplace) => {
+                                            {/* @ts-ignore - Filter correctly removes Walmart from array */}
+                                            {(MARKETPLACES.filter(m => m !== 'Walmart') as Array<Exclude<typeof MARKETPLACES[number], 'Walmart'>>).map((marketplace) => {
                                                 const isActive = hasActiveOrdersItem && searchParams?.get('marketplace') === marketplace;
                                                 
                                                 return (
                                                     <Link 
                                                         key={marketplace} 
                                                         href={`/orders/all?marketplace=${encodeURIComponent(marketplace)}`}
-                                                        onClick={() => setIsMobileMenuOpen(false)}
+                                                        onClick={() => handleNavigation()}
                                                     >
                                                         <div
-                                                            className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
+                                                            className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-all duration-200 ease-in-out ${
                                                                 isActive
                                                                     ? 'bg-blue-50 text-blue-700'
-                                                                    : 'text-slate-600 hover:bg-slate-50'
+                                                                    : 'text-slate-600 hover:bg-slate-50 hover:translate-x-1'
                                                             }`}
                                                         >
                                                             <span className="text-xs sm:text-sm font-medium">{marketplace}</span>
@@ -321,15 +311,16 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                                     </Link>
                                                 );
                                             })}
-                                        </div>
-                                    )}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Logistics Section - Collapsible with Carrier Dropdown */}
                                 <div ref={logisticsDropdownRef}>
                                     <button
-                                        onClick={() => setIsLogisticsExpanded(!isLogisticsExpanded)}
-                                        className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-colors ${
+                                        onClick={() => handleDropdownToggle('logistics')}
+                                        className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-all duration-200 ease-in-out ${
                                             hasActiveLogisticsItem
                                                 ? 'bg-blue-50 text-blue-700'
                                                 : 'text-slate-700 hover:bg-slate-50'
@@ -340,17 +331,21 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                             className={`flex-shrink-0 ${hasActiveLogisticsItem ? 'text-blue-600' : 'text-slate-400'}`}
                                         />
                                         <span className="text-xs sm:text-sm font-medium flex-1 text-left">Logistics</span>
-                                        {isLogisticsExpanded ? (
-                                            <ChevronDown size={16} className="text-slate-400 flex-shrink-0" />
-                                        ) : (
-                                            <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
-                                        )}
+                                        <ChevronDown 
+                                            size={16} 
+                                            className={`text-slate-400 flex-shrink-0 transition-transform duration-300 ease-in-out ${
+                                                isLogisticsExpanded ? 'rotate-0' : '-rotate-90'
+                                            }`} 
+                                        />
                                     </button>
 
                                     {/* Carrier Sub-items */}
-                                    {isLogisticsExpanded && (
-                                        <div className="ml-4 sm:ml-6 mt-1 space-y-0.5">
-                                            {LOGISTICS_CARRIERS.map((carrier) => {
+                                    <div 
+                                        className={`ml-4 sm:ml-6 mt-1 space-y-0.5 overflow-hidden transition-all duration-300 ease-in-out ${
+                                            isLogisticsExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                                        }`}
+                                    >
+                                        {isLogisticsExpanded && LOGISTICS_CARRIERS.map((carrier) => {
                                                 const isActive = hasActiveLogisticsItem && searchParams?.get('carrier') === carrier;
                                                 
                                                 return (
@@ -358,59 +353,39 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                                         key={carrier}
                                                         onClick={(e) => {
                                                             e.preventDefault();
-                                                            setIsMobileMenuOpen(false);
-                                                            // Check if token exists in Zustand store
-                                                            const existingToken = getToken(carrier);
-                                                            
-                                                            if (existingToken) {
-                                                                // Token exists, redirect directly to rate quote page
-                                                                // Map carrier to correct route
-                                                                const normalizedCarrier = carrier.toLowerCase();
-                                                                const carrierRoute = normalizedCarrier === 'xpo' || normalizedCarrier === 'expo' 
-                                                                    ? '/logistics/xpo' 
-                                                                    : '/logistics/estes';
-                                                                const rateQuoteUrl = `${carrierRoute}?carrier=${encodeURIComponent(carrier)}`;
-                                                                router.push(rateQuoteUrl);
-                                                            } else {
-                                                                // Token doesn't exist, show login modal
-                                                                const logisticsUrl = `/logistics?carrier=${encodeURIComponent(carrier)}`;
-                                                                router.push(logisticsUrl);
-                                                                setSelectedCarrier(carrier);
-                                                                setIsAuthModalOpen(true);
-                                                            }
+                                                            // Auto-login will handle authentication, just navigate directly
+                                                            const normalizedCarrier = carrier.toLowerCase();
+                                                            const carrierRoute = normalizedCarrier === 'xpo' || normalizedCarrier === 'expo' 
+                                                                ? '/logistics/xpo' 
+                                                                : '/logistics/estes';
+                                                            const rateQuoteUrl = `${carrierRoute}?carrier=${encodeURIComponent(carrier)}`;
+                                                            handleNavigation(() => router.push(rateQuoteUrl));
                                                         }}
-                                                        className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors cursor-pointer ${
+                                                        className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-all duration-200 ease-in-out cursor-pointer ${
                                                             isActive
                                                                 ? 'bg-blue-50 text-blue-700'
-                                                                : 'text-slate-600 hover:bg-slate-50'
+                                                                : 'text-slate-600 hover:bg-slate-50 hover:translate-x-1'
                                                         }`}
                                                     >
                                                         <span className="text-xs sm:text-sm font-medium">{carrier}</span>
                                                     </div>
                                                 );
                                             })}
-                                        </div>
-                                    )}
+                                    </div>
                                 </div>
 
                                 {/* Processed Orders Section */}
                                 <div ref={processedOrdersDropdownRef}>
                                     <Link 
                                         href="/ProcessedOrders"
-                                        onClick={() => {
-                                            setIsMobileMenuOpen(false);
-                                            // Close all dropdowns when navigating
-                                            setIsOrdersExpanded(false);
-                                            setIsLogisticsExpanded(false);
-                                            setIsProcessedOrdersExpanded(false);
-                                        }}
+                                        onClick={() => handleNavigation()}
                                     >
                                         <div
-                                            className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-colors ${
-                                                hasActiveProcessedOrdersItem
-                                                    ? 'bg-blue-50 text-blue-700'
-                                                    : 'text-slate-700 hover:bg-slate-50'
-                                            }`}
+                                        className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-all duration-200 ease-in-out ${
+                                            hasActiveProcessedOrdersItem
+                                                ? 'bg-blue-50 text-blue-700'
+                                                : 'text-slate-700 hover:bg-slate-50 hover:translate-x-1'
+                                        }`}
                                         >
                                             <PackageSearch
                                                 size={18}
@@ -425,20 +400,13 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                 <div>
                                     <Link 
                                         href="/CustomerDetails"
-                                        onClick={() => {
-                                            setIsMobileMenuOpen(false);
-                                            // Close all dropdowns when navigating
-                                            setIsOrdersExpanded(false);
-                                            setIsLogisticsExpanded(false);
-                                            setIsProcessedOrdersExpanded(false);
-                                            setIs3plGlobalExpanded(false);
-                                        }}
+                                        onClick={() => handleNavigation()}
                                     >
                                         <div
-                                            className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-colors ${
+                                            className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-all duration-200 ease-in-out ${
                                                 hasActiveCustomerDetailsItem
                                                     ? 'bg-blue-50 text-blue-700'
-                                                    : 'text-slate-700 hover:bg-slate-50'
+                                                    : 'text-slate-700 hover:bg-slate-50 hover:translate-x-1'
                                             }`}
                                         >
                                             <Users
@@ -454,19 +422,13 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                 <div>
                                     <Link 
                                         href="/3plGigaFedex/estes-pickup"
-                                        onClick={() => {
-                                            setIsMobileMenuOpen(false);
-                                            setIsOrdersExpanded(false);
-                                            setIsLogisticsExpanded(false);
-                                            setIsProcessedOrdersExpanded(false);
-                                            setIs3plGlobalExpanded(false);
-                                        }}
+                                        onClick={() => handleNavigation()}
                                     >
                                         <div
-                                            className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-colors ${
+                                            className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-all duration-200 ease-in-out ${
                                                 hasActiveEstesPickupItem
                                                     ? 'bg-blue-50 text-blue-700'
-                                                    : 'text-slate-700 hover:bg-slate-50'
+                                                    : 'text-slate-700 hover:bg-slate-50 hover:translate-x-1'
                                             }`}
                                         >
                                             <Package
@@ -481,8 +443,8 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                 {/* 3plGlobal Section - Collapsible with Dropdown */}
                                 <div ref={threePlGlobalDropdownRef}>
                                     <button
-                                        onClick={() => setIs3plGlobalExpanded(!is3plGlobalExpanded)}
-                                        className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-colors ${
+                                        onClick={() => handleDropdownToggle('3plGlobal')}
+                                        className={`w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2.5 rounded-lg transition-all duration-200 ease-in-out ${
                                             hasActive3plGlobalItem
                                                 ? 'bg-blue-50 text-blue-700'
                                                 : 'text-slate-700 hover:bg-slate-50'
@@ -493,24 +455,31 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                             className={`flex-shrink-0 ${hasActive3plGlobalItem ? 'text-blue-600' : 'text-slate-400'}`}
                                         />
                                         <span className="text-xs sm:text-sm font-medium flex-1 text-left">3-PL-Global</span>
-                                        {is3plGlobalExpanded ? (
-                                            <ChevronDown size={16} className="text-slate-400 flex-shrink-0" />
-                                        ) : (
-                                            <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
-                                        )}
+                                        <ChevronDown 
+                                            size={16} 
+                                            className={`text-slate-400 flex-shrink-0 transition-transform duration-300 ease-in-out ${
+                                                is3plGlobalExpanded ? 'rotate-0' : '-rotate-90'
+                                            }`} 
+                                        />
                                     </button>
 
                                     {/* 3plGlobal Sub-items */}
-                                    {is3plGlobalExpanded && (
-                                        <div className="ml-4 sm:ml-6 mt-1 space-y-0.5">
+                                    <div 
+                                        className={`ml-4 sm:ml-6 mt-1 space-y-0.5 overflow-hidden transition-all duration-300 ease-in-out ${
+                                            is3plGlobalExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
+                                        }`}
+                                    >
+                                        {is3plGlobalExpanded && (
+                                            <>
                                             <Link 
                                                 href="/3plGigaFedex/import-excel"
+                                                onClick={() => handleNavigation()}
                                             >
                                                 <div
-                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
+                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-all duration-200 ease-in-out ${
                                                         pathname === '/3plGigaFedex/import-excel'
                                                             ? 'bg-blue-50 text-blue-700'
-                                                            : 'text-slate-600 hover:bg-slate-50'
+                                                            : 'text-slate-600 hover:bg-slate-50 hover:translate-x-1'
                                                     }`}
                                                 >
                                                     <FileSpreadsheet
@@ -522,12 +491,13 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                             </Link>
                                             <Link 
                                                 href="/3plGigaFedex/scrap-bol"
+                                                onClick={() => handleNavigation()}
                                             >
                                                 <div
-                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
+                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-all duration-200 ease-in-out ${
                                                         pathname === '/3plGigaFedex/scrap-bol'
                                                             ? 'bg-blue-50 text-blue-700'
-                                                            : 'text-slate-600 hover:bg-slate-50'
+                                                            : 'text-slate-600 hover:bg-slate-50 hover:translate-x-1'
                                                     }`}
                                                 >
                                                     <BarChart3
@@ -539,12 +509,13 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                             </Link>
                                             <Link 
                                                 href="/3plGigaFedex/status"
+                                                onClick={() => handleNavigation()}
                                             >
                                                 <div
-                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
+                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-all duration-200 ease-in-out ${
                                                         pathname === '/3plGigaFedex/status'
                                                             ? 'bg-blue-50 text-blue-700'
-                                                            : 'text-slate-600 hover:bg-slate-50'
+                                                            : 'text-slate-600 hover:bg-slate-50 hover:translate-x-1'
                                                     }`}
                                                 >
                                                     <BarChart3
@@ -556,12 +527,13 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                             </Link>
                                             <Link 
                                                 href="/3plGigaFedex/shipping-docs"
+                                                onClick={() => handleNavigation()}
                                             >
                                                 <div
-                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-colors ${
+                                                    className={`flex items-center gap-2 px-2.5 sm:px-3 py-2 rounded-lg transition-all duration-200 ease-in-out ${
                                                         pathname === '/3plGigaFedex/shipping-docs'
                                                             ? 'bg-blue-50 text-blue-700'
-                                                            : 'text-slate-600 hover:bg-slate-50'
+                                                            : 'text-slate-600 hover:bg-slate-50 hover:translate-x-1'
                                                     }`}
                                                 >
                                                     <Folder
@@ -571,8 +543,9 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                                                     <span className="text-xs sm:text-sm font-medium">Shipping Docs</span>
                                                 </div>
                                             </Link>
-                                        </div>
-                                    )}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </nav>
                         </div>
@@ -587,7 +560,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                             href={refreshItem.href}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors"
+                            className="flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2 rounded-lg text-slate-700 hover:bg-slate-50 transition-all duration-200 ease-in-out hover:translate-x-1"
                             onClick={() => setIsMobileMenuOpen(false)}
                         >
                             <RefreshCcw size={16} className="text-slate-400 group-hover:text-slate-600 flex-shrink-0" />
@@ -631,7 +604,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                             handleLogout();
                             setIsMobileMenuOpen(false);
                         }}
-                        className="w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2 rounded-lg text-slate-700 hover:bg-red-50 hover:text-red-700 transition-colors"
+                        className="w-full flex items-center gap-2 sm:gap-3 px-2.5 sm:px-3 py-2 rounded-lg text-slate-700 hover:bg-red-50 hover:text-red-700 transition-all duration-200 ease-in-out hover:translate-x-1"
                     >
                         <LogOut size={16} className="text-slate-400 flex-shrink-0" />
                         <span className="text-xs sm:text-sm font-medium">Logout</span>
@@ -644,7 +617,7 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                 {/* Mobile Menu Toggle - In Content Area */}
                 <button
                     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-                    className="lg:hidden fixed top-3 left-3 z-50 p-2.5 bg-white rounded-lg shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+                    className="lg:hidden fixed top-3 left-3 z-50 p-2.5 bg-white rounded-lg shadow-lg border border-slate-200 hover:bg-slate-50 transition-all duration-200 ease-in-out hover:scale-105"
                     aria-label="Toggle menu"
                 >
                     <Menu size={22} className="text-slate-700" />
@@ -654,17 +627,6 @@ const AppLayout = ({ children }: { children: ReactNode }) => {
                 </div>
             </main>
 
-            {/* Logistics Authentication Modal */}
-            {selectedCarrier && (
-                <LogisticsAuthModal
-                    isOpen={isAuthModalOpen}
-                    onClose={() => {
-                        setIsAuthModalOpen(false);
-                        setSelectedCarrier(null);
-                    }}
-                    carrier={selectedCarrier}
-                />
-            )}
         </div>
     );
 };

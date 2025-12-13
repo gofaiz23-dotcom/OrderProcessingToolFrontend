@@ -10,7 +10,6 @@ import { exportOrdersToCSV } from '@/app/utils/Orders/exportOrders';
 import { LOGISTICS_CARRIERS } from '@/Shared/constant';
 import { DateFilter } from '@/app/components/shared/DateFilter';
 import { useLogisticsStore } from '@/store/logisticsStore';
-import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
 import { AutomateLogisticModal } from '@/app/Automation/components/AutomateLogisticModal';
 
 type DateFilterOption = 'all' | 'today' | 'thisWeek' | 'specificDate' | 'custom';
@@ -82,7 +81,6 @@ export const OrderList = ({
   const [showLogisticsDropdown, setShowLogisticsDropdown] = useState(false);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState<Order | null>(null);
   const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<Order | null>(null);
-  const [showLogisticsAuthModal, setShowLogisticsAuthModal] = useState(false);
   const [selectedCarrier, setSelectedCarrier] = useState<string | null>(null);
   const [showAutomateLogisticModal, setShowAutomateLogisticModal] = useState(false);
   const [pendingLogisticsAction, setPendingLogisticsAction] = useState<{
@@ -488,12 +486,9 @@ export const OrderList = ({
                           
                           // If no token, or token expired and session not active, show login popup
                           if (!logisticsToken || (tokenExpired && !sessionActive)) {
-                            // Token doesn't exist or expired with no active session, show logistics login popup and preserve the action
-                            setPendingLogisticsAction({ carrier, order: selectedOrder });
-                            setSelectedCarrier(carrier);
-                            setShowLogisticsAuthModal(true);
+                            // Token doesn't exist or expired, auto-login will handle it
+                            // Just proceed - auto-login will authenticate in the background
                             setShowLogisticsDropdown(false);
-                            return; // Don't proceed until user is logged in to logistics
                           }
                           
                           // User is logged in to logistics, proceed with redirect to rate quote page
@@ -992,18 +987,6 @@ export const OrderList = ({
           loading={deleteModalState.loading}
         />
 
-        {/* Logistics Authentication Modal */}
-        {selectedCarrier && (
-          <LogisticsAuthModal
-            isOpen={showLogisticsAuthModal}
-            onClose={() => {
-              setShowLogisticsAuthModal(false);
-              setSelectedCarrier(null);
-              setPendingLogisticsAction(null);
-            }}
-            carrier={selectedCarrier}
-          />
-        )}
 
         {/* Automate Logistic Modal */}
         <AutomateLogisticModal

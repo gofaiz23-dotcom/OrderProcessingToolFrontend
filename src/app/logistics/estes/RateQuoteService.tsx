@@ -8,7 +8,6 @@ import { buildApiUrl } from '../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
 import { buildEstesRequestBody } from './utils/requestBuilder';
 import { EstesQuoteCard } from './components/EstesQuoteCard';
-import { LogisticsAuthModal } from '@/app/components/shared/LogisticsAuthModal';
 import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 import { ESTES_AUTOFILL_DATA, ESTES_ACCOUNTS, ESTES_RATE_QUOTE_DEFAULTS, ESTES_ADDRESS_BOOK, ESTES_RATE_QUOTE_FORM_DEFAULTS } from '@/Shared/constant';
 import { StepIndicator } from './components/StepIndicator';
@@ -53,10 +52,9 @@ type RateQuoteServiceProps = {
 
 export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderData }: RateQuoteServiceProps) => {
   const searchParams = useSearchParams();
-  const { getToken, isTokenExpired, refreshToken, isSessionActive } = useLogisticsStore();
+  const { getToken, isTokenExpired, refreshToken, isSessionActive, autoLogin } = useLogisticsStore();
   const [storedToken, setStoredToken] = useState<string>('');
   const [isMounted, setIsMounted] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [loadingOrderData, setLoadingOrderData] = useState(false);
   const [toasts, setToasts] = useState<Array<{ id: string; message: string; type?: 'success' | 'error' | 'info' }>>([]);
   const [currentOrderId, setCurrentOrderId] = useState<number | undefined>(undefined);
@@ -241,10 +239,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMounted]);
   
-  // Also restore when auth modal closes (in case login happened without navigation)
+  // Check for token updates and restore form data
   useEffect(() => {
-    if (!isAuthModalOpen && isMounted) {
-      // Check if we have a token now (user just logged in)
+    if (isMounted) {
       const normalizedCarrier = carrier.toLowerCase();
       const currentToken = getToken(normalizedCarrier);
       if (currentToken) {
@@ -256,19 +253,13 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthModalOpen, isMounted]);
+  }, [isMounted]);
 
   // Check token expiration and auto-refresh if session is active
   useEffect(() => {
     const checkTokenAndRefresh = async () => {
       const normalizedCarrier = carrier.toLowerCase();
       const currentToken = getToken(normalizedCarrier) || token;
-      
-      // If no token and session is not active (browser was closed), show login
-      if (!currentToken && !isSessionActive()) {
-        setIsAuthModalOpen(true);
-        return;
-      }
       
       // If token exists but expired and session is active, try to refresh
       if (currentToken && isTokenExpired(normalizedCarrier, 10) && isSessionActive()) {
@@ -282,15 +273,8 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
           if (newToken) {
             setStoredToken(newToken);
           }
-        } else {
-          // Refresh failed, save form data and show login modal
-          saveFormDataToStorage();
-          setIsAuthModalOpen(true);
         }
-      } else if (!currentToken && isSessionActive()) {
-        // No token but session is active - save form data and show login
-        saveFormDataToStorage();
-        setIsAuthModalOpen(true);
+        // Auto-login will handle token refresh, no need to show modal
       }
     };
     
@@ -1301,24 +1285,99 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
             setStoredToken(refreshedToken);
           }
         } else {
-          // Refresh failed, save form data and show login modal
+          // Refresh failed, trigger auto-login
           saveFormDataToStorage();
-          setIsAuthModalOpen(true);
-          return;
+          setLoading(true);
+          setError(null);
+          setError(new Error('Logging in automatically...'));
+          
+          try {
+            const loginSuccess = await autoLogin(normalizedCarrier);
+            if (loginSuccess) {
+              await new Promise(resolve => setTimeout(resolve, 500));
+              currentToken = getToken(normalizedCarrier) || storedToken;
+              if (currentToken) {
+                setStoredToken(currentToken);
+                setError(null);
+              } else {
+                setError(new Error('Auto-login completed but token not found. Please try again.'));
+                setLoading(false);
+                return;
+              }
+            } else {
+              setError(new Error('Auto-login failed. Please check your credentials in .env.local file.'));
+              setLoading(false);
+              return;
+            }
+          } catch (err) {
+            setError(new Error(`Auto-login error: ${err instanceof Error ? err.message : 'Unknown error'}`));
+            setLoading(false);
+            return;
+          }
         }
       } else {
-        // No token and session not active (browser was closed), save form data and show login modal
+        // No token, trigger auto-login
         saveFormDataToStorage();
-        setIsAuthModalOpen(true);
-        return;
+        setLoading(true);
+        setError(null);
+        setError(new Error('Logging in automatically...'));
+        
+        try {
+          const loginSuccess = await autoLogin(normalizedCarrier);
+          if (loginSuccess) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            currentToken = getToken(normalizedCarrier) || storedToken;
+            if (currentToken) {
+              setStoredToken(currentToken);
+              setError(null);
+            } else {
+              setError(new Error('Auto-login completed but token not found. Please try again.'));
+              setLoading(false);
+              return;
+            }
+          } else {
+            setError(new Error('Auto-login failed. Please check your credentials in .env.local file.'));
+            setLoading(false);
+            return;
+          }
+        } catch (err) {
+          setError(new Error(`Auto-login error: ${err instanceof Error ? err.message : 'Unknown error'}`));
+          setLoading(false);
+          return;
+        }
       }
     }
     
     if (!currentToken) {
-      // Still no token after refresh attempt, save form data and show login modal
+      // Still no token after refresh attempt, trigger auto-login
       saveFormDataToStorage();
-      setIsAuthModalOpen(true);
-      return;
+      setLoading(true);
+      setError(null);
+      setError(new Error('Logging in automatically...'));
+      
+      try {
+        const loginSuccess = await autoLogin(normalizedCarrier);
+        if (loginSuccess) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+          currentToken = getToken(normalizedCarrier) || storedToken;
+          if (currentToken) {
+            setStoredToken(currentToken);
+            setError(null);
+          } else {
+            setError(new Error('Auto-login completed but token not found. Please try again.'));
+            setLoading(false);
+            return;
+          }
+        } else {
+          setError(new Error('Auto-login failed. Please check your credentials in .env.local file.'));
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        setError(new Error(`Auto-login error: ${err instanceof Error ? err.message : 'Unknown error'}`));
+        setLoading(false);
+        return;
+      }
     }
 
     setLoading(true);
@@ -1400,10 +1459,9 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
       if (!res.ok) {
         // Check if token is expired (401 Unauthorized)
         if (res.status === 401) {
-          // Token expired, save form data and show login modal
+          // Token expired, auto-login will handle it
           saveFormDataToStorage();
-          setIsAuthModalOpen(true);
-          setError(new Error('Your session has expired. Please login again.'));
+          setError(new Error('Your session has expired. Auto-login will refresh your token shortly.'));
           setLoading(false); // Reset loading state since we're not proceeding
           return;
         }
@@ -1464,9 +1522,8 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         err.message.includes('expired') ||
         err.message.includes('invalid token')
       )) {
-        // Token error, save form data and show login modal
+        // Token error, auto-login will handle it
         saveFormDataToStorage();
-        setIsAuthModalOpen(true);
       }
       setError(err);
     } finally {
@@ -2455,24 +2512,6 @@ export const EstesRateQuoteService = ({ carrier, token, orderData: initialOrderD
         </div>
       ) : null}
 
-      {/* Logistics Authentication Modal */}
-      <LogisticsAuthModal
-        isOpen={isAuthModalOpen}
-        onClose={() => {
-          setIsAuthModalOpen(false);
-          // Refresh token from store after modal closes (in case user logged in)
-          // Normalize carrier name to match how it's stored in Zustand (lowercase)
-          const normalizedCarrier = carrier.toLowerCase();
-          const updatedToken = getToken(normalizedCarrier);
-          if (updatedToken) {
-            setStoredToken(updatedToken);
-            setError(null);
-            // Restore form data after login
-            restoreFormDataFromStorage();
-          }
-        }}
-        carrier={carrier}
-      />
 
           {response && response.data?.data && (
             <div className="mt-6 space-y-6">
