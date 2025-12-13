@@ -13,6 +13,7 @@ import { EXCESSIVE_LENGTH_OPTIONS, ADDITIONAL_COMMODITY_OPTIONS } from '@/Shared
 import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 import { XPOQuoteCard } from '@/app/logistics/xpo/components/XPOQuoteCard';
 import { XPOBOLForm } from './XPOBOLForm';
+import { dispatchRateQuoteData } from '../utils/ltlOrderCache';
 import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 
 type XPORateQuoteProps = {
@@ -763,6 +764,9 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
           const existingOrder = existingOrders.orders.find(
             (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
           );
+
+          // Dispatch event for cache update (for LTL orders)
+          dispatchRateQuoteData(order.id, 'xpo', payload, data);
 
           if (existingOrder) {
             // Update existing order with rate quote data

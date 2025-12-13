@@ -28,6 +28,7 @@ import type { XPOBillOfLadingCommodity, XPOBillOfLadingReference, XPOBillOfLadin
 import { XPO_BOL_COMMODITY_DEFAULTS } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
 import type { Order } from '@/app/types/order';
 import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
+import { dispatchBOLData } from '../utils/ltlOrderCache';
 
 type LocationData = {
   searchValue: string;
@@ -1117,6 +1118,9 @@ export const XPOBOLForm = ({
           const existingOrder = existingOrders.orders.find(
             (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
           );
+
+          // Dispatch event for cache update (for LTL orders)
+          dispatchBOLData(order.id, 'xpo', data, bolFiles.length > 0 ? bolFiles : undefined);
 
           if (existingOrder) {
             // Update existing order with BOL response, shipping type, subSKUs, and PDF file

@@ -12,6 +12,7 @@ import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 import { ESTESBOLForm } from './ESTESBOL/ESTESBOLForm';
 import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
+import { dispatchRateQuoteData } from '../utils/ltlOrderCache';
 
 type EstesRateQuoteProps = {
   order: Order;
@@ -709,6 +710,9 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
           const existingOrder = existingOrders.orders.find(
             (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
           );
+
+          // Dispatch event for cache update (for LTL orders)
+          dispatchRateQuoteData(order.id, 'estes', payload, data);
 
           if (existingOrder) {
             // Update existing order with rate quote data
