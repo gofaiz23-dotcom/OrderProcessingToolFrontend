@@ -71,12 +71,29 @@ export const getAllShippedOrders = async (
     endpoint.searchParams.set('search', search.trim());
   }
 
-  const res = await fetch(endpoint.toString(), {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(endpoint.toString(), {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (fetchError) {
+    // Network error - backend might be down or CORS issue
+    const errorMessage = fetchError instanceof Error 
+      ? fetchError.message 
+      : 'Unknown network error';
+    console.error('Failed to fetch shipped orders - Network error:', {
+      url: endpoint.toString(),
+      error: errorMessage,
+      errorType: fetchError instanceof TypeError ? 'TypeError' : typeof fetchError,
+    });
+    throw new Error(
+      `Failed to connect to backend server. Please ensure the backend is running at ${endpoint.origin}. ` +
+      `Error: ${errorMessage}`
+    );
+  }
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ message: res.statusText }));

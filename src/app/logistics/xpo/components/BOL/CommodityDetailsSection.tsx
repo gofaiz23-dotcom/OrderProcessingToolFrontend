@@ -61,7 +61,7 @@ export const CommodityDetailsSection = ({
           </label>
           <input
             type="number"
-            value={commodity.grossWeight?.weight ?? ''}
+            value={commodity.grossWeight?.weight ? Math.round(commodity.grossWeight.weight) : ''}
             onChange={(e) => {
               const inputValue = e.target.value;
               // Allow empty string while typing, or parse as number
@@ -71,7 +71,9 @@ export const CommodityDetailsSection = ({
                 const numValue = parseFloat(inputValue);
                 // Only update if it's a valid number
                 if (!isNaN(numValue) && numValue >= 0) {
-                  onUpdateNested(index, ['grossWeight', 'weight'], numValue);
+                  // Round to nearest integer while typing
+                  const rounded = Math.round(numValue);
+                  onUpdateNested(index, ['grossWeight', 'weight'], rounded);
                 }
               }
             }}
@@ -81,8 +83,8 @@ export const CommodityDetailsSection = ({
               if (isNaN(numValue) || numValue < 0) {
                 onUpdateNested(index, ['grossWeight', 'weight'], 0);
               } else {
-                // Round to 2 decimal places to avoid floating point precision issues
-                const rounded = Math.round(numValue * 100) / 100;
+                // Round to nearest integer (no decimals allowed)
+                const rounded = Math.round(numValue);
                 onUpdateNested(index, ['grossWeight', 'weight'], rounded);
               }
             }}

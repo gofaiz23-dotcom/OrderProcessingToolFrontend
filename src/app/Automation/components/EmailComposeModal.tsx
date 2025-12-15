@@ -12,6 +12,7 @@ type EmailComposeModalProps = {
   defaultCc?: string | string[];
   defaultSubject?: string;
   defaultBody?: string;
+  initialAttachments?: File[]; // Optional: Pass files directly to ensure they're attached
 };
 
 export const EmailComposeModal = ({
@@ -22,6 +23,7 @@ export const EmailComposeModal = ({
   defaultCc = '',
   defaultSubject = '',
   defaultBody = '',
+  initialAttachments = [],
 }: EmailComposeModalProps) => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [to, setTo] = useState(defaultTo);
@@ -38,6 +40,7 @@ export const EmailComposeModal = ({
   const [linkText, setLinkText] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isEditorEmpty, setIsEditorEmpty] = useState(true);
+  const [selectedAttachment, setSelectedAttachment] = useState<{ file: File; url: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -81,30 +84,140 @@ export const EmailComposeModal = ({
     }
   }, [cc]);
 
-  // Load BOL files from cache when modal opens
+  // Priority 1: Always use initialAttachments if provided (most reliable)
+  // This effect watches for initialAttachments changes even after modal opens
   useEffect(() => {
-    if (isOpen && orderId) {
-      const cachedOrder = getCachedOrder(orderId);
-      if (cachedOrder) {
-        const bolFiles: File[] = [];
-        
-        // Get XPO BOL files
-        if (cachedOrder.xpoBolFiles && cachedOrder.xpoBolFiles.length > 0) {
-          bolFiles.push(...cachedOrder.xpoBolFiles);
-        }
-        
-        // Get Estes BOL files
-        if (cachedOrder.estesBolFiles && cachedOrder.estesBolFiles.length > 0) {
-          bolFiles.push(...cachedOrder.estesBolFiles);
-        }
-        
-        if (bolFiles.length > 0) {
-          setAttachments(bolFiles);
-          console.log('✅ Loaded BOL files from cache:', bolFiles.map(f => f.name));
-        }
+    if (isOpen) {
+      console.log('🔍 Checking initialAttachments:', {
+        hasInitialAttachments: !!initialAttachments,
+        initialAttachmentsLength: initialAttachments?.length || 0,
+        initialAttachments: initialAttachments?.map(f => ({ name: f.name, size: f.size })) || []
+      });
+      
+      if (initialAttachments && initialAttachments.length > 0) {
+        console.log('✅ Setting attachments from initialAttachments prop (priority):', initialAttachments.map(f => ({ 
+          name: f.name, 
+          size: f.size, 
+          type: f.type,
+          isFile: f instanceof File 
+        })));
+        setAttachments(initialAttachments);
+        console.log('✅ Attachments state updated with', initialAttachments.length, 'file(s)');
+      } else {
+        console.log('⚠️ initialAttachments is empty or not provided');
       }
     }
-  }, [isOpen, orderId]);
+  }, [isOpen, initialAttachments]);
+
+  // Priority 2: Load BOL files from cache when modal opens (fallback if no initialAttachments)
+  useEffect(() => {
+    console.log('🔄 Cache loading effect triggered:', { isOpen, orderId, hasInitialAttachments: !!initialAttachments, initialAttachmentsLength: initialAttachments?.length || 0 });
+    
+    if (isOpen && orderId) {
+      // Skip cache loading if initialAttachments are already provided
+      if (initialAttachments && initialAttachments.length > 0) {
+        console.log('⏭️ Skipping cache load - using initialAttachments instead');
+        return;
+      }
+      
+      // Try loading from cache with retries
+      let retryCount = 0;
+      const maxRetries = 5;
+      const retryDelay = 500; // 500ms between retries
+      let retryInterval: NodeJS.Timeout | null = null;
+      
+      const loadFiles = (): boolean => {
+        console.log(`🔄 Loading BOL files from cache (attempt ${retryCount + 1}/${maxRetries + 1})...`);
+        const cachedOrder = getCachedOrder(orderId);
+        
+        if (cachedOrder) {
+          console.log('📦 Cached order found:', {
+            orderId,
+            hasXpoFiles: !!cachedOrder.xpoBolFiles,
+            hasEstesFiles: !!cachedOrder.estesBolFiles,
+            xpoFilesCount: cachedOrder.xpoBolFiles?.length || 0,
+            estesFilesCount: cachedOrder.estesBolFiles?.length || 0,
+          });
+          
+          const bolFiles: File[] = [];
+          
+          // Get XPO BOL files
+          if (cachedOrder.xpoBolFiles && cachedOrder.xpoBolFiles.length > 0) {
+            console.log('📄 Found XPO BOL files:', cachedOrder.xpoBolFiles.map(f => f.name));
+            bolFiles.push(...cachedOrder.xpoBolFiles);
+          }
+          
+          // Get Estes BOL files
+          if (cachedOrder.estesBolFiles && cachedOrder.estesBolFiles.length > 0) {
+            console.log('📄 Found Estes BOL files:', cachedOrder.estesBolFiles.map(f => f.name));
+            bolFiles.push(...cachedOrder.estesBolFiles);
+          }
+          
+          if (bolFiles.length > 0) {
+            setAttachments(bolFiles);
+            console.log('✅ Successfully loaded BOL files from cache:', bolFiles.map(f => ({ 
+              name: f.name, 
+              size: f.size, 
+              type: f.type,
+              isFile: f instanceof File 
+            })));
+            return true; // Files loaded successfully
+          } else {
+            console.warn('⚠️ No BOL files found in cache for orderId:', orderId, {
+              hasXpoFiles: !!cachedOrder.xpoBolFiles,
+              hasEstesFiles: !!cachedOrder.estesBolFiles,
+              xpoFilesCount: cachedOrder.xpoBolFiles?.length || 0,
+              estesFilesCount: cachedOrder.estesBolFiles?.length || 0,
+            });
+            return false; // Files not found
+          }
+        } else {
+          console.warn('⚠️ No cached order found for orderId:', orderId);
+          return false; // Order not in cache
+        }
+      };
+      
+      // Try loading immediately
+      let loaded = loadFiles();
+      
+      // If files not found, retry multiple times with delays
+      if (!loaded && retryCount < maxRetries) {
+        retryInterval = setInterval(() => {
+          retryCount++;
+          loaded = loadFiles();
+          
+          if (loaded || retryCount >= maxRetries) {
+            if (retryInterval) {
+              clearInterval(retryInterval);
+              retryInterval = null;
+            }
+            if (!loaded) {
+              console.error('❌ Failed to load BOL files after all retries');
+            }
+          }
+        }, retryDelay);
+      }
+      
+      return () => {
+        if (retryInterval) {
+          clearInterval(retryInterval);
+        }
+      };
+    } else {
+      // Reset attachments when modal closes
+      if (!isOpen) {
+        setAttachments([]);
+      }
+    }
+  }, [isOpen, orderId, initialAttachments]);
+
+  // Debug: Log attachments whenever they change
+  useEffect(() => {
+    console.log('📎 Attachments state changed:', {
+      count: attachments.length,
+      files: attachments.map(f => ({ name: f.name, size: f.size, type: f.type }))
+    });
+  }, [attachments]);
 
   // Initialize editor content
   useEffect(() => {
@@ -229,6 +342,27 @@ export const EmailComposeModal = ({
   // Common emojis
   const commonEmojis = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈', '👿', '👹', '👺', '🤡', '💩', '👻', '💀', '☠️', '👽', '👾', '🤖', '🎃', '😺', '😸', '😹', '😻', '😼', '😽', '🙀', '😿', '😾'];
 
+  // Format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + 'B';
+    if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + 'K';
+    return Math.round(bytes / (1024 * 1024) * 10) / 10 + 'M';
+  };
+
+  // Handle attachment click to open in popup
+  const handleAttachmentClick = async (file: File) => {
+    const url = URL.createObjectURL(file);
+    setSelectedAttachment({ file, url });
+  };
+
+  // Close attachment viewer
+  const closeAttachmentViewer = () => {
+    if (selectedAttachment) {
+      URL.revokeObjectURL(selectedAttachment.url);
+    }
+    setSelectedAttachment(null);
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     setAttachments((prev) => [...prev, ...files]);
@@ -305,16 +439,28 @@ export const EmailComposeModal = ({
       onClick={(e) => e.stopPropagation()}
     >
       <div
-        className={`absolute right-4 ${isMinimized ? 'bottom-4 w-96' : 'top-20 w-[600px]'} bg-white rounded-lg shadow-2xl border border-slate-300 flex flex-col pointer-events-auto transition-all duration-300`}
+        className={`fixed ${isMinimized ? 'bottom-4 right-4 w-96' : 'bottom-4 right-4 w-[600px]'} bg-white rounded-lg shadow-2xl border border-slate-300 flex flex-col pointer-events-auto transition-all duration-300`}
         style={{
-          maxHeight: isMinimized ? '60px' : 'calc(100vh - 120px)',
+          maxHeight: isMinimized ? '64px' : 'calc(100vh - 40px)',
+          height: isMinimized ? '64px' : 'auto',
         }}
         onClick={handleModalClick}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 bg-slate-50 rounded-t-lg">
+        {/* Header - Always visible, even when minimized */}
+        <div 
+          className={`flex items-center justify-between px-4 py-2 border-b border-slate-200 bg-slate-50 rounded-t-lg ${isMinimized ? 'cursor-pointer' : ''}`}
+          onClick={(e) => {
+            if (isMinimized) {
+              e.stopPropagation();
+              setIsMinimized(false);
+            }
+          }}
+        >
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-slate-700">New Message</span>
+            {isMinimized && (
+              <span className="text-xs text-slate-500">Click to expand</span>
+            )}
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -435,19 +581,31 @@ export const EmailComposeModal = ({
                   {attachments.map((file, index) => (
                     <div
                       key={index}
-                      className="flex items-center gap-2 px-2 py-1 bg-white border border-slate-300 rounded text-xs"
+                      className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-md text-xs hover:bg-slate-200 transition-colors cursor-pointer group"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAttachmentClick(file);
+                      }}
                     >
-                      <Paperclip size={12} className="text-slate-500" />
-                      <span className="text-slate-700 max-w-[200px] truncate">{file.name}</span>
+                      <Paperclip size={14} className="text-slate-600 flex-shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-slate-700 font-medium truncate max-w-[250px]">
+                          {file.name}
+                        </span>
+                        <span className="text-slate-500 text-[10px]">
+                          ({formatFileSize(file.size)})
+                        </span>
+                      </div>
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           removeAttachment(index);
                         }}
-                        className="text-slate-400 hover:text-red-600"
+                        className="ml-1 text-slate-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                        title="Remove attachment"
                       >
-                        <X size={12} />
+                        <X size={14} />
                       </button>
                     </div>
                   ))}
@@ -573,6 +731,106 @@ export const EmailComposeModal = ({
                 )}
               </div>
             </div>
+
+            {/* Attachment Viewer Popup */}
+            {selectedAttachment && (
+              <div 
+                className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[100]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeAttachmentViewer();
+                }}
+              >
+                <div 
+                  className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] w-full m-4 flex flex-col"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                    <div className="flex items-center gap-3">
+                      <Paperclip size={20} className="text-slate-600" />
+                      <div>
+                        <h3 className="text-lg font-semibold text-slate-900">
+                          {selectedAttachment.file.name}
+                        </h3>
+                        <p className="text-sm text-slate-500">
+                          {formatFileSize(selectedAttachment.file.size)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeAttachmentViewer();
+                      }}
+                      className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                      title="Close"
+                    >
+                      <X size={20} className="text-slate-600" />
+                    </button>
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1 overflow-auto p-6 bg-slate-50">
+                    {selectedAttachment.file.type.startsWith('image/') ? (
+                      <div className="flex items-center justify-center">
+                        <img
+                          src={selectedAttachment.url}
+                          alt={selectedAttachment.file.name}
+                          className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-lg"
+                        />
+                      </div>
+                    ) : selectedAttachment.file.type === 'application/pdf' ? (
+                      <div className="w-full h-[70vh]">
+                        <iframe
+                          src={selectedAttachment.url}
+                          className="w-full h-full border-0 rounded-lg shadow-lg bg-white"
+                          title={selectedAttachment.file.name}
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-[70vh] text-center">
+                        <Paperclip size={64} className="text-slate-400 mb-4" />
+                        <p className="text-slate-600 mb-2">
+                          Preview not available for this file type
+                        </p>
+                        <a
+                          href={selectedAttachment.url}
+                          download={selectedAttachment.file.name}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Download File
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="px-6 py-4 border-t border-slate-200 bg-white flex justify-end gap-2">
+                    <a
+                      href={selectedAttachment.url}
+                      download={selectedAttachment.file.name}
+                      className="px-4 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      Download
+                    </a>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeAttachmentViewer();
+                      }}
+                      className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-md transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Link Insert Dialog */}
             {showLinkDialog && (

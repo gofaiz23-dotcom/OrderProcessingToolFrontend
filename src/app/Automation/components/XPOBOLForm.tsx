@@ -29,6 +29,8 @@ import { XPO_BOL_COMMODITY_DEFAULTS } from '@/app/api/ShippingUtil/xpo/BillOfLan
 import type { Order } from '@/app/types/order';
 import { dispatchBOLData, dispatchPickupData, updateCachedOrder, getCachedOrder } from '../utils/ltlOrderCache';
 import { createShippedOrder } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
+import { EmailComposeModal } from './EmailComposeModal';
+import { EMAIL_TEMPLATES } from '../constants/emailTemplates';
 
 type LocationData = {
   searchValue: string;
@@ -86,6 +88,8 @@ export const XPOBOLForm = ({
   const [showResponsePreview, setShowResponsePreview] = useState(false);
   const [showPayloadPreview, setShowPayloadPreview] = useState(false);
   const [payloadPreview, setPayloadPreview] = useState<Record<string, unknown> | null>(null);
+  const [showEmailCompose, setShowEmailCompose] = useState(false);
+  const [bolFilesForEmail, setBolFilesForEmail] = useState<File[]>([]); // Store BOL files to pass to email modal
   
   // Helper function to format description with subSKUs
   const formatDescriptionWithSubSKUs = (baseDescription: string, subSKUsArray: string[]): string => {
@@ -875,6 +879,12 @@ export const XPOBOLForm = ({
       const data = await res.json();
       setResponseJson(data);
       
+      // Store pickup request payload for later use (to trigger email modal)
+      let pickupRequestPayload: XPOPickupRequestFields | undefined = undefined;
+      let finalPickupPayload: Record<string, unknown> | undefined = undefined;
+      let pickupRequestSuccess = false;
+      let pickupResponseData: Record<string, unknown> | undefined = undefined;
+      
       // If schedulePickup is true, also create a pickup request
       if (schedulePickup && pickupDate && pickupReadyTime && dockCloseTime && contactCompanyName && contactName && contactPhone) {
         try {
@@ -892,7 +902,7 @@ export const XPOBOLForm = ({
           };
 
           // Build pickup request payload from BOL form data
-          const pickupRequestPayload: XPOPickupRequestFields = {
+          pickupRequestPayload = {
             pickupRqstInfo: {
               pkupDate: convertToISO8601(pickupDate, '00:00:00'), // Use date with 00:00:00 time
               readyTime: convertToISO8601(pickupDate, pickupReadyTime),
@@ -947,7 +957,7 @@ export const XPOBOLForm = ({
           };
 
           const pickupPayload = buildXPOPickupRequestRequestBody(pickupRequestPayload);
-          const finalPickupPayload = {
+          finalPickupPayload = {
             shippingCompany: carrier,
             ...pickupPayload,
           };
@@ -990,6 +1000,10 @@ export const XPOBOLForm = ({
             if (process.env.NODE_ENV === 'development') {
               console.log('Pickup Request Created:', pickupData);
             }
+            
+            // Store pickup response for later use
+            pickupResponseData = pickupData;
+            pickupRequestSuccess = true;
             
             // Dispatch pickup data to cache - this will trigger final DB save in AutomateLogisticModal
             dispatchPickupData(order.id, {
@@ -1091,6 +1105,14 @@ export const XPOBOLForm = ({
             bolFiles.push(pdfFile);
           }
           
+          // Save BOL files directly to cache immediately so they're available for email attachment
+          if (bolFiles.length > 0) {
+            updateCachedOrder(order.id, { xpoBolFiles: bolFiles });
+            // Also store in state to pass directly to email modal (more reliable)
+            setBolFilesForEmail(bolFiles);
+            console.log('✅ BOL files saved to cache and state for email attachment:', bolFiles.map(f => f.name));
+          }
+          
           // Dispatch event for cache update (for LTL orders)
           dispatchBOLData(order.id, 'xpo', data, bolFiles.length > 0 ? bolFiles : undefined);
           
@@ -1153,10 +1175,81 @@ export const XPOBOLForm = ({
             updateCachedOrder(order.id, { logisticsShippedOrderId: logisticsOrderId });
             console.log('✅ Stored logisticsOrderId in cache for future updates:', logisticsOrderId);
           }
+
+          // If pickup was requested, dispatch pickup data to trigger email modal
+          // This happens even if pickup request creation failed, because BOL is created and pickup was attempted
+          if (schedulePickup) {
+            const cachedOrder = getCachedOrder(order.id);
+            
+            // Use actual pickup response if available, otherwise create a placeholder
+            const pickupResponse = pickupResponseData || cachedOrder?.pickupResponseJsonb || {
+              carrier: 'xpo',
+              pickupRequested: true,
+              pickupScheduled: pickupRequestSuccess,
+            };
+            
+            // Dispatch pickup data to trigger email modal
+            dispatchPickupData(order.id, {
+              carrier: 'xpo',
+              pickupRequestPayload: finalPickupPayload || {},
+              pickupData: pickupResponse,
+              response: pickupResponse,
+            });
+            console.log('✅ Pickup requested - email modal will be shown after BOL creation');
+          }
         }
       } catch (saveError) {
         console.error('⚠️ Failed to save BOL to database:', saveError);
         // Don't throw error - BOL creation was successful, just log the save error
+      }
+
+      // Open email compose modal with generated email content for LTL and Parcel orders
+      // Show email modal regardless of pickup request visibility, with a delay to ensure it appears on top
+      // Only show once - prevent duplicate emails
+      const finalShippingType = shippingType || 'LTL'; // Use provided shipping type or default to LTL
+      
+      if ((finalShippingType === 'LTL' || finalShippingType === 'Parcel') && !showEmailCompose) {
+        const orderJsonb = order.jsonb as Record<string, unknown>;
+        const customerName = getJsonbValue(orderJsonb, 'Customer Name');
+        const orderNumber = getJsonbValue(orderJsonb, 'Order Number') || 
+                           getJsonbValue(orderJsonb, 'PO#') || 
+                           getJsonbValue(orderJsonb, 'PO Number') || '';
+        
+        let emailSubject = '';
+        let emailBody = '';
+        
+        if (finalShippingType === 'LTL') {
+          emailSubject = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.subject(customerName, orderNumber);
+          emailBody = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.body(orderJsonb, subSKUs);
+        } else if (finalShippingType === 'Parcel') {
+          emailSubject = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.subject(customerName, orderNumber);
+          emailBody = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.body(orderJsonb, subSKUs);
+        }
+        
+        console.log('📧 Preparing to show email compose modal:', {
+          shippingType: finalShippingType,
+          customerName,
+          orderNumber,
+          hasSubject: !!emailSubject,
+          hasBody: !!emailBody,
+        });
+        
+        // Open email compose modal after a delay (longer than pickup request to ensure it appears on top)
+        // The email modal has z-index 9999, so it will appear above the pickup request form
+        setTimeout(() => {
+          if (!showEmailCompose) {
+            console.log('📧 Opening email compose modal');
+            setShowEmailCompose(true);
+          } else {
+            console.log('⚠️ Email modal already open, skipping duplicate');
+          }
+        }, 3000); // 3 second delay to ensure pickup request form is visible first, then email modal appears on top
+      } else {
+        if (showEmailCompose) {
+          console.log('⚠️ Email modal already shown, skipping');
+        } else {
+          console.log('⚠️ Email modal not shown - shippingType is not LTL or Parcel:', finalShippingType);
+        }
       }
 
       if (onSuccess) {
@@ -1918,6 +2011,49 @@ export const XPOBOLForm = ({
           )}
         </div>
       )}
+
+      {/* Email Compose Modal */}
+      {showEmailCompose && (() => {
+        const orderJsonb = order.jsonb as Record<string, unknown>;
+        const customerName = getJsonbValue(orderJsonb, 'Customer Name');
+        const orderNumber = getJsonbValue(orderJsonb, 'Order Number') || 
+                           getJsonbValue(orderJsonb, 'PO#') || 
+                           getJsonbValue(orderJsonb, 'PO Number') || '';
+        
+        const finalShippingType = shippingType || 'LTL';
+        let emailSubject = '';
+        let emailBody = '';
+        
+        if (finalShippingType === 'LTL') {
+          emailSubject = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.subject(customerName, orderNumber);
+          emailBody = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.body(orderJsonb, subSKUs);
+        } else if (finalShippingType === 'Parcel') {
+          emailSubject = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.subject(customerName, orderNumber);
+          emailBody = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.body(orderJsonb, subSKUs);
+        }
+        
+        console.log('📧 Rendering email compose modal:', {
+          isOpen: showEmailCompose,
+          shippingType: finalShippingType,
+          hasSubject: !!emailSubject,
+          hasBody: !!emailBody,
+        });
+        
+        return (
+          <EmailComposeModal
+            isOpen={showEmailCompose}
+            onClose={() => {
+              console.log('📧 Closing email compose modal');
+              setShowEmailCompose(false);
+            }}
+            orderId={order.id}
+            defaultSubject={emailSubject}
+            defaultBody={emailBody}
+            defaultTo="gofaiz23@gmail.com"
+            initialAttachments={bolFilesForEmail} // Pass BOL files directly to ensure they're attached
+          />
+        );
+      })()}
     </div>
   );
 };
