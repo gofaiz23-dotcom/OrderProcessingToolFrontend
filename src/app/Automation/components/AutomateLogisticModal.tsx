@@ -15,6 +15,8 @@ import {
   type CachedOrderData,
 } from '../utils/ltlOrderCache';
 import { getAllShippedOrders, type ShippedOrder } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
+import { EmailComposeModal } from './EmailComposeModal';
+import { EMAIL_TEMPLATES } from '../constants/emailTemplates';
 
 type AutomateLogisticModalProps = {
   isOpen: boolean;
@@ -107,23 +109,66 @@ export const AutomateLogisticModal = ({
   const [existingShippedOrders, setExistingShippedOrders] = useState<Record<string, ShippedOrder>>({});
   // Track original subSKUs to detect changes
   const [originalSubSKUs, setOriginalSubSKUs] = useState<Record<number, string[]>>({});
-  
+  // State for email compose modal
+  const [showEmailCompose, setShowEmailCompose] = useState(false);
+  const [emailComposeOrderId, setEmailComposeOrderId] = useState<number | null>(null);
 
-  // Function to find existing shipped order by SKU
-  const findExistingShippedOrder = useCallback(async (sku: string): Promise<ShippedOrder | null> => {
+  // Function to find existing shipped order by SKU and orderOnMarketPlace
+  // Returns the most recent order with matching SKU and marketplace (for pre-filling convenience)
+  const findExistingShippedOrder = useCallback(async (sku: string, orderOnMarketPlace?: string): Promise<ShippedOrder | null> => {
     if (!sku || sku === '-') return null;
     
     try {
-      const result = await getAllShippedOrders({
-        page: 1,
-        limit: 10,
-        search: sku,
+      // Use sku parameter directly (backend supports it)
+      const endpoint = new URL(buildApiUrl('/Logistics/shipped-orders'));
+      endpoint.searchParams.set('sku', sku.trim());
+      if (orderOnMarketPlace && orderOnMarketPlace !== '-') {
+        endpoint.searchParams.set('orderOnMarketPlace', orderOnMarketPlace.trim());
+      }
+      endpoint.searchParams.set('page', '1');
+      endpoint.searchParams.set('limit', '10');
+      endpoint.searchParams.set('sortBy', 'createdAt');
+      endpoint.searchParams.set('sortOrder', 'desc'); // Get most recent first
+      
+      const response = await fetch(endpoint.toString(), {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
       });
       
-      // Find exact SKU match
-      const matchedOrder = result.orders.find((order: ShippedOrder) => 
-        order.sku && order.sku.toLowerCase().trim() === sku.toLowerCase().trim()
-      );
+      if (!response.ok) {
+        console.error('Failed to fetch orders:', response.statusText);
+        return null;
+      }
+      
+      const data = await response.json();
+      const orders = data.orders || data.data || [];
+      
+      // Find exact SKU match (and orderOnMarketPlace if provided)
+      const matchedOrder = orders.find((order: ShippedOrder) => {
+        const skuMatch = order.sku && order.sku.toLowerCase().trim() === sku.toLowerCase().trim();
+        if (!skuMatch) return false;
+        
+        // If orderOnMarketPlace is provided, also match it
+        if (orderOnMarketPlace && orderOnMarketPlace !== '-') {
+          return order.orderOnMarketPlace && 
+                 order.orderOnMarketPlace.toLowerCase().trim() === orderOnMarketPlace.toLowerCase().trim();
+        }
+        
+        return true;
+      });
+      
+      if (matchedOrder) {
+        console.log('✅ Found existing order for SKU:', sku, 'Marketplace:', orderOnMarketPlace, 'Order ID:', matchedOrder.id);
+        console.log('Order data:', {
+          shippingType: matchedOrder.shippingType,
+          subSKUs: matchedOrder.subSKUs,
+          ordersJsonb: matchedOrder.ordersJsonb,
+        });
+      } else {
+        console.log('⚠️ No existing order found for SKU:', sku, 'Marketplace:', orderOnMarketPlace);
+      }
       
       return matchedOrder || null;
     } catch (error) {
@@ -140,8 +185,9 @@ export const AutomateLogisticModal = ({
       
       for (const order of orders) {
         const sku = getJsonbValue(order.jsonb, 'SKU');
+        const orderOnMarketPlace = order.orderOnMarketPlace || '';
         if (sku && sku !== '-') {
-          const existingOrder = await findExistingShippedOrder(sku);
+          const existingOrder = await findExistingShippedOrder(sku, orderOnMarketPlace);
           if (existingOrder) {
             existingMap[sku] = existingOrder;
             
@@ -149,37 +195,66 @@ export const AutomateLogisticModal = ({
             let shippingType: 'LTL' | 'Parcel' | '' = '';
             let subSKUsList: string[] = [];
             
-            // Get shipping type
-            if (existingOrder.shippingType) {
-              shippingType = existingOrder.shippingType as 'LTL' | 'Parcel';
-            } else if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
+            console.log('🔍 Extracting data from existing order:', {
+              orderId: existingOrder.id,
+              hasShippingType: !!existingOrder.shippingType,
+              hasSubSKUs: !!existingOrder.subSKUs,
+              hasOrdersJsonb: !!existingOrder.ordersJsonb,
+              ordersJsonb: existingOrder.ordersJsonb,
+            });
+            
+            // Get shipping type - check ordersJsonb first (since that's where we store it)
+            if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
               const ordersData = existingOrder.ordersJsonb as any;
-              const shiptypes = ordersData?.shiptypes || ordersData?.shippingType;
+              const shiptypes = ordersData?.shiptypes || ordersData?.shippingType || ordersData?.ShippingType;
               if (shiptypes === 'LTL' || shiptypes === 'Parcel') {
                 shippingType = shiptypes;
+                console.log('✅ Found shipping type in ordersJsonb:', shippingType);
               }
             }
             
-            // Get subSKUs
-            if (existingOrder.subSKUs && Array.isArray(existingOrder.subSKUs) && existingOrder.subSKUs.length > 0) {
-              subSKUsList = existingOrder.subSKUs;
-            } else if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
+            // Fallback to direct field if not found in ordersJsonb
+            if (!shippingType && existingOrder.shippingType) {
+              shippingType = existingOrder.shippingType as 'LTL' | 'Parcel';
+              console.log('✅ Found shipping type in direct field:', shippingType);
+            }
+            
+            // Get subSKUs - check ordersJsonb first (since that's where we store it)
+            if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
               const ordersData = existingOrder.ordersJsonb as any;
-              const subSKUsValue = ordersData?.subSKUs || ordersData?.subSKU;
+              const subSKUsValue = ordersData?.subSKUs || ordersData?.subSKU || ordersData?.SubSKUs || ordersData?.SubSKU;
               
               if (Array.isArray(subSKUsValue)) {
                 subSKUsList = subSKUsValue;
+                console.log('✅ Found subSKUs in ordersJsonb (array):', subSKUsList);
               } else if (typeof subSKUsValue === 'string' && subSKUsValue.trim()) {
                 subSKUsList = subSKUsValue.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                console.log('✅ Found subSKUs in ordersJsonb (string):', subSKUsValue, '→ parsed:', subSKUsList);
               }
+            }
+            
+            // Fallback to direct field if not found in ordersJsonb
+            if (subSKUsList.length === 0 && existingOrder.subSKUs && Array.isArray(existingOrder.subSKUs) && existingOrder.subSKUs.length > 0) {
+              subSKUsList = existingOrder.subSKUs;
+              console.log('✅ Found subSKUs in direct field:', subSKUsList);
             }
             
             // Pre-populate if we have data
             if (shippingType || subSKUsList.length > 0) {
-              setShippingTypes((prev) => ({
-                ...prev,
-                [order.id]: shippingType || prev[order.id] || '',
-              }));
+              console.log('📝 Pre-populating form with:', {
+                orderId: order.id,
+                shippingType,
+                subSKUsList,
+              });
+              
+              setShippingTypes((prev) => {
+                const updated: Record<number, '' | 'LTL' | 'Parcel'> = {
+                  ...prev,
+                  [order.id]: (shippingType || prev[order.id] || '') as '' | 'LTL' | 'Parcel',
+                };
+                console.log('✅ Updated shippingTypes:', updated);
+                return updated;
+              });
               
               setSubSKUs((prev) => {
                 const updated = { ...prev };
@@ -187,6 +262,7 @@ export const AutomateLogisticModal = ({
                   updated[order.id] = subSKUsList;
                   newOriginalSubSKUs[order.id] = [...subSKUsList];
                 }
+                console.log('✅ Updated subSKUs:', updated);
                 return updated;
               });
               
@@ -197,6 +273,8 @@ export const AutomateLogisticModal = ({
                   [order.id]: true,
                 }));
               }
+            } else {
+              console.log('⚠️ No shipping type or subSKUs found to pre-populate');
             }
           }
         }
@@ -504,40 +582,35 @@ export const AutomateLogisticModal = ({
       const cachedOrder = getCachedOrder(orderId);
       if (!cachedOrder) return;
 
-      // Get logistics order ID - if not exists, try to find existing or create new
+      // Get logistics order ID from cache (should be set when BOL was created)
+      // Always use ID for updates - never search by SKU
       let logisticsOrderId = cachedOrder.logisticsShippedOrderId;
 
       if (!logisticsOrderId) {
-        // Try to find existing order first
-        const existingId = await findExistingLogisticsOrder(cachedOrder.sku, cachedOrder.orderOnMarketPlace);
-        
-        if (existingId) {
-          logisticsOrderId = existingId;
-          updateOrderCache(orderId, { logisticsShippedOrderId: logisticsOrderId });
-        } else {
-          // Create order if not found
-          const createResponse = await fetch(buildApiUrl('/Logistics/shipped-orders'), {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              sku: cachedOrder.sku,
-              orderOnMarketPlace: cachedOrder.orderOnMarketPlace,
-              ordersJsonb: cachedOrder.ordersJsonb,
-            }),
-          });
+        // If ID is not in cache, create a new order
+        // Don't search by SKU - always create new orders
+        const createResponse = await fetch(buildApiUrl('/Logistics/shipped-orders'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sku: cachedOrder.sku,
+            orderOnMarketPlace: cachedOrder.orderOnMarketPlace,
+            ordersJsonb: cachedOrder.ordersJsonb,
+          }),
+        });
 
-          if (!createResponse.ok) {
-            throw new Error('Failed to create order');
-          }
-
-          const createResult = await createResponse.json();
-          logisticsOrderId = createResult.data?.id || createResult.id;
-          
-          // Update cache with logistics order ID
-          updateOrderCache(orderId, { logisticsShippedOrderId: logisticsOrderId });
+        if (!createResponse.ok) {
+          throw new Error('Failed to create order');
         }
+
+        const createResult = await createResponse.json();
+        logisticsOrderId = createResult.data?.id || createResult.id;
+        
+        // Update cache with logistics order ID
+        updateOrderCache(orderId, { logisticsShippedOrderId: logisticsOrderId });
+        console.log('✅ Created new order and stored ID in cache:', logisticsOrderId);
       }
 
       // Prepare FormData for update with files
@@ -562,17 +635,17 @@ export const AutomateLogisticModal = ({
         subSKUs: cachedOrder.subSKUs.join(', '),
       };
 
-      // Prepare rateQuotesResponseJsonb - combine XPO and Estes requests only (clear responses as requested)
-      const rateQuotesResponseJsonb: Record<string, unknown> = {};
-      if (cachedOrder.xpoRateQuoteRequest) {
-        rateQuotesResponseJsonb.xpo = {
-          request: cachedOrder.xpoRateQuoteRequest,
-        };
-      }
-      if (cachedOrder.estesRateQuoteRequest) {
-        rateQuotesResponseJsonb.estes = {
-          request: cachedOrder.estesRateQuoteRequest,
-        };
+      // Prepare rate quotes - separate request and response for frontend display
+      let rateQuotesRequestJsonb: Record<string, unknown> | undefined = undefined;
+      let rateQuotesResponseJsonb: Record<string, unknown> | undefined = undefined;
+      
+      // Store only the selected carrier's quote (user selects one, not both)
+      if (cachedOrder.xpoRateQuoteRequest && cachedOrder.xpoRateQuoteResponse) {
+        rateQuotesRequestJsonb = { xpo: cachedOrder.xpoRateQuoteRequest };
+        rateQuotesResponseJsonb = { xpo: cachedOrder.xpoRateQuoteResponse };
+      } else if (cachedOrder.estesRateQuoteRequest && cachedOrder.estesRateQuoteResponse) {
+        rateQuotesRequestJsonb = { estes: cachedOrder.estesRateQuoteRequest };
+        rateQuotesResponseJsonb = { estes: cachedOrder.estesRateQuoteResponse };
       }
 
       // Prepare bolResponseJsonb - combine XPO and Estes
@@ -586,7 +659,10 @@ export const AutomateLogisticModal = ({
 
       // Add JSON fields to FormData
       formData.append('ordersJsonb', JSON.stringify(finalOrdersJsonb));
-      if (Object.keys(rateQuotesResponseJsonb).length > 0) {
+      if (rateQuotesRequestJsonb && Object.keys(rateQuotesRequestJsonb).length > 0) {
+        formData.append('rateQuotesRequestJsonb', JSON.stringify(rateQuotesRequestJsonb));
+      }
+      if (rateQuotesResponseJsonb && Object.keys(rateQuotesResponseJsonb).length > 0) {
         formData.append('rateQuotesResponseJsonb', JSON.stringify(rateQuotesResponseJsonb));
       }
       if (Object.keys(bolResponseJsonb).length > 0) {
@@ -617,7 +693,7 @@ export const AutomateLogisticModal = ({
       console.error('Error updating order from cache:', error);
       throw error;
     }
-  }, [updateOrderCache, findExistingLogisticsOrder]);
+  }, [updateOrderCache]);
 
   // Listen for events from XPO/Estes components to update cache
   useEffect(() => {
@@ -643,28 +719,43 @@ export const AutomateLogisticModal = ({
           xpoBolResponse: bolResponse,
           xpoBolFiles: bolFiles,
         });
-        // Update order when BOL is ready
-        updateOrderFromCache(orderId).catch(err => console.error('Error updating order:', err));
+        // BOL is saved to DB immediately in the BOL component, just cache it for pickup
+        console.log('✅ BOL data cached');
       } else if (carrier === 'estes') {
         updateOrderCache(orderId, {
           estesBolResponse: bolResponse,
           estesBolFiles: bolFiles,
         });
-        // Update order when BOL is ready
-        updateOrderFromCache(orderId).catch(err => console.error('Error updating order:', err));
+        // BOL is saved to DB immediately in the BOL component, just cache it for pickup
+        console.log('✅ BOL data cached');
       }
     };
 
     const handlePickupData = (e: CustomEvent) => {
       const { orderId, pickupResponse } = e.detail;
+      // Store carrier info if available in pickup response
+      const carrier = (pickupResponse as any)?.carrier || 
+                      (pickupResponse as any)?.Carrier ||
+                      undefined;
+      
       updateOrderCache(orderId, {
         pickupResponseJsonb: pickupResponse,
+        ...(carrier && { carrier: carrier.toLowerCase() }),
       });
       // Update order when pickup is ready, then clear cache
       updateOrderFromCache(orderId)
         .then(() => {
-          setToastMessage('Order updated successfully. Cache cleared.');
+          setToastMessage('Pickup scheduled successfully! Opening email compose...');
           setShowToast(true);
+          
+          // Get order data for email template
+          const order = orders.find(o => o.id === orderId);
+          const orderNumber = order ? getJsonbValue(order.jsonb, 'Order#') : undefined;
+          const sku = order ? getJsonbValue(order.jsonb, 'SKU') : undefined;
+          
+          // Show email compose modal with BOL files attached
+          setEmailComposeOrderId(orderId);
+          setShowEmailCompose(true);
         })
         .catch(err => {
           console.error('Error updating order with pickup data:', err);
@@ -1741,6 +1832,61 @@ export const AutomateLogisticModal = ({
           }}
         />
       )}
+
+      {/* Email Compose Modal */}
+      {emailComposeOrderId && (() => {
+        const order = orders.find(o => o.id === emailComposeOrderId);
+        const orderNumber = order ? getJsonbValue(order.jsonb, 'Order#') : undefined;
+        const sku = order ? getJsonbValue(order.jsonb, 'SKU') : undefined;
+        
+        // Determine carrier from cached order data
+        const cachedOrder = getCachedOrder(emailComposeOrderId);
+        let carrier: 'estes' | 'xpo' = 'estes'; // Default to estes
+        
+        if (cachedOrder) {
+          // First, check if carrier is explicitly stored in cache
+          if (cachedOrder.carrier && (cachedOrder.carrier === 'estes' || cachedOrder.carrier === 'xpo')) {
+            carrier = cachedOrder.carrier;
+          } else {
+            // Fallback: Check which BOL response exists to determine carrier
+            if (cachedOrder.estesBolResponse && !cachedOrder.xpoBolResponse) {
+              carrier = 'estes';
+            } else if (cachedOrder.xpoBolResponse && !cachedOrder.estesBolResponse) {
+              carrier = 'xpo';
+            } else if (cachedOrder.xpoBolResponse) {
+              // If both exist, prefer XPO (or you can add logic to determine based on pickup response)
+              carrier = 'xpo';
+            }
+          }
+        }
+        
+        const emailSubject = EMAIL_TEMPLATES.PICKUP_SCHEDULED.subject(
+          carrier,
+          emailComposeOrderId,
+          orderNumber !== '-' ? orderNumber : undefined
+        );
+        const emailBody = EMAIL_TEMPLATES.PICKUP_SCHEDULED.body(
+          carrier,
+          emailComposeOrderId,
+          orderNumber !== '-' ? orderNumber : undefined,
+          sku !== '-' ? sku : undefined
+        );
+        const emailCc = EMAIL_TEMPLATES.PICKUP_SCHEDULED.cc(carrier);
+        
+        return (
+          <EmailComposeModal
+            isOpen={showEmailCompose}
+            onClose={() => {
+              setShowEmailCompose(false);
+              setEmailComposeOrderId(null);
+            }}
+            orderId={emailComposeOrderId}
+            defaultSubject={emailSubject}
+            defaultBody={emailBody}
+            defaultCc={emailCc.length > 0 ? emailCc : undefined}
+          />
+        );
+      })()}
     </div>
   );
 };

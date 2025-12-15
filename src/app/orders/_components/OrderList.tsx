@@ -109,6 +109,10 @@ export const OrderList = ({
   // SKU lookup map for shiptypes and subSKUs
   const [skuLookupMap, setSkuLookupMap] = useState<Map<string, SKULookupData>>(new Map());
   const [loadingSkuLookup, setLoadingSkuLookup] = useState(false);
+  
+  // Processed orders lookup - Set of Order# values that are already processed
+  const [processedOrderNumbers, setProcessedOrderNumbers] = useState<Set<string>>(new Set());
+  const [loadingProcessedOrders, setLoadingProcessedOrders] = useState(false);
 
   // Fetch SKU lookup data on component mount
   useEffect(() => {
@@ -125,6 +129,44 @@ export const OrderList = ({
     };
     
     fetchSkuLookup();
+  }, []);
+
+  // Fetch processed orders to check which Order# values are already processed
+  useEffect(() => {
+    const fetchProcessedOrders = async () => {
+      setLoadingProcessedOrders(true);
+      try {
+        const { getAllShippedOrders } = await import('@/app/ProcessedOrders/utils/shippedOrdersApi');
+        // Fetch all processed orders (with a reasonable limit)
+        const result = await getAllShippedOrders({ page: 1, limit: 1000 });
+        
+        const orderNumbers = new Set<string>();
+        
+        result.orders.forEach((processedOrder) => {
+          // Extract Order# from ordersJsonb
+          if (processedOrder.ordersJsonb && typeof processedOrder.ordersJsonb === 'object') {
+            const ordersData = processedOrder.ordersJsonb as Record<string, unknown>;
+            const orderNumber = ordersData['Order#'] || 
+                               ordersData['Order Number'] || 
+                               ordersData['orderNumber'] ||
+                               ordersData['order_number'];
+            
+            if (orderNumber && typeof orderNumber === 'string' && orderNumber.trim() !== '') {
+              orderNumbers.add(orderNumber.trim());
+            }
+          }
+        });
+        
+        setProcessedOrderNumbers(orderNumbers);
+        console.log('✅ Loaded processed order numbers:', orderNumbers.size);
+      } catch (error) {
+        console.error('Error fetching processed orders:', error);
+      } finally {
+        setLoadingProcessedOrders(false);
+      }
+    };
+    
+    fetchProcessedOrders();
   }, []);
 
   // Use pagination from backend if available, otherwise use client-side pagination for search
@@ -259,12 +301,24 @@ export const OrderList = ({
     });
   };
 
-  // Handle select all (only for current page)
+  // Helper function to check if an order is disabled
+  const isOrderDisabled = (order: Order): boolean => {
+    const orderNumber = getJsonbValue(order.jsonb, 'Order#');
+    const sku = getJsonbValue(order.jsonb, 'SKU');
+    const skuData = getSKUData(sku !== '-' ? sku : null, skuLookupMap);
+    const isOrderProcessed = orderNumber !== '-' && processedOrderNumbers.has(orderNumber);
+    const hasPickupScheduled = skuData?.hasPickupScheduled || false;
+    return isOrderProcessed || hasPickupScheduled;
+  };
+
+  // Handle select all (only for current page, skip disabled orders)
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
       const newSelectedIds = new Set(selectedOrderIds);
       displayOrders.forEach((order) => {
-        newSelectedIds.add(order.id);
+        if (!isOrderDisabled(order)) {
+          newSelectedIds.add(order.id);
+        }
       });
       setSelectedOrderIds(newSelectedIds);
     } else {
@@ -274,8 +328,9 @@ export const OrderList = ({
     }
   };
 
-  // Check if all orders on current page are selected
-  const allSelected = displayOrders.length > 0 && displayOrders.every((order) => selectedOrderIds.has(order.id));
+  // Check if all enabled orders on current page are selected
+  const enabledOrders = displayOrders.filter(order => !isOrderDisabled(order));
+  const allSelected = enabledOrders.length > 0 && enabledOrders.every((order) => selectedOrderIds.has(order.id));
   const someSelected = displayOrders.some((order) => selectedOrderIds.has(order.id));
 
   // Handle page changes
@@ -454,18 +509,30 @@ export const OrderList = ({
 
       {/* Action Buttons - Always visible */}
       <div className={`flex flex-col sm:flex-row gap-2 sm:gap-3 justify-end mb-2 sm:mb-4 lg:mb-6 relative z-40 flex-shrink-0 ${fullWidth ? 'px-4' : 'px-3 sm:px-0'}`}>
-        {/* Automate Logistic Button - Show when one or more orders are selected */}
-        {selectedOrderIds.size > 0 && (
-          <button
-            onClick={() => {
-              setShowAutomateLogisticModal(true);
-            }}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-slate-700 rounded-md border border-slate-300 hover:bg-slate-50 transition-colors text-sm font-medium shadow-sm"
-          >
-            <Truck className="h-4 w-4" />
-            <span>Automate Logistic</span>
-          </button>
-        )}
+        {/* Automate Logistic Button - Show when one or more enabled orders are selected */}
+        {(() => {
+          // Filter out disabled orders from selection
+          const enabledSelectedOrders = Array.from(selectedOrderIds).filter(id => {
+            const order = orders.find(o => o.id === id);
+            return order && !isOrderDisabled(order);
+          });
+          
+          return enabledSelectedOrders.length > 0 && (
+            <button
+              onClick={() => {
+                // Only pass enabled orders to the modal
+                const enabledOrders = orders.filter(order => 
+                  selectedOrderIds.has(order.id) && !isOrderDisabled(order)
+                );
+                setShowAutomateLogisticModal(true);
+              }}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 w-full sm:w-auto bg-white text-slate-700 rounded-md border border-slate-300 hover:bg-slate-50 transition-colors text-sm font-medium shadow-sm"
+            >
+              <Truck className="h-4 w-4" />
+              <span>Automate Logistic ({enabledSelectedOrders.length})</span>
+            </button>
+          );
+        })()}
 
         {/* Logistics Dropdown Button - Show only when exactly one order is selected */}
         {selectedOrderIds.size === 1 && (
@@ -737,6 +804,16 @@ export const OrderList = ({
                       const shippingType = skuData?.shippingType || null;
                       const subSKUs = skuData?.subSKUs || [];
                       
+                      // Check if order is already processed or has pickup scheduled
+                      const isOrderProcessed = orderNumber !== '-' && processedOrderNumbers.has(orderNumber);
+                      const hasPickupScheduled = skuData?.hasPickupScheduled || false;
+                      const isDisabled = isOrderProcessed || hasPickupScheduled;
+                      const disableReason = isOrderProcessed 
+                        ? 'Order already processed' 
+                        : hasPickupScheduled 
+                        ? 'Pickup already scheduled' 
+                        : '';
+                      
                       // Format order date - try from jsonb first, then createdAt
                       let orderDate = '-';
                       const jsonbOrderDate = getJsonbValue(order.jsonb, 'Order Date');
@@ -765,12 +842,15 @@ export const OrderList = ({
                       return (
                         <tr
                           key={order.id}
-                          onClick={() => onOrderSelect(order)}
-                          className={`cursor-pointer transition-all duration-150 border-b border-slate-200 ${
-                            isChecked || isSelected
-                              ? 'bg-blue-50 border-l-4 border-l-blue-600'
-                              : 'bg-white hover:bg-slate-50'
+                          onClick={() => !isDisabled && onOrderSelect(order)}
+                          className={`transition-all duration-150 border-b border-slate-200 ${
+                            isDisabled
+                              ? 'bg-slate-100 opacity-60 cursor-not-allowed'
+                              : isChecked || isSelected
+                              ? 'bg-blue-50 border-l-4 border-l-blue-600 cursor-pointer'
+                              : 'bg-white hover:bg-slate-50 cursor-pointer'
                           }`}
+                          title={isDisabled ? disableReason : ''}
                         >
                           {/* Select Column with Checkbox */}
                           <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
@@ -778,9 +858,24 @@ export const OrderList = ({
                               <input
                                 type="checkbox"
                                 checked={isChecked}
-                                onChange={(e) => handleCheckboxChange(order.id, e.target.checked)}
-                                onClick={(e) => e.stopPropagation()}
-                                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded cursor-pointer"
+                                disabled={isDisabled}
+                                onChange={(e) => {
+                                  if (!isDisabled) {
+                                    handleCheckboxChange(order.id, e.target.checked);
+                                  }
+                                }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isDisabled) {
+                                    e.preventDefault();
+                                  }
+                                }}
+                                className={`h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded ${
+                                  isDisabled 
+                                    ? 'cursor-not-allowed opacity-50' 
+                                    : 'cursor-pointer'
+                                }`}
+                                title={isDisabled ? disableReason : 'Select order'}
                               />
                             </div>
                           </td>
@@ -865,8 +960,18 @@ export const OrderList = ({
                           </td>
                           {/* Order# Column */}
                           <td className="px-2 sm:px-3 lg:px-6 py-3 sm:py-4 whitespace-nowrap hidden sm:table-cell">
-                            <div className="text-xs sm:text-sm text-slate-900">
-                              {orderNumber}
+                            <div className="flex items-center gap-2">
+                              <div className="text-xs sm:text-sm text-slate-900">
+                                {orderNumber}
+                              </div>
+                              {isDisabled && (
+                                <span 
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800"
+                                  title={disableReason}
+                                >
+                                  {isOrderProcessed ? 'Processed' : 'Pickup Scheduled'}
+                                </span>
+                              )}
                             </div>
                           </td>
                           {/* Customer Name Column */}
@@ -1068,7 +1173,9 @@ export const OrderList = ({
         {/* Automate Logistic Modal */}
         <AutomateLogisticModal
           isOpen={showAutomateLogisticModal}
-          orders={orders.filter(order => selectedOrderIds.has(order.id))}
+          orders={orders.filter(order => 
+            selectedOrderIds.has(order.id) && !isOrderDisabled(order)
+          )}
           onClose={() => setShowAutomateLogisticModal(false)}
         />
       </div>

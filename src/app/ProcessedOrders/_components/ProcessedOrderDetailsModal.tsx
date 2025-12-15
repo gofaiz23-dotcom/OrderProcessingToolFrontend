@@ -209,13 +209,74 @@ export const ProcessedOrderDetailsModal = ({
 
             // Check for alternative field names (in case backend uses different naming)
             const rawData = response.data as any;
-            const rateQuotesRequestJsonb = 
-              normalizeJsonb(rawData.rateQuotesRequestJsonb) ?? 
-              normalizeJsonb(rawData.rateQuotesRequest) ??
-              normalizeJsonb(rawData.rate_quotes_request_jsonb) ??
-              normalizeJsonb(rawData.rateQuotesRequestJson) ??
-              rateQuotesRequestJsonbFromStorage ?? // Use localStorage as fallback
-              undefined;
+            
+            // Extract rate quotes from nested structure if needed
+            // Backend stores both request and response in rateQuotesResponseJsonb as:
+            // { xpo: { request: ..., response: ... }, estes: { request: ..., response: ... } }
+            let rateQuotesRequestJsonb: Record<string, unknown> | undefined = undefined;
+            const rateQuotesResponseJsonbRaw = normalizeJsonb(rawData.rateQuotesResponseJsonb);
+            
+            if (rateQuotesResponseJsonbRaw && typeof rateQuotesResponseJsonbRaw === 'object') {
+              // Check if it's the nested structure (has carrier keys with request/response)
+              const hasNestedStructure = Object.keys(rateQuotesResponseJsonbRaw).some(key => {
+                const carrier = rateQuotesResponseJsonbRaw[key];
+                return carrier && typeof carrier === 'object' && ('request' in carrier || 'response' in carrier);
+              });
+              
+              if (hasNestedStructure) {
+                // Extract request from nested structure
+                const requestParts: Record<string, unknown> = {};
+                Object.keys(rateQuotesResponseJsonbRaw).forEach(carrier => {
+                  const carrierData = rateQuotesResponseJsonbRaw[carrier];
+                  if (carrierData && typeof carrierData === 'object' && 'request' in carrierData) {
+                    requestParts[carrier] = carrierData.request;
+                  }
+                });
+                if (Object.keys(requestParts).length > 0) {
+                  rateQuotesRequestJsonb = requestParts;
+                }
+              }
+            }
+            
+            // Fallback to direct field or alternative names
+            if (!rateQuotesRequestJsonb) {
+              rateQuotesRequestJsonb = 
+                normalizeJsonb(rawData.rateQuotesRequestJsonb) ?? 
+                normalizeJsonb(rawData.rateQuotesRequest) ??
+                normalizeJsonb(rawData.rate_quotes_request_jsonb) ??
+                normalizeJsonb(rawData.rateQuotesRequestJson) ??
+                rateQuotesRequestJsonbFromStorage ?? // Use localStorage as fallback
+                undefined;
+            }
+            
+            // Extract response from nested structure if needed
+            let rateQuotesResponseJsonb: Record<string, unknown> | undefined = undefined;
+            if (rateQuotesResponseJsonbRaw && typeof rateQuotesResponseJsonbRaw === 'object') {
+              const hasNestedStructure = Object.keys(rateQuotesResponseJsonbRaw).some(key => {
+                const carrier = rateQuotesResponseJsonbRaw[key];
+                return carrier && typeof carrier === 'object' && ('request' in carrier || 'response' in carrier);
+              });
+              
+              if (hasNestedStructure) {
+                // Extract response from nested structure
+                const responseParts: Record<string, unknown> = {};
+                Object.keys(rateQuotesResponseJsonbRaw).forEach(carrier => {
+                  const carrierData = rateQuotesResponseJsonbRaw[carrier];
+                  if (carrierData && typeof carrierData === 'object' && 'response' in carrierData) {
+                    responseParts[carrier] = carrierData.response;
+                  }
+                });
+                if (Object.keys(responseParts).length > 0) {
+                  rateQuotesResponseJsonb = responseParts;
+                }
+              } else {
+                rateQuotesResponseJsonb = rateQuotesResponseJsonbRaw as Record<string, unknown>;
+              }
+            }
+            
+            if (!rateQuotesResponseJsonb) {
+              rateQuotesResponseJsonb = normalizeJsonb(rawData.rateQuotesResponseJsonb);
+            }
 
             const normalizedOrder: ShippedOrder = {
               id: response.data.id,
@@ -224,7 +285,7 @@ export const ProcessedOrderDetailsModal = ({
               status: response.data.status,
               ordersJsonb: normalizeJsonb(response.data.ordersJsonb) || response.data.ordersJsonb,
               rateQuotesRequestJsonb: rateQuotesRequestJsonb,
-              rateQuotesResponseJsonb: normalizeJsonb(response.data.rateQuotesResponseJsonb),
+              rateQuotesResponseJsonb: rateQuotesResponseJsonb,
               bolResponseJsonb: normalizeJsonb(response.data.bolResponseJsonb),
               pickupResponseJsonb: normalizeJsonb(response.data.pickupResponseJsonb),
               uploads: response.data.uploads || [],

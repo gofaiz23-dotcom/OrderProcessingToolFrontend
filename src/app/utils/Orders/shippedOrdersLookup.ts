@@ -3,6 +3,8 @@ import { getAllShippedOrders, type ShippedOrder } from '@/app/ProcessedOrders/ut
 export type SKULookupData = {
   shippingType: string | null;
   subSKUs: string[];
+  hasPickupScheduled?: boolean;
+  orderNumber?: string; // Order# from ordersJsonb
 };
 
 /**
@@ -62,19 +64,41 @@ export const createSKULookupMap = async (): Promise<Map<string, SKULookupData>> 
           }
         }
         
+        // Check if pickup is scheduled (pickupResponseJsonb exists and is not empty)
+        const hasPickupScheduled = !!(order.pickupResponseJsonb && 
+          typeof order.pickupResponseJsonb === 'object' && 
+          Object.keys(order.pickupResponseJsonb).length > 0);
+        
+        // Extract Order# from ordersJsonb
+        let orderNumber: string | undefined = undefined;
+        if (order.ordersJsonb && typeof order.ordersJsonb === 'object') {
+          const ordersData = order.ordersJsonb as any;
+          const orderNum = ordersData['Order#'] || 
+                          ordersData['Order Number'] || 
+                          ordersData['orderNumber'] ||
+                          ordersData['order_number'];
+          if (orderNum && typeof orderNum === 'string' && orderNum.trim() !== '') {
+            orderNumber = orderNum.trim();
+          }
+        }
+        
         // Store in map (if SKU already exists, we keep the first one or merge subSKUs)
         if (!lookupMap.has(order.sku)) {
           lookupMap.set(order.sku, {
             shippingType,
             subSKUs,
+            hasPickupScheduled,
+            orderNumber,
           });
         } else {
-          // Merge subSKUs if SKU already exists
+          // Merge subSKUs if SKU already exists, and check if any has pickup scheduled
           const existing = lookupMap.get(order.sku)!;
           const mergedSubSKUs = [...new Set([...existing.subSKUs, ...subSKUs])];
           lookupMap.set(order.sku, {
             shippingType: existing.shippingType || shippingType,
             subSKUs: mergedSubSKUs,
+            hasPickupScheduled: existing.hasPickupScheduled || hasPickupScheduled,
+            orderNumber: existing.orderNumber || orderNumber,
           });
         }
       });

@@ -18,8 +18,8 @@ import { ESTESReferenceNumbers } from './ESTESReferenceNumbers';
 import { ESTESNotifications } from './ESTESNotifications';
 import { ESTESPickupRequest } from './ESTESPickupRequest';
 import type { Order } from '@/app/types/order';
-import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
-import { dispatchBOLData } from '../../utils/ltlOrderCache';
+import { dispatchBOLData, updateCachedOrder, getCachedOrder, storePickupPrefillData } from '../../utils/ltlOrderCache';
+import { createShippedOrder } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 
 type ESTESBOLFormProps = {
   order: Order;
@@ -868,6 +868,39 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
       setResponseData(data);
       setShowResponsePreview(true);
       
+      // Store pickup prefill data in cache for redirect
+      const pickupPrefillData = {
+        originName,
+        originAddress1,
+        originAddress2,
+        originZipCode,
+        originCountry,
+        originContactName,
+        originPhone,
+        originEmail,
+        handlingUnits: handlingUnits.map(unit => ({
+          quantity: unit.quantity,
+          weight: unit.weight,
+          handlingUnitType: unit.handlingUnitType,
+        })),
+        destinationZipCode,
+        hazmat: handlingUnits.some(unit => unit.items.some(item => item.description.toLowerCase().includes('hazmat'))),
+        protectFromFreezing: specialHandlingRequests.some(req => req.toLowerCase().includes('freez')),
+        food: false,
+        poison: false,
+        overlength: false,
+        liftgate: liftGateService,
+        doNotStack: handlingUnits.some(unit => unit.doNotStack),
+        rateQuoteData: quoteData,
+      };
+      
+      storePickupPrefillData(order.id, pickupPrefillData);
+      
+      // Automatically show pickup request form after a short delay
+      setTimeout(() => {
+        setShowPickupRequest(true);
+      }, 1500); // 1.5 second delay to show success message
+      
       // Save BOL response with Shipping Type, SubSKU, and PDF file to database
       try {
         const sku = getJsonbValue(order.jsonb, 'SKU') || '';
@@ -880,51 +913,102 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           if (responseData?.data?.images?.bol) {
             try {
               const base64String = responseData.data.images.bol;
-              const binaryString = atob(base64String);
-              const bytes = new Uint8Array(binaryString.length);
-              for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
+              console.log('📄 Creating PDF from base64, length:', base64String?.length);
+              
+              if (!base64String || base64String.trim() === '') {
+                console.warn('⚠️ Base64 string is empty');
+              } else {
+                const binaryString = atob(base64String);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+                const blob = new Blob([bytes], { type: 'application/pdf' });
+                const proNumber = responseData?.data?.referenceNumbers?.pro || 'BOL';
+                const fileName = `BillOfLading_${proNumber}_${Date.now()}.pdf`;
+                const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
+                
+                console.log('✅ PDF file created:', {
+                  name: pdfFile.name,
+                  size: pdfFile.size,
+                  type: pdfFile.type,
+                  isFile: pdfFile instanceof File,
+                });
+                
+                bolFiles.push(pdfFile);
               }
-              const blob = new Blob([bytes], { type: 'application/pdf' });
-              const proNumber = responseData?.data?.referenceNumbers?.pro || 'BOL';
-              const fileName = `BillOfLading_${proNumber}_${Date.now()}.pdf`;
-              const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
-              bolFiles.push(pdfFile);
             } catch (pdfError) {
               console.error('⚠️ Failed to create PDF file:', pdfError);
             }
+          } else {
+            console.warn('⚠️ No BOL image in response data:', {
+              hasData: !!responseData?.data,
+              hasImages: !!responseData?.data?.images,
+              hasBol: !!responseData?.data?.images?.bol,
+            });
           }
           
-          // Check if order already exists
-          const existingOrders = await getAllShippedOrders({ page: 1, limit: 100 });
-          const existingOrder = existingOrders.orders.find(
-            (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
-          );
-
           // Dispatch event for cache update (for LTL orders)
           dispatchBOLData(order.id, 'estes', data, bolFiles.length > 0 ? bolFiles : undefined);
-
-          if (existingOrder) {
-            // Update existing order with BOL response, shipping type, subSKUs, and PDF file
-            await updateShippedOrder(existingOrder.id, {
-              bolResponseJsonb: data,
-              shippingType: finalShippingType,
-              subSKUs: subSKUs.length > 0 ? subSKUs : undefined,
-              files: bolFiles.length > 0 ? bolFiles : undefined,
-            });
-            console.log('✅ Updated existing order with BOL response');
-          } else {
-            // Create new order with BOL response, shipping type, subSKUs, and PDF file
-            await createShippedOrder({
-              sku,
-              orderOnMarketPlace: marketplace,
-              ordersJsonb: order.jsonb as Record<string, unknown>,
-              bolResponseJsonb: data,
-              shippingType: finalShippingType,
-              subSKUs: subSKUs.length > 0 ? subSKUs : undefined,
-              files: bolFiles.length > 0 ? bolFiles : undefined,
-            });
-            console.log('✅ Created new order with BOL response');
+          
+          // Get cached rate quotes if available
+          const cachedOrder = getCachedOrder(order.id);
+          let rateQuotesRequestJsonb: Record<string, unknown> | undefined = undefined;
+          let rateQuotesResponseJsonb: Record<string, unknown> | undefined = undefined;
+          
+          // Include rate quotes from cache if available
+          if (cachedOrder) {
+            if (cachedOrder.xpoRateQuoteRequest && cachedOrder.xpoRateQuoteResponse) {
+              rateQuotesRequestJsonb = { xpo: cachedOrder.xpoRateQuoteRequest };
+              rateQuotesResponseJsonb = { xpo: cachedOrder.xpoRateQuoteResponse };
+            } else if (cachedOrder.estesRateQuoteRequest && cachedOrder.estesRateQuoteResponse) {
+              rateQuotesRequestJsonb = { estes: cachedOrder.estesRateQuoteRequest };
+              rateQuotesResponseJsonb = { estes: cachedOrder.estesRateQuoteResponse };
+            }
+          }
+          
+          // Prepare bolResponseJsonb - combine XPO and Estes if both exist
+          const bolResponseJsonb: Record<string, unknown> = {};
+          if (cachedOrder?.xpoBolResponse) {
+            bolResponseJsonb.xpo = cachedOrder.xpoBolResponse;
+          }
+          bolResponseJsonb.estes = data; // Current Estes BOL
+          
+          // Always create new order - don't check for duplicates by SKU
+          // Updates should only be done using ID (not SKU)
+          console.log('📤 Creating order with files:', {
+            sku,
+            marketplace,
+            filesCount: bolFiles.length,
+            files: bolFiles.map(f => ({ name: f.name, size: f.size, type: f.type })),
+          });
+          
+          const createdOrder = await createShippedOrder({
+            sku,
+            orderOnMarketPlace: marketplace,
+            ordersJsonb: order.jsonb as Record<string, unknown>,
+            bolResponseJsonb: Object.keys(bolResponseJsonb).length > 0 ? bolResponseJsonb : data,
+            rateQuotesRequestJsonb: rateQuotesRequestJsonb,
+            rateQuotesResponseJsonb: rateQuotesResponseJsonb,
+            shippingType: finalShippingType,
+            subSKUs: subSKUs.length > 0 ? subSKUs : undefined,
+            files: bolFiles.length > 0 ? bolFiles : undefined,
+          });
+          
+          console.log('✅ Order created:', {
+            id: createdOrder?.id,
+            uploads: createdOrder?.uploads,
+            uploadsLength: createdOrder?.uploads?.length,
+          });
+          
+          // Extract ID from response
+          const logisticsOrderId = createdOrder?.id;
+          console.log('✅ Created new order with BOL response, ID:', logisticsOrderId);
+          
+          // Store logisticsOrderId in cache for pickup update (always use ID, not SKU)
+          if (logisticsOrderId) {
+            updateCachedOrder(order.id, { logisticsShippedOrderId: logisticsOrderId });
+            console.log('✅ Stored logisticsOrderId in cache for future updates:', logisticsOrderId);
           }
         }
       } catch (saveError) {
@@ -1328,7 +1412,9 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
                       </button>
                       <button
                         type="button"
-                        onClick={() => setShowPickupRequest(true)}
+                        onClick={() => {
+                          setShowPickupRequest(true);
+                        }}
                         className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm"
                       >
                         <Send size={16} />

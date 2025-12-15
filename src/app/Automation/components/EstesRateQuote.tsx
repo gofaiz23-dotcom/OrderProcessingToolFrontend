@@ -11,7 +11,6 @@ import { ESTES_ACCOUNTS, ESTES_RATE_QUOTE_DEFAULTS, ESTES_RATE_QUOTE_FORM_DEFAUL
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/shared/SearchableDropdown';
 import { ESTESBOLForm } from './ESTESBOL/ESTESBOLForm';
-import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 import { dispatchRateQuoteData } from '../utils/ltlOrderCache';
 
 type EstesRateQuoteProps = {
@@ -397,14 +396,31 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
     const handleQuoteSelected = (e: CustomEvent) => {
       const { quoteId, index, carrier } = e.detail;
       if (carrier === 'estes' && response?.data?.data?.[index]) {
-        setSelectedQuote(response.data.data[index]);
+        const selected = response.data.data[index];
+        setSelectedQuote(selected);
+        
+        // Dispatch only the selected quote's request and response to cache
+        // Get the original request payload from state
+        const requestPayload = (response as any)?._requestPayload || null;
+        if (requestPayload) {
+          // Create a response object with only the selected quote
+          const selectedQuoteResponse = {
+            ...response,
+            data: {
+              ...response.data,
+              data: [selected], // Only include the selected quote
+            },
+          };
+          dispatchRateQuoteData(order.id, 'estes', requestPayload, selectedQuoteResponse);
+          console.log('✅ Selected Estes quote cached');
+        }
       }
     };
     window.addEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
     return () => {
       window.removeEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
     };
-  }, [response]);
+  }, [response, order.id]);
 
   // Auto-scroll to BOL form when it's shown
   useEffect(() => {
@@ -693,50 +709,16 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
       }
 
       const data = await res.json();
+      // Store request payload in response object for later use
+      (data as any)._requestPayload = payload;
       setResponse(data);
       setShowAccountInfo(false);
       
       // Log response for debugging
       console.log('✅ Estes Rate Quote Response:', JSON.stringify(data, null, 2));
 
-      // Save rate quote request and response to database
-      try {
-        const sku = getJsonbValue(order.jsonb, 'SKU') || '';
-        const marketplace = order.orderOnMarketPlace || '';
-        
-        if (sku && marketplace) {
-          // Check if order already exists
-          const existingOrders = await getAllShippedOrders({ page: 1, limit: 100 });
-          const existingOrder = existingOrders.orders.find(
-            (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
-          );
-
-          // Dispatch event for cache update (for LTL orders)
-          dispatchRateQuoteData(order.id, 'estes', payload, data);
-
-          if (existingOrder) {
-            // Update existing order with rate quote data
-            await updateShippedOrder(existingOrder.id, {
-              rateQuotesRequestJsonb: payload,
-              rateQuotesResponseJsonb: data,
-            });
-            console.log('✅ Updated existing order with rate quote data');
-          } else {
-            // Create new order with rate quote data
-            await createShippedOrder({
-              sku,
-              orderOnMarketPlace: marketplace,
-              ordersJsonb: order.jsonb as Record<string, unknown>,
-              rateQuotesRequestJsonb: payload,
-              rateQuotesResponseJsonb: data,
-            });
-            console.log('✅ Created new order with rate quote data');
-          }
-        }
-      } catch (saveError) {
-        console.error('⚠️ Failed to save rate quote to database:', saveError);
-        // Don't throw error - rate quote was successful, just log the save error
-      }
+      // Don't dispatch to cache yet - wait for user to select a quote
+      // The selected quote will be dispatched when user clicks on a quote card
     } catch (err) {
       setError(err);
     } finally {
