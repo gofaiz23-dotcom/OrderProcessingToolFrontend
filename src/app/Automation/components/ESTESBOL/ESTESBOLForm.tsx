@@ -20,6 +20,8 @@ import { ESTESPickupRequest } from './ESTESPickupRequest';
 import type { Order } from '@/app/types/order';
 import { dispatchBOLData, updateCachedOrder, getCachedOrder, storePickupPrefillData } from '../../utils/ltlOrderCache';
 import { createShippedOrder } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
+import { EmailComposeModal } from '../EmailComposeModal';
+import { EMAIL_TEMPLATES } from '../../constants/emailTemplates';
 
 type ESTESBOLFormProps = {
   order: Order;
@@ -244,6 +246,8 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [requestPayload, setRequestPayload] = useState<any>(null);
   const [showPickupRequest, setShowPickupRequest] = useState(false);
+  const [showEmailCompose, setShowEmailCompose] = useState(false);
+  const [bolFilesForEmail, setBolFilesForEmail] = useState<File[]>([]); // Store BOL files to pass to email modal
   const [showSections, setShowSections] = useState<Record<string, boolean>>({
     accountInfo: true,
     billingInfo: true,
@@ -948,6 +952,22 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
             });
           }
           
+          // Save BOL files directly to cache immediately so they're available for email attachment
+          if (bolFiles.length > 0) {
+            updateCachedOrder(order.id, { estesBolFiles: bolFiles });
+            // Also store in state to pass directly to email modal (more reliable)
+            console.log('📦 Setting bolFilesForEmail state with', bolFiles.length, 'file(s):', bolFiles.map(f => ({ 
+              name: f.name, 
+              size: f.size, 
+              type: f.type,
+              isFile: f instanceof File 
+            })));
+            setBolFilesForEmail(bolFiles);
+            console.log('✅ BOL files saved to cache and state for email attachment:', bolFiles.map(f => f.name));
+          } else {
+            console.warn('⚠️ No BOL files to save - bolFiles array is empty');
+          }
+          
           // Dispatch event for cache update (for LTL orders)
           dispatchBOLData(order.id, 'estes', data, bolFiles.length > 0 ? bolFiles : undefined);
           
@@ -1016,6 +1036,55 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
         // Don't throw error - BOL creation was successful, just log the save error
       }
       
+      // Open email compose modal with generated email content for LTL and Parcel orders
+      // Show email modal regardless of pickup request visibility, with a delay to ensure it appears on top
+      // Only show once - prevent duplicate emails
+      const finalShippingType = shippingType || 'LTL'; // Use provided shipping type or default to LTL
+      
+      if ((finalShippingType === 'LTL' || finalShippingType === 'Parcel') && !showEmailCompose) {
+        const orderJsonb = order.jsonb as Record<string, unknown>;
+        const customerName = getJsonbValue(orderJsonb, 'Customer Name');
+        const orderNumber = getJsonbValue(orderJsonb, 'Order Number') || 
+                           getJsonbValue(orderJsonb, 'PO#') || 
+                           getJsonbValue(orderJsonb, 'PO Number') || '';
+        
+        let emailSubject = '';
+        let emailBody = '';
+        
+        if (finalShippingType === 'LTL') {
+          emailSubject = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.subject(customerName, orderNumber);
+          emailBody = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.body(orderJsonb, subSKUs);
+        } else if (finalShippingType === 'Parcel') {
+          emailSubject = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.subject(customerName, orderNumber);
+          emailBody = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.body(orderJsonb, subSKUs);
+        }
+        
+        console.log('📧 Preparing to show email compose modal:', {
+          shippingType: finalShippingType,
+          customerName,
+          orderNumber,
+          hasSubject: !!emailSubject,
+          hasBody: !!emailBody,
+        });
+        
+        // Open email compose modal after a delay (longer than pickup request to ensure it appears on top)
+        // The email modal has z-index 9999, so it will appear above the pickup request form
+        setTimeout(() => {
+          if (!showEmailCompose) {
+            console.log('📧 Opening email compose modal');
+            setShowEmailCompose(true);
+          } else {
+            console.log('⚠️ Email modal already open, skipping duplicate');
+          }
+        }, 3000); // 3 second delay to ensure pickup request form is visible first, then email modal appears on top
+      } else {
+        if (showEmailCompose) {
+          console.log('⚠️ Email modal already shown, skipping');
+        } else {
+          console.log('⚠️ Email modal not shown - shippingType is not LTL or Parcel:', finalShippingType);
+        }
+      }
+      
       if (onSuccess) {
         onSuccess(data);
       }
@@ -1072,6 +1141,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
   };
 
   return (
+    <>
       <div className="mt-6 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-bold text-slate-900">Bill of Lading</h3>
@@ -1471,6 +1541,52 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           )}
         </div>
       </div>
+
+      {/* Email Compose Modal */}
+      {showEmailCompose && (() => {
+        const orderJsonb = order.jsonb as Record<string, unknown>;
+        const customerName = getJsonbValue(orderJsonb, 'Customer Name');
+        const orderNumber = getJsonbValue(orderJsonb, 'Order Number') || 
+                           getJsonbValue(orderJsonb, 'PO#') || 
+                           getJsonbValue(orderJsonb, 'PO Number') || '';
+        
+        const finalShippingType = shippingType || 'LTL';
+        let emailSubject = '';
+        let emailBody = '';
+        
+        if (finalShippingType === 'LTL') {
+          emailSubject = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.subject(customerName, orderNumber);
+          emailBody = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.body(orderJsonb, subSKUs);
+        } else if (finalShippingType === 'Parcel') {
+          emailSubject = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.subject(customerName, orderNumber);
+          emailBody = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.body(orderJsonb, subSKUs);
+        }
+        
+        console.log('📧 Rendering email compose modal:', {
+          isOpen: showEmailCompose,
+          shippingType: finalShippingType,
+          hasSubject: !!emailSubject,
+          hasBody: !!emailBody,
+          bolFilesForEmailCount: bolFilesForEmail.length,
+          bolFilesForEmail: bolFilesForEmail.map(f => ({ name: f.name, size: f.size, type: f.type }))
+        });
+        
+        return (
+          <EmailComposeModal
+            isOpen={showEmailCompose}
+            onClose={() => {
+              console.log('📧 Closing email compose modal');
+              setShowEmailCompose(false);
+            }}
+            orderId={order.id}
+            defaultSubject={emailSubject}
+            defaultBody={emailBody}
+            defaultTo="gofaiz23@gmail.com"
+            initialAttachments={bolFilesForEmail} // Pass BOL files directly to ensure they're attached
+          />
+        );
+      })()}
+    </>
   );
 };
 
