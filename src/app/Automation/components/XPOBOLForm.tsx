@@ -27,8 +27,8 @@ import { XPO_SHIPPER_ADDRESS_BOOK, XPO_BOL_DEFAULTS, ESTES_RATE_QUOTE_FORM_DEFAU
 import type { XPOBillOfLadingCommodity, XPOBillOfLadingReference, XPOBillOfLadingFields } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
 import { XPO_BOL_COMMODITY_DEFAULTS } from '@/app/api/ShippingUtil/xpo/BillOfLandingField';
 import type { Order } from '@/app/types/order';
-import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
-import { dispatchBOLData } from '../utils/ltlOrderCache';
+import { dispatchBOLData, dispatchPickupData, updateCachedOrder, getCachedOrder } from '../utils/ltlOrderCache';
+import { createShippedOrder } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 
 type LocationData = {
   searchValue: string;
@@ -991,36 +991,14 @@ export const XPOBOLForm = ({
               console.log('Pickup Request Created:', pickupData);
             }
             
-            // Update order with pickup response - find by SKU and marketplace
-            try {
-              const sku = getJsonbValue(order.jsonb, 'SKU') || '';
-              const marketplace = order.orderOnMarketPlace || '';
-              
-              if (sku && marketplace) {
-                // Find the order that matches this rate quote
-                const existingOrders = await getAllShippedOrders({ page: 1, limit: 100 });
-                const existingOrder = existingOrders.orders.find(
-                  (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
-                );
-
-                if (existingOrder) {
-                  // Update existing order with pickup response
-                  await updateShippedOrder(existingOrder.id, {
-                    pickupResponseJsonb: {
-                      pickupRequestPayload: finalPickupPayload,
-                      pickupData,
-                      response: pickupData,
-                    },
-                  });
-                  console.log('✅ Updated existing order with pickup response');
-                } else {
-                  console.warn('⚠️ Could not find order to update with pickup response');
-                }
-              }
-            } catch (saveError) {
-              console.error('⚠️ Failed to save pickup response to database:', saveError);
-              // Don't throw error - pickup request was successful, just log the save error
-            }
+            // Dispatch pickup data to cache - this will trigger final DB save in AutomateLogisticModal
+            dispatchPickupData(order.id, {
+              pickupRequestPayload: finalPickupPayload,
+              pickupData,
+              response: pickupData,
+              carrier: 'xpo', // Explicitly set carrier
+            });
+            console.log('✅ Pickup data cached and will trigger final DB save with all cached data');
           }
         } catch (pickupErr) {
           // Log the error but don't fail the entire flow - BOL was created successfully
@@ -1113,36 +1091,67 @@ export const XPOBOLForm = ({
             bolFiles.push(pdfFile);
           }
           
-          // Check if order already exists
-          const existingOrders = await getAllShippedOrders({ page: 1, limit: 100 });
-          const existingOrder = existingOrders.orders.find(
-            (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
-          );
-
           // Dispatch event for cache update (for LTL orders)
           dispatchBOLData(order.id, 'xpo', data, bolFiles.length > 0 ? bolFiles : undefined);
-
-          if (existingOrder) {
-            // Update existing order with BOL response, shipping type, subSKUs, and PDF file
-            await updateShippedOrder(existingOrder.id, {
-              bolResponseJsonb: data,
-              shippingType: finalShippingType,
-              subSKUs: subSKUs.length > 0 ? subSKUs : undefined,
-              files: bolFiles.length > 0 ? bolFiles : undefined,
-            });
-            console.log('✅ Updated existing order with BOL response');
-          } else {
-            // Create new order with BOL response, shipping type, subSKUs, and PDF file
-            await createShippedOrder({
-              sku,
-              orderOnMarketPlace: marketplace,
-              ordersJsonb: order.jsonb as Record<string, unknown>,
-              bolResponseJsonb: data,
-              shippingType: finalShippingType,
-              subSKUs: subSKUs.length > 0 ? subSKUs : undefined,
-              files: bolFiles.length > 0 ? bolFiles : undefined,
-            });
-            console.log('✅ Created new order with BOL response');
+          
+          // Get cached rate quotes if available
+          const cachedOrder = getCachedOrder(order.id);
+          let rateQuotesRequestJsonb: Record<string, unknown> | undefined = undefined;
+          let rateQuotesResponseJsonb: Record<string, unknown> | undefined = undefined;
+          
+          // Include rate quotes from cache if available
+          if (cachedOrder) {
+            if (cachedOrder.xpoRateQuoteRequest && cachedOrder.xpoRateQuoteResponse) {
+              rateQuotesRequestJsonb = { xpo: cachedOrder.xpoRateQuoteRequest };
+              rateQuotesResponseJsonb = { xpo: cachedOrder.xpoRateQuoteResponse };
+            } else if (cachedOrder.estesRateQuoteRequest && cachedOrder.estesRateQuoteResponse) {
+              rateQuotesRequestJsonb = { estes: cachedOrder.estesRateQuoteRequest };
+              rateQuotesResponseJsonb = { estes: cachedOrder.estesRateQuoteResponse };
+            }
+          }
+          
+          // Prepare bolResponseJsonb - combine XPO and Estes if both exist
+          const bolResponseJsonb: Record<string, unknown> = {};
+          bolResponseJsonb.xpo = data; // Current XPO BOL
+          if (cachedOrder?.estesBolResponse) {
+            bolResponseJsonb.estes = cachedOrder.estesBolResponse;
+          }
+          
+          // Always create new order - don't check for duplicates by SKU
+          // Updates should only be done using ID (not SKU)
+          console.log('📤 Creating order with files:', {
+            sku,
+            marketplace,
+            filesCount: bolFiles.length,
+            files: bolFiles.map(f => ({ name: f.name, size: f.size, type: f.type })),
+          });
+          
+          const createdOrder = await createShippedOrder({
+            sku,
+            orderOnMarketPlace: marketplace,
+            ordersJsonb: order.jsonb as Record<string, unknown>,
+            bolResponseJsonb: Object.keys(bolResponseJsonb).length > 0 ? bolResponseJsonb : data,
+            rateQuotesRequestJsonb: rateQuotesRequestJsonb,
+            rateQuotesResponseJsonb: rateQuotesResponseJsonb,
+            shippingType: finalShippingType,
+            subSKUs: subSKUs.length > 0 ? subSKUs : undefined,
+            files: bolFiles.length > 0 ? bolFiles : undefined,
+          });
+          
+          console.log('✅ Order created:', {
+            id: createdOrder?.id,
+            uploads: createdOrder?.uploads,
+            uploadsLength: createdOrder?.uploads?.length,
+          });
+          
+          // Extract ID from response
+          const logisticsOrderId = createdOrder?.id;
+          console.log('✅ Created new order with BOL response, ID:', logisticsOrderId);
+          
+          // Store logisticsOrderId in cache for pickup update (always use ID, not SKU)
+          if (logisticsOrderId) {
+            updateCachedOrder(order.id, { logisticsShippedOrderId: logisticsOrderId });
+            console.log('✅ Stored logisticsOrderId in cache for future updates:', logisticsOrderId);
           }
         }
       } catch (saveError) {

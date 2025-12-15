@@ -4,6 +4,38 @@
 
 const LTL_CACHE_KEY = 'ltl_orders_cache';
 
+export type PickupPrefillData = {
+  // Origin/Pickup Location
+  originName?: string;
+  originAddress1?: string;
+  originAddress2?: string;
+  originZipCode?: string;
+  originCountry?: string;
+  originContactName?: string;
+  originPhone?: string;
+  originEmail?: string;
+  // Shipments
+  handlingUnits?: Array<{
+    quantity: number;
+    weight: number;
+    handlingUnitType: string;
+  }>;
+  destinationZipCode?: string;
+  // Freight Characteristics
+  hazmat?: boolean;
+  protectFromFreezing?: boolean;
+  food?: boolean;
+  poison?: boolean;
+  overlength?: boolean;
+  liftgate?: boolean;
+  doNotStack?: boolean;
+  // Rate Quote Data
+  rateQuoteData?: {
+    quote?: any;
+    formData?: any;
+  };
+};
+
 export type CachedOrderData = {
   orderId: number;
   sku: string;
@@ -21,6 +53,8 @@ export type CachedOrderData = {
   xpoBolFiles?: File[]; // Files are stored separately, not in JSON cache
   estesBolFiles?: File[]; // Files are stored separately, not in JSON cache
   pickupResponseJsonb?: Record<string, unknown>;
+  carrier?: 'estes' | 'xpo'; // Carrier used for pickup
+  pickupPrefillData?: PickupPrefillData; // Data to prefill pickup form
 };
 
 // In-memory storage for files (since they can't be serialized to localStorage)
@@ -181,4 +215,19 @@ export const dispatchPickupData = (orderId: number, pickupResponse: Record<strin
   window.dispatchEvent(new CustomEvent('pickupData', {
     detail: { orderId, pickupResponse },
   }));
+};
+
+/**
+ * Store pickup prefill data in cache
+ */
+export const storePickupPrefillData = (orderId: number, prefillData: PickupPrefillData): void => {
+  updateCachedOrder(orderId, { pickupPrefillData: prefillData });
+};
+
+/**
+ * Get pickup prefill data from cache
+ */
+export const getPickupPrefillData = (orderId: number): PickupPrefillData | null => {
+  const cached = getCachedOrder(orderId);
+  return cached?.pickupPrefillData || null;
 };

@@ -14,7 +14,6 @@ import { SearchableDropdown, SearchableDropdownOption } from '@/app/components/s
 import { XPOQuoteCard } from '@/app/logistics/xpo/components/XPOQuoteCard';
 import { XPOBOLForm } from './XPOBOLForm';
 import { dispatchRateQuoteData } from '../utils/ltlOrderCache';
-import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 
 type XPORateQuoteProps = {
   order: Order;
@@ -606,6 +605,12 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
       // Log response for debugging
       console.log('✅ XPO Rate Quote Response:', JSON.stringify(data, null, 2));
       
+      // Store request payload in response object for later use
+      (data as any)._requestPayload = payload;
+      
+      // Don't dispatch to cache yet - wait for user to select a quote
+      // The selected quote will be dispatched when user clicks on a quote card
+      
       // Transform and extract quotes
       const transformQuote = (quote: any, transitTime?: any) => {
         // Extract total charges from totCharge array
@@ -753,45 +758,6 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
       const transformedQuotes = rawQuotes.map(quote => transformQuote(quote, transitTime));
       setQuotes(transformedQuotes);
       
-      // Save rate quote request and response to database
-      try {
-        const sku = getJsonbValue(order.jsonb, 'SKU') || '';
-        const marketplace = order.orderOnMarketPlace || '';
-        
-        if (sku && marketplace) {
-          // Check if order already exists
-          const existingOrders = await getAllShippedOrders({ page: 1, limit: 100 });
-          const existingOrder = existingOrders.orders.find(
-            (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
-          );
-
-          // Dispatch event for cache update (for LTL orders)
-          dispatchRateQuoteData(order.id, 'xpo', payload, data);
-
-          if (existingOrder) {
-            // Update existing order with rate quote data
-            await updateShippedOrder(existingOrder.id, {
-              rateQuotesRequestJsonb: payload,
-              rateQuotesResponseJsonb: data,
-            });
-            console.log('✅ Updated existing order with rate quote data');
-          } else {
-            // Create new order with rate quote data
-            await createShippedOrder({
-              sku,
-              orderOnMarketPlace: marketplace,
-              ordersJsonb: order.jsonb as Record<string, unknown>,
-              rateQuotesRequestJsonb: payload,
-              rateQuotesResponseJsonb: data,
-            });
-            console.log('✅ Created new order with rate quote data');
-          }
-        }
-      } catch (saveError) {
-        console.error('⚠️ Failed to save rate quote to database:', saveError);
-        // Don't throw error - rate quote was successful, just log the save error
-      }
-      
       // Close form content and pickup details dropdown when quotes are generated
       setShowFormContent(false);
       setShowPickupDetails(false);
@@ -807,14 +773,34 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
     const handleQuoteSelected = (e: CustomEvent) => {
       const { quoteId, index, carrier } = e.detail;
       if (carrier === 'xpo' && quotes[index]) {
-        setSelectedQuote(quotes[index]);
+        const selected = quotes[index];
+        setSelectedQuote(selected);
+        
+        // Dispatch only the selected quote's request and response to cache
+        // Get the original request payload from response
+        const requestPayload = (response as any)?._requestPayload || null;
+        if (requestPayload) {
+          // Create a response object with only the selected quote
+          const selectedQuoteResponse = {
+            ...response,
+            data: {
+              ...response.data,
+              data: {
+                ...response.data?.data,
+                rateQuote: selected, // Only include the selected quote
+              },
+            },
+          };
+          dispatchRateQuoteData(order.id, 'xpo', requestPayload, selectedQuoteResponse);
+          console.log('✅ Selected XPO quote cached');
+        }
       }
     };
     window.addEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
     return () => {
       window.removeEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
     };
-  }, [quotes]);
+  }, [quotes, response, order.id]);
 
   // Expose getQuote function via ref
   useImperativeHandle(ref, () => ({

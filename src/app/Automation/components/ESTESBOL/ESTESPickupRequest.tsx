@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { Send, Loader2, CheckCircle2, XCircle, Plus, Trash2 } from 'lucide-react';
 import { createEstesPickupRequest, type EstesPickupData } from '@/app/api/3plGigaFedexApi/estesPickupApi';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
-import { updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 import type { Order } from '@/app/types/order';
 import { dispatchPickupData } from '../../utils/ltlOrderCache';
 
@@ -312,40 +311,20 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
           automationId: response.automation_id,
           pickupData,
           response,
+          carrier: 'estes', // Explicitly set carrier
         });
       }
       
       // Update order with pickup response - find by SKU and marketplace
       if (order) {
-        try {
-          const sku = getJsonbValue(order.jsonb, 'SKU') || '';
-          const marketplace = order.orderOnMarketPlace || '';
-          
-          if (sku && marketplace) {
-            // Find the order that matches this rate quote
-            const existingOrders = await getAllShippedOrders({ page: 1, limit: 100 });
-            const existingOrder = existingOrders.orders.find(
-              (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
-            );
-
-            if (existingOrder) {
-              // Update existing order with pickup response
-              await updateShippedOrder(existingOrder.id, {
-                pickupResponseJsonb: {
-                  automationId: response.automation_id,
-                  pickupData,
-                  response,
-                },
-              });
-              console.log('✅ Updated existing order with pickup response');
-            } else {
-              console.warn('⚠️ Could not find order to update with pickup response');
-            }
-          }
-        } catch (saveError) {
-          console.error('⚠️ Failed to save pickup response to database:', saveError);
-          // Don't throw error - pickup request was successful, just log the save error
-        }
+        // Dispatch pickup data to cache - this will trigger final DB save in AutomateLogisticModal
+        dispatchPickupData(order.id, {
+          automationId: response.automation_id,
+          pickupData,
+          response,
+          carrier: 'estes', // Explicitly set carrier
+        });
+        console.log('✅ Pickup data cached and will trigger final DB save with all cached data');
       }
       
       if (onSuccess) {

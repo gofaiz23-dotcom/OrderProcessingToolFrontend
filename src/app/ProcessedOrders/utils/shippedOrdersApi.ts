@@ -186,15 +186,78 @@ export const getAllShippedOrders = async (
       return undefined;
     };
     
+    // Extract rate quotes from nested structure if needed
+    // Backend stores both request and response in rateQuotesResponseJsonb as:
+    // { xpo: { request: ..., response: ... }, estes: { request: ..., response: ... } }
+    const rateQuotesResponseJsonbRaw = normalizeJsonb(order.rateQuotesResponseJsonb) ?? order.rateQuotesResponseJsonb;
+    let rateQuotesRequestJsonb: Record<string, unknown> | undefined = undefined;
+    let rateQuotesResponseJsonb: Record<string, unknown> | undefined = undefined;
+    
+    if (rateQuotesResponseJsonbRaw && typeof rateQuotesResponseJsonbRaw === 'object') {
+      // Check if it's the nested structure (has carrier keys with request/response)
+      const hasNestedStructure = Object.keys(rateQuotesResponseJsonbRaw).some(key => {
+        const carrier = rateQuotesResponseJsonbRaw[key];
+        return carrier && typeof carrier === 'object' && ('request' in carrier || 'response' in carrier);
+      });
+      
+      if (hasNestedStructure) {
+        // Extract request and response from nested structure
+        const requestParts: Record<string, unknown> = {};
+        const responseParts: Record<string, unknown> = {};
+        
+        Object.keys(rateQuotesResponseJsonbRaw).forEach(carrier => {
+          const carrierData = rateQuotesResponseJsonbRaw[carrier];
+          if (carrierData && typeof carrierData === 'object') {
+            if ('request' in carrierData) {
+              requestParts[carrier] = carrierData.request;
+            }
+            if ('response' in carrierData) {
+              responseParts[carrier] = carrierData.response;
+            }
+          }
+        });
+        
+        if (Object.keys(requestParts).length > 0) {
+          rateQuotesRequestJsonb = requestParts;
+        }
+        if (Object.keys(responseParts).length > 0) {
+          rateQuotesResponseJsonb = responseParts;
+        }
+      } else {
+        // It's already in the flat structure, use as-is
+        rateQuotesResponseJsonb = rateQuotesResponseJsonbRaw as Record<string, unknown>;
+      }
+    }
+    
+    // Fallback to direct field if it exists
+    if (!rateQuotesRequestJsonb) {
+      rateQuotesRequestJsonb = normalizeJsonb(order.rateQuotesRequestJsonb) ?? order.rateQuotesRequestJsonb;
+    }
+    
     const normalized = {
       ...order,
       ordersJsonb: normalizeJsonb(order.ordersJsonb) || order.ordersJsonb,
       // Preserve original value if normalization returns undefined but original exists
-      rateQuotesRequestJsonb: normalizeJsonb(order.rateQuotesRequestJsonb) ?? order.rateQuotesRequestJsonb,
-      rateQuotesResponseJsonb: normalizeJsonb(order.rateQuotesResponseJsonb) ?? order.rateQuotesResponseJsonb,
+      rateQuotesRequestJsonb: rateQuotesRequestJsonb,
+      rateQuotesResponseJsonb: rateQuotesResponseJsonb ?? normalizeJsonb(order.rateQuotesResponseJsonb) ?? order.rateQuotesResponseJsonb,
       bolResponseJsonb: normalizeJsonb(order.bolResponseJsonb) ?? order.bolResponseJsonb,
       pickupResponseJsonb: normalizeJsonb(order.pickupResponseJsonb) ?? order.pickupResponseJsonb,
+      // Ensure uploads is always an array
+      uploads: Array.isArray(order.uploads) ? order.uploads : (order.uploads ? [order.uploads] : []),
     };
+    
+    // Debug: Log uploads and rate quotes for first order
+    if (process.env.NODE_ENV === 'development' && index === 0) {
+      console.log('getAllShippedOrders - Order data:', {
+        id: normalized.id,
+        uploads: normalized.uploads,
+        uploadsLength: normalized.uploads?.length,
+        hasRateQuotesRequest: !!normalized.rateQuotesRequestJsonb,
+        hasRateQuotesResponse: !!normalized.rateQuotesResponseJsonb,
+        rateQuotesRequestKeys: normalized.rateQuotesRequestJsonb ? Object.keys(normalized.rateQuotesRequestJsonb) : [],
+        rateQuotesResponseKeys: normalized.rateQuotesResponseJsonb ? Object.keys(normalized.rateQuotesResponseJsonb) : [],
+      });
+    }
     
     // Debug: Log normalized order
     if (process.env.NODE_ENV === 'development' && index === 0) {
@@ -274,14 +337,34 @@ export const createShippedOrder = async (payload: CreateShippedOrderPayload): Pr
   }
   
   if (payload.files && payload.files.length > 0) {
-    payload.files.forEach((file) => {
+    console.log('📎 Adding files to FormData:', payload.files.length, 'files');
+    payload.files.forEach((file, index) => {
+      console.log(`  File ${index + 1}:`, {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        isFile: file instanceof File,
+        isBlob: file instanceof Blob,
+      });
       formData.append('files', file);
     });
+    
+    // Verify files are in FormData
+    console.log('📋 FormData entries:', Array.from(formData.entries()).map(([key, value]) => {
+      if (value && typeof value === 'object' && 'name' in value && 'size' in value) {
+        const file = value as File;
+        return [key, { name: file.name, size: file.size, type: file.type }];
+      }
+      return [key, typeof value === 'string' ? value.substring(0, 50) : value];
+    }));
+  } else {
+    console.log('⚠️ No files to add to FormData');
   }
 
   const res = await fetch(buildApiUrl('/Logistics/shipped-orders'), {
     method: 'POST',
     body: formData,
+    // DO NOT set Content-Type header - browser will set it automatically with boundary for FormData
   });
 
   if (!res.ok) {

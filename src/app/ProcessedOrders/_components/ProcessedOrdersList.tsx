@@ -849,6 +849,19 @@ export const ProcessedOrdersList = ({
                         </div>
                       </td>
                       <td className="px-3 sm:px-6 py-4 whitespace-nowrap">
+                        {(() => {
+                          // Debug: Log uploads for troubleshooting
+                          if (process.env.NODE_ENV === 'development' && !order.uploads) {
+                            console.log('Order has no uploads:', {
+                              id: order.id,
+                              sku: order.sku,
+                              hasUploads: !!order.uploads,
+                              uploads: order.uploads,
+                              uploadsType: typeof order.uploads,
+                            });
+                          }
+                          return null;
+                        })()}
                         {order.uploads && order.uploads.length > 0 ? (
                           <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">

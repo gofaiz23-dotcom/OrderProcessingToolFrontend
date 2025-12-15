@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Send, Loader2, CheckCircle2, XCircle, Plus, Trash2 } from 'lucide-react';
 import { createEstesPickupRequest, type EstesPickupData } from '@/app/api/3plGigaFedexApi/estesPickupApi';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
+import { getPickupPrefillData, getCachedOrder } from '@/app/Automation/utils/ltlOrderCache';
+import type { Order } from '@/app/types/order';
 
 type Shipment = {
   id: string;
@@ -78,7 +80,7 @@ export default function EstesPickupRequestPage() {
     return [{ id: '1', type: 'PALLET', handlingUnits: '', weight: '', destinationZip: '' }];
   });
 
-  // Update shipments when URL params change
+  // Update shipments when URL params change (legacy support)
   useEffect(() => {
     const shipmentsParam = searchParams?.get('shipments');
     if (shipmentsParam) {
@@ -128,6 +130,147 @@ export default function EstesPickupRequestPage() {
   const [showBrowser, setShowBrowser] = useState(false);
   const [browserType, setBrowserType] = useState<'chrome' | 'chromium' | 'edge' | 'firefox'>('chrome');
   const [submitForm, setSubmitForm] = useState(true);
+
+  // Helper function to extract value from JSONB
+  const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
+    if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '';
+    const obj = jsonb as Record<string, unknown>;
+    
+    const normalizedKey = key.trim();
+    const keyWithoutHash = normalizedKey.replace(/#/g, '');
+    const keyLower = normalizedKey.toLowerCase();
+    const keyWithoutHashLower = keyWithoutHash.toLowerCase();
+    
+    const keysToTry = [
+      normalizedKey,
+      keyWithoutHash,
+      `#${keyWithoutHash}`,
+      keyLower,
+      keyWithoutHashLower,
+      `#${keyWithoutHashLower}`,
+    ];
+    
+    for (const k of keysToTry) {
+      if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') {
+        return String(obj[k]);
+      }
+    }
+    
+    const allKeys = Object.keys(obj);
+    for (const objKey of allKeys) {
+      const objKeyLower = objKey.toLowerCase();
+      if (
+        objKeyLower === keyLower ||
+        objKeyLower === keyWithoutHashLower ||
+        objKeyLower.includes(keyWithoutHashLower)
+      ) {
+        const value = obj[objKey];
+        if (value !== undefined && value !== null && value !== '') {
+          return String(value);
+        }
+      }
+    }
+    
+    return '';
+  };
+
+  // Pre-fill form from cache when orderId is present
+  useEffect(() => {
+    const orderIdParam = searchParams?.get('orderId');
+    if (orderIdParam) {
+      const orderId = parseInt(orderIdParam);
+      if (!isNaN(orderId)) {
+        // Get cached order data
+        const cachedOrder = getCachedOrder(orderId);
+        if (cachedOrder) {
+          // Get pickup prefill data
+          const prefillData = getPickupPrefillData(orderId);
+          
+          if (prefillData) {
+            // Pre-fill pickup location from BOL origin data
+            if (prefillData.originName) setCompanyName(prefillData.originName);
+            if (prefillData.originAddress1) setAddress1(prefillData.originAddress1);
+            if (prefillData.originAddress2) setAddress2(prefillData.originAddress2);
+            if (prefillData.originZipCode) setZipCode(prefillData.originZipCode);
+            if (prefillData.originCountry) setCountry(prefillData.originCountry);
+            if (prefillData.originContactName) {
+              setRequesterName(prefillData.originContactName);
+              setDockName(prefillData.originContactName);
+            }
+            if (prefillData.originPhone) {
+              setRequesterPhone(prefillData.originPhone);
+              setDockPhone(prefillData.originPhone);
+            }
+            if (prefillData.originEmail) {
+              setRequesterEmail(prefillData.originEmail);
+              setDockEmail(prefillData.originEmail);
+            }
+            
+            // Pre-fill shipments from handling units
+            if (prefillData.handlingUnits && prefillData.handlingUnits.length > 0) {
+              setShipments(
+                prefillData.handlingUnits.map((unit, index) => ({
+                  id: String(index + 1),
+                  type: unit.handlingUnitType || 'PALLET',
+                  handlingUnits: String(unit.quantity || ''),
+                  weight: String(unit.weight || ''),
+                  destinationZip: prefillData.destinationZipCode || '',
+                }))
+              );
+              setPickupType('LL');
+            }
+            
+            // Pre-fill freight characteristics
+            if (prefillData.hazmat !== undefined) setHazmat(prefillData.hazmat);
+            if (prefillData.protectFromFreezing !== undefined) setProtectFromFreezing(prefillData.protectFromFreezing);
+            if (prefillData.food !== undefined) setFood(prefillData.food);
+            if (prefillData.poison !== undefined) setPoison(prefillData.poison);
+            if (prefillData.overlength !== undefined) setOverlength(prefillData.overlength);
+            if (prefillData.liftgate !== undefined) setLiftgate(prefillData.liftgate);
+            if (prefillData.doNotStack !== undefined) setStackable(!prefillData.doNotStack);
+          }
+          
+          // Pre-fill from order data if available
+          if (cachedOrder.ordersJsonb) {
+            const orderJsonb = cachedOrder.ordersJsonb as Record<string, unknown>;
+            
+            // Fill requester details from order if not already filled from prefill data
+            const customerName = getJsonbValue(orderJsonb, 'Customer Name');
+            if (customerName && !prefillData?.originContactName) {
+              setRequesterName(customerName);
+              setDockName(customerName);
+            }
+            
+            const customerPhone = getJsonbValue(orderJsonb, 'Customer Phone Number') || 
+                                 getJsonbValue(orderJsonb, 'Phone');
+            if (customerPhone && !prefillData?.originPhone) {
+              setRequesterPhone(customerPhone);
+              setDockPhone(customerPhone);
+            }
+            
+            const customerEmail = getJsonbValue(orderJsonb, 'Customer Email') || 
+                                 getJsonbValue(orderJsonb, 'Email');
+            if (customerEmail && !prefillData?.originEmail) {
+              setRequesterEmail(customerEmail);
+              setDockEmail(customerEmail);
+            }
+          }
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  // Set default pickup date to today
+  useEffect(() => {
+    if (!pickupDate) {
+      const today = new Date();
+      const year = today.getFullYear();
+      const month = String(today.getMonth() + 1).padStart(2, '0');
+      const day = String(today.getDate()).padStart(2, '0');
+      setPickupDate(`${year}-${month}-${day}`);
+    }
+  }, []);
 
   const addShipment = () => {
     setShipments([...shipments, { id: Date.now().toString(), type: 'PALLET', handlingUnits: '', weight: '', destinationZip: '' }]);
