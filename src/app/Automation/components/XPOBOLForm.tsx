@@ -834,6 +834,28 @@ export const XPOBOLForm = ({
         setLoading(false);
         return;
       }
+
+      // Validate Pickup Location (Shipper) fields
+      if (!pickupLocation.company || !pickupLocation.streetAddress || !pickupLocation.city || !pickupLocation.state || !pickupLocation.postalCode) {
+        setError(new Error('Please fill in all required Pickup Location fields (Company, Address, City, State, Zip) for Pickup Request'));
+        setLoading(false);
+        return;
+      }
+
+      // Validate Delivery Location Zip (for destZip6)
+      if (!deliveryLocation.postalCode) {
+        setError(new Error('Delivery Location Zip Code is required for Pickup Request'));
+        setLoading(false);
+        return;
+      }
+
+      // Validate Commodity Weight
+      const invalidWeight = commodities.some(c => !c.grossWeight?.weight || c.grossWeight.weight <= 0);
+      if (invalidWeight) {
+        setError(new Error('All commodities must have a valid weight greater than 0 for Pickup Request'));
+        setLoading(false);
+        return;
+      }
     }
 
     try {
