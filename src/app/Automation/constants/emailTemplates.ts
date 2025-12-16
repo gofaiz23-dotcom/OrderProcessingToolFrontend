@@ -9,12 +9,12 @@ type Carrier = 'estes' | 'xpo';
  */
 const getJsonbValue = (jsonb: Record<string, unknown>, key: string): string => {
   if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '';
-  
+
   const normalizedKey = key.trim();
   const keyWithoutHash = normalizedKey.replace(/#/g, '');
   const keyLower = normalizedKey.toLowerCase();
   const keyWithoutHashLower = keyWithoutHash.toLowerCase();
-  
+
   const keysToTry = [
     normalizedKey,
     keyWithoutHash,
@@ -23,13 +23,13 @@ const getJsonbValue = (jsonb: Record<string, unknown>, key: string): string => {
     keyWithoutHashLower,
     `#${keyWithoutHashLower}`,
   ];
-  
+
   for (const k of keysToTry) {
     if (jsonb[k] !== undefined && jsonb[k] !== null && jsonb[k] !== '') {
       return String(jsonb[k]);
     }
   }
-  
+
   const allKeys = Object.keys(jsonb);
   for (const objKey of allKeys) {
     const objKeyLower = objKey.toLowerCase();
@@ -44,7 +44,7 @@ const getJsonbValue = (jsonb: Record<string, unknown>, key: string): string => {
       }
     }
   }
-  
+
   return '';
 };
 
@@ -62,7 +62,7 @@ export const getEstesPickupScheduledEmailBody = (
 ): string => {
   const orderRef = orderNumber || `Order ${orderId}`;
   const skuInfo = sku ? `\nSKU: ${sku}` : '';
-  
+
   return `Dear Team,
 
 Pickup has been successfully scheduled with Estes Express for ${orderRef}.${skuInfo}
@@ -106,7 +106,7 @@ export const getXPOPickupScheduledEmailBody = (
 ): string => {
   const orderRef = orderNumber || `Order ${orderId}`;
   const skuInfo = sku ? `\nSKU: ${sku}` : '';
-  
+
   return `Dear Team,
 
 Pickup has been successfully scheduled with XPO Logistics for ${orderRef}.${skuInfo}
@@ -181,8 +181,9 @@ export const getPickupScheduledEmailSubject = (
  */
 export const DEFAULT_CC_EMAILS = {
   ESTES: [
-    'gofaiz23@gmail.com',
+    'fhshyderbad@gmail.com',
     // Add more Estes CC emails here if needed
+
   ],
   XPO: [
     'gofaiz23@gmail.com',
@@ -204,48 +205,93 @@ export const getDefaultCCEmails = (carrier: Carrier): string[] => {
 };
 
 /**
+ * Marketplace shorthands for BOL filenames
+ */
+export const MARKETPLACE_SHORTHANDS: Record<string, string> = {
+  'Walmart': 'WM',
+  'Amazon': 'AZ',
+  'eBay': 'EB',
+  'Shopify': 'SF',
+  'Overstock': 'OS',
+  'Wayfair': 'WF',
+  'Sears': 'SR',
+  'Target': 'TG',
+  'HomeDepot': 'HD',
+  'NewEgg': 'NE',
+  'Rakuten': 'RT',
+  'GigaB2B': 'GB',
+} as const;
+
+/**
+ * Get formatted BOL filename
+ * Format: CustomerName MarketplaceShorthand OrderNumber
+ * @param customerName - Customer name
+ * @param marketplace - Marketplace name
+ * @param orderNumber - Order number
+ * @returns Formatted filename (without extension)
+ */
+export const getFormattedBOLFilename = (
+  customerName: string,
+  marketplace: string,
+  orderNumber: string
+): string => {
+  // Normalize marketplace match
+  const mpKey = Object.keys(MARKETPLACE_SHORTHANDS).find(
+    key => key.toLowerCase() === (marketplace || '').toLowerCase()
+  );
+
+  const mpShorthand = mpKey ? MARKETPLACE_SHORTHANDS[mpKey] : (marketplace || 'UNK');
+
+  // Clean up customer name (remove special chars if needed, for filename safety)
+  const safeCustomerName = customerName.replace(/[^a-zA-Z0-9\s-_]/g, '').trim();
+  const safeOrderNumber = orderNumber.replace(/[^a-zA-Z0-9\s-_]/g, '').trim();
+
+  return `${safeCustomerName} ${mpShorthand} ${safeOrderNumber}`;
+};
+
+/**
  * Email templates organized by carrier
  */
 export const EMAIL_TEMPLATES = {
   ESTES: {
     PICKUP_SCHEDULED: {
-      subject: (orderId: number, orderNumber?: string) => 
+      subject: (orderId: number, orderNumber?: string) =>
         getEstesPickupScheduledEmailSubject(orderId, orderNumber),
-      body: (orderId: number, orderNumber?: string, sku?: string) => 
+      body: (orderId: number, orderNumber?: string, sku?: string) =>
         getEstesPickupScheduledEmailBody(orderId, orderNumber, sku),
       cc: () => getDefaultCCEmails('estes'),
     },
   },
   XPO: {
     PICKUP_SCHEDULED: {
-      subject: (orderId: number, orderNumber?: string) => 
+      subject: (orderId: number, orderNumber?: string) =>
         getXPOPickupScheduledEmailSubject(orderId, orderNumber),
-      body: (orderId: number, orderNumber?: string, sku?: string) => 
+      body: (orderId: number, orderNumber?: string, sku?: string) =>
         getXPOPickupScheduledEmailBody(orderId, orderNumber, sku),
       cc: () => getDefaultCCEmails('xpo'),
     },
   },
   // Generic template that auto-detects carrier
   PICKUP_SCHEDULED: {
-    subject: (carrier: Carrier, orderId: number, orderNumber?: string) => 
+    subject: (carrier: Carrier, orderId: number, orderNumber?: string) =>
       getPickupScheduledEmailSubject(carrier, orderId, orderNumber),
-    body: (carrier: Carrier, orderId: number, orderNumber?: string, sku?: string) => 
+    body: (carrier: Carrier, orderId: number, orderNumber?: string, sku?: string) =>
       getPickupScheduledEmailBody(carrier, orderId, orderNumber, sku),
     cc: (carrier: Carrier) => getDefaultCCEmails(carrier),
   },
   // LTL Order Draft Email Template
   LTL_ORDER_DRAFT: {
-    subject: (customerName: string, orderNumber: string) => 
+    subject: (customerName: string, orderNumber: string) =>
       getLTLOrderDraftEmailSubject(customerName, orderNumber),
-    body: (orderJsonb: Record<string, unknown>, subSKUs: string[] = []) => 
+    body: (orderJsonb: Record<string, unknown>, subSKUs: string[] = []) =>
       getLTLOrderDraftEmailBody(orderJsonb, subSKUs),
     cc: () => [],
   },
   // Parcel Order Draft Email Template
   PARCEL_ORDER_DRAFT: {
-    subject: (customerName: string, orderNumber: string) => 
+    subject: (customerName: string, orderNumber: string) =>
       getParcelOrderDraftEmailSubject(customerName, orderNumber),
-    body: (orderJsonb: Record<string, unknown>, subSKUs: string[] = []) => 
+    body: (orderJsonb: Record<string, unknown>, subSKUs: string[] = []) =>
       getParcelOrderDraftEmailBody(orderJsonb, subSKUs),
     cc: () => [],
   },
@@ -274,56 +320,91 @@ export const getLTLOrderDraftEmailBody = (
   orderJsonb: Record<string, unknown>,
   subSKUs: string[] = []
 ): string => {
+  // Debug: Log all available fields in order JSONB
+  console.log('📧 LTL Email - Order JSONB fields:', Object.keys(orderJsonb).sort());
+  console.log('📧 LTL Email - Order JSONB data:', orderJsonb);
+
   // Extract order details
   const customerName = getJsonbValue(orderJsonb, 'Customer Name') || '';
-  const orderNumber = getJsonbValue(orderJsonb, 'Order Number') || 
-                     getJsonbValue(orderJsonb, 'PO#') || 
-                     getJsonbValue(orderJsonb, 'PO Number') || '';
-  
-  // Extract shipping address - try multiple field name variations (same as XPOBOLForm)
+  const orderNumber = getJsonbValue(orderJsonb, 'Order Number') ||
+    getJsonbValue(orderJsonb, 'PO#') ||
+    getJsonbValue(orderJsonb, 'PO Number') || '';
+
+  // Extract shipping address - try comprehensive field name variations
   const streetAddress = getJsonbValue(orderJsonb, 'Ship to Address 1') ||
-                       getJsonbValue(orderJsonb, 'Shipping Address') ||
-                       getJsonbValue(orderJsonb, 'Customer Address') ||
-                       getJsonbValue(orderJsonb, 'Customer Address 1') ||
-                       getJsonbValue(orderJsonb, 'Address') ||
-                       getJsonbValue(orderJsonb, 'Address 1') ||
-                       getJsonbValue(orderJsonb, 'Ship to Address') || '';
-  
+    getJsonbValue(orderJsonb, 'Shipping Address') ||
+    getJsonbValue(orderJsonb, 'Ship to Address') ||
+    getJsonbValue(orderJsonb, 'Customer Address') ||
+    getJsonbValue(orderJsonb, 'Customer Address 1') ||
+    getJsonbValue(orderJsonb, 'Street Address') ||
+    getJsonbValue(orderJsonb, 'Address Line 1') ||
+    getJsonbValue(orderJsonb, 'Address 1') ||
+    getJsonbValue(orderJsonb, 'Address') ||
+    getJsonbValue(orderJsonb, 'Street') ||
+    getJsonbValue(orderJsonb, 'Addr 1') ||
+    getJsonbValue(orderJsonb, 'Ship Address') || '';
+
   const streetAddress2 = getJsonbValue(orderJsonb, 'Ship to Address 2') ||
-                        getJsonbValue(orderJsonb, 'Customer Address 2') ||
-                        getJsonbValue(orderJsonb, 'Address 2') || '';
-  
+    getJsonbValue(orderJsonb, 'Customer Address 2') ||
+    getJsonbValue(orderJsonb, 'Address Line 2') ||
+    getJsonbValue(orderJsonb, 'Address 2') ||
+    getJsonbValue(orderJsonb, 'Addr 2') || '';
+
   const city = getJsonbValue(orderJsonb, 'Ship to City') ||
-              getJsonbValue(orderJsonb, 'Shipping City') ||
-              getJsonbValue(orderJsonb, 'Customer City') || '';
-  
+    getJsonbValue(orderJsonb, 'Shipping City') ||
+    getJsonbValue(orderJsonb, 'Destination City') ||
+    getJsonbValue(orderJsonb, 'Customer City') ||
+    getJsonbValue(orderJsonb, 'Ship City') ||
+    getJsonbValue(orderJsonb, 'City') || '';
+
   const state = getJsonbValue(orderJsonb, 'Ship to State') ||
-               getJsonbValue(orderJsonb, 'Shipping State') ||
-               getJsonbValue(orderJsonb, 'Ship to State/Province') ||
-               getJsonbValue(orderJsonb, 'Customer State') || '';
-  
+    getJsonbValue(orderJsonb, 'Shipping State') ||
+    getJsonbValue(orderJsonb, 'Ship to State/Province') ||
+    getJsonbValue(orderJsonb, 'Destination State') ||
+    getJsonbValue(orderJsonb, 'Customer State') ||
+    getJsonbValue(orderJsonb, 'Ship State') ||
+    getJsonbValue(orderJsonb, 'State/Province') ||
+    getJsonbValue(orderJsonb, 'State') ||
+    getJsonbValue(orderJsonb, 'Province') || '';
+
   const zip = getJsonbValue(orderJsonb, 'Ship to Zip Code') ||
-             getJsonbValue(orderJsonb, 'Shipping Zip Code') ||
-             getJsonbValue(orderJsonb, 'Ship to Postal Code') ||
-             getJsonbValue(orderJsonb, 'Customer Zip Code') ||
-             getJsonbValue(orderJsonb, 'Customer Postal Code') || '';
-  
+    getJsonbValue(orderJsonb, 'Shipping Zip Code') ||
+    getJsonbValue(orderJsonb, 'Ship to Postal Code') ||
+    getJsonbValue(orderJsonb, 'Destination Zip') ||
+    getJsonbValue(orderJsonb, 'Customer Zip Code') ||
+    getJsonbValue(orderJsonb, 'Customer Postal Code') ||
+    getJsonbValue(orderJsonb, 'Ship Zip') ||
+    getJsonbValue(orderJsonb, 'Zip Code') ||
+    getJsonbValue(orderJsonb, 'Postal Code') ||
+    getJsonbValue(orderJsonb, 'Zip') || '';
+
   // Phone number should always be the same
   const phone = '6262099751';
-  
+
+  // Debug: Log extracted values
+  console.log('📧 LTL Email - Extracted address:', {
+    customerName,
+    streetAddress,
+    streetAddress2,
+    city,
+    state,
+    zip,
+    phone,
+  });
+
   // Format full address with Address Line 2 if present
-  const fullStreetAddress = streetAddress2 
+  const fullStreetAddress = streetAddress2
     ? `${streetAddress}\n${streetAddress2}`.trim()
     : streetAddress;
-  
+
   // Format city, state, zip
   const cityStateZip = [city, state, zip].filter(Boolean).join(', ');
-  
+
   // Format subSKUs list - use subSKUs if available, otherwise show message
-  const skuList = subSKUs.length > 0 
+  const skuList = subSKUs.length > 0
     ? subSKUs.map(sku => `- ${sku}`).join('\n')
     : '- (No sub-SKUs provided)';
-  
+
   return `Team,
 
 Please palletize this order and provide shipping info and images for our records. Please provide sales order acknowledgement for review?
@@ -334,13 +415,9 @@ Order details:
 ${skuList}
 
 shipping address:
-
 ${customerName}
-
 ${fullStreetAddress}
-
 ${cityStateZip}
-
 ${phone}
 
 Please confirm?
@@ -360,7 +437,7 @@ export const getParcelOrderDraftEmailSubject = (
   customerName: string,
   orderNumber: string
 ): string => {
-  return `[Hawasly Furniture order] - ${customerName} and ${orderNumber} (Draft for Parcel order)`;
+  return `Hawasly Furniture order - ${customerName} ${orderNumber}`;
 };
 
 /**
@@ -373,56 +450,91 @@ export const getParcelOrderDraftEmailBody = (
   orderJsonb: Record<string, unknown>,
   subSKUs: string[] = []
 ): string => {
+  // Debug: Log all available fields in order JSONB
+  console.log('📧 Parcel Email - Order JSONB fields:', Object.keys(orderJsonb).sort());
+  console.log('📧 Parcel Email - Order JSONB data:', orderJsonb);
+
   // Extract order details
   const customerName = getJsonbValue(orderJsonb, 'Customer Name') || '';
-  const orderNumber = getJsonbValue(orderJsonb, 'Order Number') || 
-                     getJsonbValue(orderJsonb, 'PO#') || 
-                     getJsonbValue(orderJsonb, 'PO Number') || '';
-  
-  // Extract shipping address - try multiple field name variations (same as XPOBOLForm)
+  const orderNumber = getJsonbValue(orderJsonb, 'Order Number') ||
+    getJsonbValue(orderJsonb, 'PO#') ||
+    getJsonbValue(orderJsonb, 'PO Number') || '';
+
+  // Extract shipping address - try comprehensive field name variations
   const streetAddress = getJsonbValue(orderJsonb, 'Ship to Address 1') ||
-                       getJsonbValue(orderJsonb, 'Shipping Address') ||
-                       getJsonbValue(orderJsonb, 'Customer Address') ||
-                       getJsonbValue(orderJsonb, 'Customer Address 1') ||
-                       getJsonbValue(orderJsonb, 'Address') ||
-                       getJsonbValue(orderJsonb, 'Address 1') ||
-                       getJsonbValue(orderJsonb, 'Ship to Address') || '';
-  
+    getJsonbValue(orderJsonb, 'Shipping Address') ||
+    getJsonbValue(orderJsonb, 'Ship to Address') ||
+    getJsonbValue(orderJsonb, 'Customer Address') ||
+    getJsonbValue(orderJsonb, 'Customer Address 1') ||
+    getJsonbValue(orderJsonb, 'Street Address') ||
+    getJsonbValue(orderJsonb, 'Address Line 1') ||
+    getJsonbValue(orderJsonb, 'Address 1') ||
+    getJsonbValue(orderJsonb, 'Address') ||
+    getJsonbValue(orderJsonb, 'Street') ||
+    getJsonbValue(orderJsonb, 'Addr 1') ||
+    getJsonbValue(orderJsonb, 'Ship Address') || '';
+
   const streetAddress2 = getJsonbValue(orderJsonb, 'Ship to Address 2') ||
-                        getJsonbValue(orderJsonb, 'Customer Address 2') ||
-                        getJsonbValue(orderJsonb, 'Address 2') || '';
-  
+    getJsonbValue(orderJsonb, 'Customer Address 2') ||
+    getJsonbValue(orderJsonb, 'Address Line 2') ||
+    getJsonbValue(orderJsonb, 'Address 2') ||
+    getJsonbValue(orderJsonb, 'Addr 2') || '';
+
   const city = getJsonbValue(orderJsonb, 'Ship to City') ||
-              getJsonbValue(orderJsonb, 'Shipping City') ||
-              getJsonbValue(orderJsonb, 'Customer City') || '';
-  
+    getJsonbValue(orderJsonb, 'Shipping City') ||
+    getJsonbValue(orderJsonb, 'Destination City') ||
+    getJsonbValue(orderJsonb, 'Customer City') ||
+    getJsonbValue(orderJsonb, 'Ship City') ||
+    getJsonbValue(orderJsonb, 'City') || '';
+
   const state = getJsonbValue(orderJsonb, 'Ship to State') ||
-               getJsonbValue(orderJsonb, 'Shipping State') ||
-               getJsonbValue(orderJsonb, 'Ship to State/Province') ||
-               getJsonbValue(orderJsonb, 'Customer State') || '';
-  
+    getJsonbValue(orderJsonb, 'Shipping State') ||
+    getJsonbValue(orderJsonb, 'Ship to State/Province') ||
+    getJsonbValue(orderJsonb, 'Destination State') ||
+    getJsonbValue(orderJsonb, 'Customer State') ||
+    getJsonbValue(orderJsonb, 'Ship State') ||
+    getJsonbValue(orderJsonb, 'State/Province') ||
+    getJsonbValue(orderJsonb, 'State') ||
+    getJsonbValue(orderJsonb, 'Province') || '';
+
   const zip = getJsonbValue(orderJsonb, 'Ship to Zip Code') ||
-             getJsonbValue(orderJsonb, 'Shipping Zip Code') ||
-             getJsonbValue(orderJsonb, 'Ship to Postal Code') ||
-             getJsonbValue(orderJsonb, 'Customer Zip Code') ||
-             getJsonbValue(orderJsonb, 'Customer Postal Code') || '';
-  
+    getJsonbValue(orderJsonb, 'Shipping Zip Code') ||
+    getJsonbValue(orderJsonb, 'Ship to Postal Code') ||
+    getJsonbValue(orderJsonb, 'Destination Zip') ||
+    getJsonbValue(orderJsonb, 'Customer Zip Code') ||
+    getJsonbValue(orderJsonb, 'Customer Postal Code') ||
+    getJsonbValue(orderJsonb, 'Ship Zip') ||
+    getJsonbValue(orderJsonb, 'Zip Code') ||
+    getJsonbValue(orderJsonb, 'Postal Code') ||
+    getJsonbValue(orderJsonb, 'Zip') || '';
+
   // Phone number should always be the same
   const phone = '6262099751';
-  
+
+  // Debug: Log extracted values
+  console.log('📧 Parcel Email - Extracted address:', {
+    customerName,
+    streetAddress,
+    streetAddress2,
+    city,
+    state,
+    zip,
+    phone,
+  });
+
   // Format full address with Address Line 2 if present
-  const fullStreetAddress = streetAddress2 
+  const fullStreetAddress = streetAddress2
     ? `${streetAddress}\n${streetAddress2}`.trim()
     : streetAddress;
-  
+
   // Format city, state, zip
   const cityStateZip = [city, state, zip].filter(Boolean).join(', ');
-  
+
   // Format subSKUs list - use subSKUs if available, otherwise show message
-  const skuList = subSKUs.length > 0 
+  const skuList = subSKUs.length > 0
     ? subSKUs.map(sku => `- ${sku}`).join('\n')
     : '- (No sub-SKUs provided)';
-  
+
   return `Team,
 
 Please ship this order and provide shipping info and images for our records. Please provide sales order acknowledgement for review?
@@ -433,13 +545,9 @@ Order details:
 ${skuList}
 
 shipping address:
-
 ${customerName}
-
 ${fullStreetAddress}
-
 ${cityStateZip}
-
 ${phone}
 
 Please confirm?

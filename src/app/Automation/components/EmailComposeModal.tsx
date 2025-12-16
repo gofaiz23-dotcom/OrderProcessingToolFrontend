@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Minimize2, Maximize2, Send, Paperclip, Bold, Italic, Underline, Link, Smile, Image, MoreVertical, Trash2 } from 'lucide-react';
 import { getCachedOrder } from '../utils/ltlOrderCache';
+import { sendEmail } from '@/app/api/EmailApi/Compose';
 
 type EmailComposeModalProps = {
   isOpen: boolean;
@@ -33,6 +34,7 @@ export const EmailComposeModal = ({
   const [showBcc, setShowBcc] = useState(false);
   const [subject, setSubject] = useState(defaultSubject);
   const [body, setBody] = useState(defaultBody);
+  const [htmlContent, setHtmlContent] = useState('');
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [showLinkDialog, setShowLinkDialog] = useState(false);
@@ -41,6 +43,10 @@ export const EmailComposeModal = ({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isEditorEmpty, setIsEditorEmpty] = useState(true);
   const [selectedAttachment, setSelectedAttachment] = useState<{ file: File; url: string } | null>(null);
+  const [sendStatus, setSendStatus] = useState<{ type: 'success' | 'error' | null; message: string }>({
+    type: null,
+    message: '',
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -57,7 +63,7 @@ export const EmailComposeModal = ({
           return; // Don't load from localStorage if defaultCc is provided
         }
       }
-      
+
       // If no defaultCc, try to load saved CC emails from localStorage
       const savedCC = localStorage.getItem('email_cc_addresses');
       if (savedCC) {
@@ -93,13 +99,13 @@ export const EmailComposeModal = ({
         initialAttachmentsLength: initialAttachments?.length || 0,
         initialAttachments: initialAttachments?.map(f => ({ name: f.name, size: f.size })) || []
       });
-      
+
       if (initialAttachments && initialAttachments.length > 0) {
-        console.log('✅ Setting attachments from initialAttachments prop (priority):', initialAttachments.map(f => ({ 
-          name: f.name, 
-          size: f.size, 
+        console.log('✅ Setting attachments from initialAttachments prop (priority):', initialAttachments.map(f => ({
+          name: f.name,
+          size: f.size,
           type: f.type,
-          isFile: f instanceof File 
+          isFile: f instanceof File
         })));
         setAttachments(initialAttachments);
         console.log('✅ Attachments state updated with', initialAttachments.length, 'file(s)');
@@ -112,24 +118,24 @@ export const EmailComposeModal = ({
   // Priority 2: Load BOL files from cache when modal opens (fallback if no initialAttachments)
   useEffect(() => {
     console.log('🔄 Cache loading effect triggered:', { isOpen, orderId, hasInitialAttachments: !!initialAttachments, initialAttachmentsLength: initialAttachments?.length || 0 });
-    
+
     if (isOpen && orderId) {
       // Skip cache loading if initialAttachments are already provided
       if (initialAttachments && initialAttachments.length > 0) {
         console.log('⏭️ Skipping cache load - using initialAttachments instead');
         return;
       }
-      
+
       // Try loading from cache with retries
       let retryCount = 0;
-      const maxRetries = 5;
+      const maxRetries = 40; // Increased retry count to allow ~20s for PDF generation
       const retryDelay = 500; // 500ms between retries
       let retryInterval: NodeJS.Timeout | null = null;
-      
+
       const loadFiles = (): boolean => {
         console.log(`🔄 Loading BOL files from cache (attempt ${retryCount + 1}/${maxRetries + 1})...`);
         const cachedOrder = getCachedOrder(orderId);
-        
+
         if (cachedOrder) {
           console.log('📦 Cached order found:', {
             orderId,
@@ -138,28 +144,28 @@ export const EmailComposeModal = ({
             xpoFilesCount: cachedOrder.xpoBolFiles?.length || 0,
             estesFilesCount: cachedOrder.estesBolFiles?.length || 0,
           });
-          
+
           const bolFiles: File[] = [];
-          
+
           // Get XPO BOL files
           if (cachedOrder.xpoBolFiles && cachedOrder.xpoBolFiles.length > 0) {
             console.log('📄 Found XPO BOL files:', cachedOrder.xpoBolFiles.map(f => f.name));
             bolFiles.push(...cachedOrder.xpoBolFiles);
           }
-          
+
           // Get Estes BOL files
           if (cachedOrder.estesBolFiles && cachedOrder.estesBolFiles.length > 0) {
             console.log('📄 Found Estes BOL files:', cachedOrder.estesBolFiles.map(f => f.name));
             bolFiles.push(...cachedOrder.estesBolFiles);
           }
-          
+
           if (bolFiles.length > 0) {
             setAttachments(bolFiles);
-            console.log('✅ Successfully loaded BOL files from cache:', bolFiles.map(f => ({ 
-              name: f.name, 
-              size: f.size, 
+            console.log('✅ Successfully loaded BOL files from cache:', bolFiles.map(f => ({
+              name: f.name,
+              size: f.size,
               type: f.type,
-              isFile: f instanceof File 
+              isFile: f instanceof File
             })));
             return true; // Files loaded successfully
           } else {
@@ -176,16 +182,16 @@ export const EmailComposeModal = ({
           return false; // Order not in cache
         }
       };
-      
+
       // Try loading immediately
       let loaded = loadFiles();
-      
+
       // If files not found, retry multiple times with delays
       if (!loaded && retryCount < maxRetries) {
         retryInterval = setInterval(() => {
           retryCount++;
           loaded = loadFiles();
-          
+
           if (loaded || retryCount >= maxRetries) {
             if (retryInterval) {
               clearInterval(retryInterval);
@@ -197,7 +203,7 @@ export const EmailComposeModal = ({
           }
         }, retryDelay);
       }
-      
+
       return () => {
         if (retryInterval) {
           clearInterval(retryInterval);
@@ -219,20 +225,28 @@ export const EmailComposeModal = ({
     });
   }, [attachments]);
 
-  // Initialize editor content
+  // Initialize or restore editor content
   useEffect(() => {
-    if (isOpen && editorRef.current) {
-      if (defaultBody) {
+    if (isOpen && !isMinimized && editorRef.current) {
+      if (htmlContent) {
+        // Restore saved content (e.g. from minimize)
+        if (editorRef.current.innerHTML !== htmlContent) {
+          editorRef.current.innerHTML = htmlContent;
+        }
+      } else if (defaultBody && isEditorEmpty) {
+        // Initial load from props
         // Convert plain text to HTML, preserving line breaks
         const htmlBody = defaultBody.replace(/\n/g, '<br>');
         editorRef.current.innerHTML = htmlBody;
+        setHtmlContent(htmlBody);
         setIsEditorEmpty(!defaultBody.trim());
-      } else {
+      } else if (!htmlContent && !defaultBody) {
+        // Empty state
         editorRef.current.innerHTML = '';
         setIsEditorEmpty(true);
       }
     }
-  }, [isOpen, defaultBody]);
+  }, [isOpen, isMinimized, defaultBody]);
 
   // Close emoji picker when clicking outside
   useEffect(() => {
@@ -334,7 +348,9 @@ export const EmailComposeModal = ({
   const handleEditorChange = () => {
     if (editorRef.current) {
       const text = editorRef.current.innerText || '';
+      const html = editorRef.current.innerHTML || '';
       setBody(text);
+      setHtmlContent(html);
       setIsEditorEmpty(!text.trim());
     }
   };
@@ -363,12 +379,29 @@ export const EmailComposeModal = ({
     setSelectedAttachment(null);
   };
 
+  const MAX_ATTACHMENT_COUNT = 15;
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+
+    if (attachments.length + files.length > MAX_ATTACHMENT_COUNT) {
+      setSendStatus({
+        type: 'error',
+        message: `Maximum ${MAX_ATTACHMENT_COUNT} files allowed. You already have ${attachments.length}.`
+      });
+      // specific file input value reset is done in finally or implicit
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
     setAttachments((prev) => [...prev, ...files]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    // Clear any previous error
+    setSendStatus({ type: null, message: '' });
   };
 
   const removeAttachment = (index: number) => {
@@ -376,51 +409,91 @@ export const EmailComposeModal = ({
   };
 
   const handleSend = async () => {
+    // Validation
     if (!to.trim()) {
-      alert('Please enter a recipient email address');
+      setSendStatus({ type: 'error', message: 'Please enter a recipient email address' });
+      return;
+    }
+
+    if (!subject.trim()) {
+      setSendStatus({ type: 'error', message: 'Please enter a subject' });
       return;
     }
 
     setIsSending(true);
+    setSendStatus({ type: null, message: '' });
+
     try {
       // Get HTML content from editor
-      const htmlBody = editorRef.current?.innerHTML || body;
-      // Convert HTML to plain text for mailto (most email clients support HTML in body)
+      const htmlBody = editorRef.current?.innerHTML || '';
       const plainBody = editorRef.current?.innerText || body;
-      
-      // Create mailto link with subject and body
-      const mailtoBody = encodeURIComponent(plainBody);
-      const mailtoSubject = encodeURIComponent(subject);
-      let mailtoLink = `mailto:${to}`;
-      const params: string[] = [];
-      
-      if (cc.trim()) params.push(`cc=${encodeURIComponent(cc)}`);
-      if (bcc.trim()) params.push(`bcc=${encodeURIComponent(bcc)}`);
-      if (subject.trim()) params.push(`subject=${mailtoSubject}`);
-      if (plainBody.trim()) params.push(`body=${mailtoBody}`);
-      
-      if (params.length > 0) {
-        mailtoLink += `?${params.join('&')}`;
+
+      // Parse recipients - handle multiple emails separated by commas
+      const toList = to.split(',').map(email => email.trim()).filter(Boolean);
+      const ccList = cc.trim() ? cc.split(',').map(email => email.trim()).filter(Boolean) : [];
+      const bccList = bcc.trim() ? bcc.split(',').map(email => email.trim()).filter(Boolean) : [];
+
+      // Validate at least one recipient
+      if (toList.length === 0) {
+        setSendStatus({ type: 'error', message: 'Please provide at least one valid recipient' });
+        setIsSending(false);
+        return;
       }
-      
-      // Note: mailto protocol doesn't support file attachments directly
-      // The files are already loaded in the attachments state
-      // User will need to manually attach them in their email client
-      if (attachments.length > 0) {
-        const fileNames = attachments.map(f => f.name).join(', ');
-        alert(`Note: ${attachments.length} file(s) (${fileNames}) are ready to attach. Please attach them manually in your email client.`);
+
+      // 1. Validate Max Attachments BEFORE sending
+      if (attachments.length > MAX_ATTACHMENT_COUNT) {
+        setSendStatus({
+          type: 'error',
+          message: `Too many files! Maximum ${MAX_ATTACHMENT_COUNT} allowed, but you have ${attachments.length}. Please remove some files.`
+        });
+        setIsSending(false);
+        return;
       }
-      
-      // Open default email client
-      window.location.href = mailtoLink;
-      
-      // Close modal after a short delay
+
+      console.log('📧 Sending email via API:', {
+        to: toList,
+        cc: ccList,
+        bcc: bccList,
+        subject: subject.trim(),
+        attachments: attachments.length,
+      });
+
+      // Send email using backend API (same as main email compose page)
+      const result = await sendEmail({
+        to: toList,
+        cc: ccList.length > 0 ? ccList.join(',') : undefined,
+        bcc: bccList.length > 0 ? bccList.join(',') : undefined,
+        subject: subject.trim(),
+        text: plainBody || undefined,
+        html: htmlBody || undefined,
+        attachments: attachments,
+      });
+
+      console.log('✅ Email sent successfully:', result);
+
+      // Success
+      const totalRecipients = toList.length + ccList.length + bccList.length;
+      setSendStatus({
+        type: 'success',
+        message: `Email sent successfully to ${totalRecipients} recipient(s)!`
+      });
+
+      // Close modal logic removed as per user request
+      /* 
       setTimeout(() => {
         onClose();
-      }, 1000);
+      }, 2000); 
+      */
+
     } catch (error) {
-      console.error('Error sending email:', error);
-      alert('Failed to open email client. Please check your email settings.');
+      console.error('❌ Error sending email:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : 'Failed to send email. Please try again.';
+      setSendStatus({
+        type: 'error',
+        message: errorMessage
+      });
     } finally {
       setIsSending(false);
     }
@@ -434,7 +507,7 @@ export const EmailComposeModal = ({
   };
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-[9999] pointer-events-none"
       onClick={(e) => e.stopPropagation()}
     >
@@ -447,7 +520,7 @@ export const EmailComposeModal = ({
         onClick={handleModalClick}
       >
         {/* Header - Always visible, even when minimized */}
-        <div 
+        <div
           className={`flex items-center justify-between px-4 py-2 border-b border-slate-200 bg-slate-50 rounded-t-lg ${isMinimized ? 'cursor-pointer' : ''}`}
           onClick={(e) => {
             if (isMinimized) {
@@ -574,44 +647,7 @@ export const EmailComposeModal = ({
               />
             </div>
 
-            {/* Attachments */}
-            {attachments.length > 0 && (
-              <div className="px-4 py-2 border-b border-slate-200 bg-slate-50">
-                <div className="flex flex-wrap gap-2">
-                  {attachments.map((file, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 border border-slate-200 rounded-md text-xs hover:bg-slate-200 transition-colors cursor-pointer group"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAttachmentClick(file);
-                      }}
-                    >
-                      <Paperclip size={14} className="text-slate-600 flex-shrink-0" />
-                      <div className="flex flex-col min-w-0">
-                        <span className="text-slate-700 font-medium truncate max-w-[250px]">
-                          {file.name}
-                        </span>
-                        <span className="text-slate-500 text-[10px]">
-                          ({formatFileSize(file.size)})
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeAttachment(index);
-                        }}
-                        className="ml-1 text-slate-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                        title="Remove attachment"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+
 
             {/* Body */}
             <div className="flex-1 flex flex-col min-h-0">
@@ -657,7 +693,7 @@ export const EmailComposeModal = ({
                 >
                   <Smile size={14} className="text-slate-600" />
                   {showEmojiPicker && (
-                    <div 
+                    <div
                       className="absolute bottom-full left-0 mb-2 bg-white border border-slate-300 rounded-lg shadow-xl p-3 w-64 max-h-48 overflow-y-auto z-50 grid grid-cols-8 gap-1 emoji-picker-container"
                       onClick={(e) => e.stopPropagation()}
                     >
@@ -702,7 +738,10 @@ export const EmailComposeModal = ({
                   <MoreVertical size={14} className="text-slate-600" />
                 </button>
               </div>
-              <div className="flex-1 relative">
+              <div
+                className="flex-1 relative flex flex-col min-h-0 overflow-y-auto custom-scrollbar"
+                onClick={() => editorRef.current?.focus()}
+              >
                 <div
                   ref={editorRef}
                   contentEditable
@@ -718,9 +757,9 @@ export const EmailComposeModal = ({
                     const text = e.clipboardData.getData('text/plain');
                     document.execCommand('insertText', false, text);
                   }}
-                  className="flex-1 w-full px-4 py-3 text-sm text-black resize-none outline-none focus:ring-0 overflow-y-auto"
-                  style={{ 
-                    minHeight: '300px', 
+                  className="w-full px-4 py-3 text-sm text-black resize-none outline-none focus:ring-0"
+                  style={{
+                    minHeight: '150px',
                     whiteSpace: 'pre-wrap',
                   }}
                 />
@@ -729,19 +768,60 @@ export const EmailComposeModal = ({
                     Compose email
                   </div>
                 )}
+
+
               </div>
+
+              {/* Attachments - Fixed at bottom of content area */}
+              {attachments.length > 0 && (
+                <div className="px-4 py-3 border-t border-slate-100 bg-white max-h-[140px] overflow-y-auto custom-scrollbar" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex flex-wrap gap-2">
+                    {attachments.map((file, index) => (
+                      <div
+                        key={index}
+                        className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 border border-slate-200 rounded-full hover:bg-slate-200 transition-colors cursor-pointer group max-w-[280px]"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAttachmentClick(file);
+                        }}
+                      >
+                        <Paperclip size={14} className="text-slate-600 flex-shrink-0" />
+                        <div className="flex flex-col min-w-0 flex-1">
+                          <span className="text-slate-700 text-xs font-medium truncate" title={file.name}>
+                            {file.name}
+                          </span>
+                          <span className="text-slate-500 text-[10px] leading-tight">
+                            {formatFileSize(file.size)}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeAttachment(index);
+                          }}
+                          className="p-0.5 text-slate-400 hover:text-red-600 rounded-full hover:bg-slate-300 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                          title="Remove attachment"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Attachment Viewer Popup */}
             {selectedAttachment && (
-              <div 
+              <div
                 className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-[100]"
                 onClick={(e) => {
                   e.stopPropagation();
                   closeAttachmentViewer();
                 }}
               >
-                <div 
+                <div
                   className="bg-white rounded-lg shadow-2xl max-w-4xl max-h-[90vh] w-full m-4 flex flex-col"
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -834,14 +914,14 @@ export const EmailComposeModal = ({
 
             {/* Link Insert Dialog */}
             {showLinkDialog && (
-              <div 
+              <div
                 className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowLinkDialog(false);
                 }}
               >
-                <div 
+                <div
                   className="bg-white rounded-lg p-6 w-96 shadow-xl"
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -931,6 +1011,22 @@ export const EmailComposeModal = ({
                   <Trash2 size={16} className="text-slate-600" />
                 </button>
               </div>
+
+              {/* Status Message */}
+              {sendStatus.type && (
+                <div className={`px-4 py-2 border-t ${sendStatus.type === 'success'
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-red-50 border-red-200'
+                  }`}>
+                  <p className={`text-sm ${sendStatus.type === 'success'
+                    ? 'text-green-700'
+                    : 'text-red-700'
+                    }`}>
+                    {sendStatus.message}
+                  </p>
+                </div>
+              )}
+
               <div className="flex items-center gap-2">
                 <button
                   type="button"

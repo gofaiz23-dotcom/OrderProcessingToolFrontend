@@ -21,7 +21,7 @@ import type { Order } from '@/app/types/order';
 import { dispatchBOLData, updateCachedOrder, getCachedOrder, storePickupPrefillData } from '../../utils/ltlOrderCache';
 import { createShippedOrder } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 import { EmailComposeModal } from '../EmailComposeModal';
-import { EMAIL_TEMPLATES } from '../../constants/emailTemplates';
+import { EMAIL_TEMPLATES, getFormattedBOLFilename } from '../../constants/emailTemplates';
 
 type ESTESBOLFormProps = {
   order: Order;
@@ -67,12 +67,12 @@ type ReferenceNumber = {
 const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
   if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '';
   const obj = jsonb as Record<string, unknown>;
-  
+
   const normalizedKey = key.trim();
   const keyWithoutHash = normalizedKey.replace(/#/g, '');
   const keyLower = normalizedKey.toLowerCase();
   const keyWithoutHashLower = keyWithoutHash.toLowerCase();
-  
+
   const keysToTry = [
     normalizedKey,
     keyWithoutHash,
@@ -81,13 +81,13 @@ const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
     keyWithoutHashLower,
     `#${keyWithoutHashLower}`,
   ];
-  
+
   for (const k of keysToTry) {
     if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') {
       return String(obj[k]);
     }
   }
-  
+
   const allKeys = Object.keys(obj);
   for (const objKey of allKeys) {
     const objKeyLower = objKey.toLowerCase();
@@ -102,32 +102,32 @@ const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
       }
     }
   }
-  
+
   return '';
 };
 
 // Function to generate Master BOL Number
 const generateMasterBolNumber = (orderData: Order): string => {
   if (!orderData?.jsonb) return '';
-  
+
   const orderJsonb = orderData.jsonb as Record<string, unknown>;
-  const orderOnMarketPlace = getJsonbValue(orderJsonb, 'Order on Marketplace') || 
-                             getJsonbValue(orderJsonb, 'Marketplace') ||
-                             getJsonbValue(orderJsonb, 'Market Place');
-  
+  const orderOnMarketPlace = getJsonbValue(orderJsonb, 'Order on Marketplace') ||
+    getJsonbValue(orderJsonb, 'Marketplace') ||
+    getJsonbValue(orderJsonb, 'Market Place');
+
   if (!orderOnMarketPlace) return '';
-  
+
   const months = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
   const currentMonth = new Date().getMonth();
   const monthLetter = months[currentMonth];
-  
+
   const marketplace = orderOnMarketPlace;
   const marketplaceFirstLetter = marketplace.charAt(0).toUpperCase();
   const marketplaceAbbrev = MARKETPLACE_ABBREVIATIONS[marketplace] || marketplace.substring(0, 2).toUpperCase();
-  
+
   const customerName = getJsonbValue(orderJsonb, 'Customer Name');
   if (!customerName) return '';
-  
+
   return `${monthLetter}${marketplaceFirstLetter}-${customerName} ${marketplaceAbbrev}`;
 };
 
@@ -138,11 +138,11 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
   // Account Information
   const [myAccount, setMyAccount] = useState(ESTES_ACCOUNTS[0]?.accountNumber || '');
   const [role, setRole] = useState('Third-Party');
-  
+
   // Billing Information
   const [payer, setPayer] = useState('Third Party');
   const [terms, setTerms] = useState('Prepaid');
-  
+
   // Shipment Information
   const [masterBol, setMasterBol] = useState('');
   const [shipDate, setShipDate] = useState(() => {
@@ -151,7 +151,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
   });
   const [quoteId, setQuoteId] = useState('');
   const [autoAssignPro, setAutoAssignPro] = useState(true);
-  
+
   // Origin Information (Shipper)
   const [originAddressBook, setOriginAddressBook] = useState('');
   const [originAccount, setOriginAccount] = useState('');
@@ -166,7 +166,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
   const [originPhone, setOriginPhone] = useState('');
   const [originEmail, setOriginEmail] = useState('');
   const [originLoadingZip, setOriginLoadingZip] = useState(false);
-  
+
   // Destination Information (Consignee)
   const [destinationAddressBook, setDestinationAddressBook] = useState('');
   const [destinationName, setDestinationName] = useState('');
@@ -180,7 +180,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
   const [destinationPhone, setDestinationPhone] = useState('');
   const [destinationEmail, setDestinationEmail] = useState('');
   const [destinationLoadingZip, setDestinationLoadingZip] = useState(false);
-  
+
   // Bill To Information
   const [billToAddressBook, setBillToAddressBook] = useState('');
   const [billToAccount, setBillToAccount] = useState('0216496');
@@ -195,13 +195,13 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
   const [billToPhone, setBillToPhone] = useState(ESTES_BILL_TO_DEFAULTS.phone);
   const [billToEmail, setBillToEmail] = useState(ESTES_BILL_TO_DEFAULTS.email);
   const [billToLoadingZip, setBillToLoadingZip] = useState(false);
-  
+
   // Accessorials
   const [selectedAccessorials, setSelectedAccessorials] = useState<string[]>([]);
   const [appointmentRequest, setAppointmentRequest] = useState(false);
   const [liftGateService, setLiftGateService] = useState(false);
   const [residentialDelivery, setResidentialDelivery] = useState(false);
-  
+
   // Special Handling Requests - Auto-select all by default
   const [specialHandlingRequests, setSpecialHandlingRequests] = useState<string[]>([
     'Added Accessorials Require Pre Approval',
@@ -209,20 +209,20 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
     'Do Not Remove Shrink Wrap from Skid',
     'Fragile-Handle with Care',
   ]);
-  
+
   // Commodities
   const [handlingUnits, setHandlingUnits] = useState<HandlingUnit[]>([]);
-  
+
   // Freight Information
   const [fullValueCoverage, setFullValueCoverage] = useState(false);
   const [fullValueCoverageAmount, setFullValueCoverageAmount] = useState('');
-  
+
   // Service Options
   const [selectedService, setSelectedService] = useState('LTL Standard');
-  
+
   // Reference Numbers
   const [referenceNumbers, setReferenceNumbers] = useState<ReferenceNumber[]>([]);
-  
+
   // Notifications
   const [billOfLadingNotification, setBillOfLadingNotification] = useState(true);
   const [shippingLabelsNotification, setShippingLabelsNotification] = useState(true);
@@ -237,7 +237,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
     shippingLabels: { shipper: true, consignee: true, thirdParty: false },
     trackingUpdates: { shipper: true, consignee: true, thirdParty: false },
   });
-  
+
   // UI State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -269,18 +269,18 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
     const baseDescription = 'KD Furniture Items -';
     const subSKUsString = subSKUs.join(', ');
     const formattedDescription = `${baseDescription} ${subSKUsString}`;
-    
+
     const itemDescLower = description.toLowerCase();
     const baseDescLower = baseDescription.toLowerCase();
-    const shouldUpdate = 
-      !description || 
-      description === '' || 
+    const shouldUpdate =
+      !description ||
+      description === '' ||
       description.trim() === '' ||
       description === baseDescription ||
       itemDescLower === baseDescLower ||
       (description.startsWith(baseDescription) && !description.includes(subSKUsString)) ||
       (itemDescLower.startsWith(baseDescLower) && !description.includes(subSKUsString));
-    
+
     return shouldUpdate ? formattedDescription : description;
   }, [subSKUs]);
 
@@ -298,7 +298,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
   useEffect(() => {
     if (quoteData?.formData) {
       const data = quoteData.formData;
-      
+
       if (data.myAccount) setMyAccount(data.myAccount);
       if (data.role) setRole(data.role);
       if (data.term) setTerms(data.term);
@@ -313,7 +313,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           // Handle both unit-level description (from EstesRateQuote) and item-level descriptions
           const unitDescription = (unit as any).description || '';
           const formattedUnitDescription = formatDescriptionWithSubSKUs(unitDescription);
-          
+
           // If items exist, update their descriptions
           // If no items exist but there's a unit description, create an item with that description
           let items = unit.items || [];
@@ -332,10 +332,10 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
               description: formatDescriptionWithSubSKUs(item.description || unitDescription || ''),
             }));
           }
-          
+
           // Remove unit-level description if it exists (ESTESBOLForm doesn't use it)
           const { description: _, ...unitWithoutDescription } = unit;
-          
+
           return {
             ...unitWithoutDescription,
             items,
@@ -347,7 +347,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
       if (data.residentialDelivery) setResidentialDelivery(true);
       if (data.appointmentRequest) setAppointmentRequest(true);
     }
-    
+
     if (quoteData?.quote?.quoteId) {
       setQuoteId(quoteData.quote.quoteId);
     }
@@ -357,28 +357,28 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
   useEffect(() => {
     if (!order?.jsonb) return;
     const orderJsonb = order.jsonb as Record<string, unknown>;
-    
+
     const customerName = getJsonbValue(orderJsonb, 'Customer Name');
     if (customerName && !destinationName) setDestinationName(customerName);
-    
+
     const shipToAddress = getJsonbValue(orderJsonb, 'Ship to Address 1') ||
-                         getJsonbValue(orderJsonb, 'Shipping Address');
+      getJsonbValue(orderJsonb, 'Shipping Address');
     if (shipToAddress && !destinationAddress1) setDestinationAddress1(shipToAddress);
-    
+
     const shipToCity = getJsonbValue(orderJsonb, 'Ship to City') ||
-                      getJsonbValue(orderJsonb, 'Shipping City');
+      getJsonbValue(orderJsonb, 'Shipping City');
     if (shipToCity && !destinationCity) setDestinationCity(shipToCity);
-    
+
     const shipToState = getJsonbValue(orderJsonb, 'Ship to State') ||
-                       getJsonbValue(orderJsonb, 'Shipping State');
+      getJsonbValue(orderJsonb, 'Shipping State');
     if (shipToState && !destinationState) setDestinationState(shipToState);
-    
+
     const shipToZip = getJsonbValue(orderJsonb, 'Ship to Zip Code') ||
-                     getJsonbValue(orderJsonb, 'Shipping Zip Code');
+      getJsonbValue(orderJsonb, 'Shipping Zip Code');
     if (shipToZip && !destinationZipCode) setDestinationZipCode(shipToZip);
-    
+
     const customerPhone = getJsonbValue(orderJsonb, 'Customer Phone Number') ||
-                         getJsonbValue(orderJsonb, 'Phone');
+      getJsonbValue(orderJsonb, 'Phone');
     if (customerPhone && !destinationPhone) setDestinationPhone(customerPhone);
   }, [order]);
 
@@ -400,7 +400,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           const place = data.places[0];
           const city = place['place name'];
           const state = place['state abbreviation'];
-          
+
           if (type === 'origin') {
             setOriginCity(city);
             setOriginState(state);
@@ -454,32 +454,32 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
         if (prevUnits.length === 0) {
           return prevUnits;
         }
-        
-        const hasChanges = prevUnits.some(unit => 
+
+        const hasChanges = prevUnits.some(unit =>
           unit.items.some(item => {
             const formatted = formatDescriptionWithSubSKUs(item.description);
             return formatted !== item.description;
           })
         );
-        
+
         if (!hasChanges) {
           return prevUnits; // No changes needed
         }
-        
+
         // Update existing units' item descriptions
         return prevUnits.map((unit) => ({
           ...unit,
-          items: unit.items.length > 0 
+          items: unit.items.length > 0
             ? unit.items.map((item) => ({
-                ...item,
-                description: formatDescriptionWithSubSKUs(item.description),
-              }))
+              ...item,
+              description: formatDescriptionWithSubSKUs(item.description),
+            }))
             : [{
-                id: Date.now().toString(),
-                description: formatDescriptionWithSubSKUs(''),
-                pieces: 1,
-                pieceType: 'CARTON'
-              }],
+              id: Date.now().toString(),
+              description: formatDescriptionWithSubSKUs(''),
+              pieces: 1,
+              pieceType: 'CARTON'
+            }],
         }));
       });
     }
@@ -507,7 +507,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
 
   const addHandlingUnit = () => {
     const defaultDescription = formatDescriptionWithSubSKUs('');
-    
+
     const newUnit: HandlingUnit = {
       id: Date.now().toString(),
       doNotStack: false,
@@ -520,11 +520,11 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
       class: '',
       nmfc: '',
       sub: '',
-      items: [{ 
-        id: Date.now().toString(), 
-        description: defaultDescription, 
-        pieces: 1, 
-        pieceType: 'CARTON' 
+      items: [{
+        id: Date.now().toString(),
+        description: defaultDescription,
+        pieces: 1,
+        pieceType: 'CARTON'
       }],
     };
     setHandlingUnits([...handlingUnits, newUnit]);
@@ -542,14 +542,14 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
 
   const addItemToUnit = (unitId: string) => {
     const defaultDescription = formatDescriptionWithSubSKUs('');
-    
+
     setHandlingUnits(
       handlingUnits.map((unit) =>
         unit.id === unitId
           ? {
-              ...unit,
-              items: [...unit.items, { id: Date.now().toString(), description: defaultDescription, pieces: 1, pieceType: 'CARTON' }],
-            }
+            ...unit,
+            items: [...unit.items, { id: Date.now().toString(), description: defaultDescription, pieces: 1, pieceType: 'CARTON' }],
+          }
           : unit
       )
     );
@@ -583,7 +583,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
         'CRATE': 'CRT',
         'BOX': 'BOX',
       };
-      
+
       let lineItems = unit.items.map((item) => ({
         description: item.description || '',
         weight: unit.weight || 0,
@@ -595,7 +595,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
         nmfcSub: unit.sub || '',
         hazardous: false,
       }));
-      
+
       if (lineItems.length === 0) {
         lineItems = [{
           description: '',
@@ -609,7 +609,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           hazardous: false,
         }];
       }
-      
+
       return {
         count: unit.quantity || 1,
         type: typeMap[unit.handlingUnitType] || 'PAT',
@@ -624,8 +624,8 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
       };
     });
 
-    const specialInstructions = specialHandlingRequests.length > 0 
-      ? specialHandlingRequests.join(',') 
+    const specialInstructions = specialHandlingRequests.length > 0
+      ? specialHandlingRequests.join(',')
       : undefined;
 
     const billOfLadingEmailsList = billOfLadingEmails.filter((email) => email.trim() !== '');
@@ -725,8 +725,8 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           addresses: billOfLadingEmailsList.length > 0 ? billOfLadingEmailsList : [],
         },
       },
-      notifications: trackingUpdatesEmailsList.length > 0 
-        ? trackingUpdatesEmailsList.map((email) => ({ email })) 
+      notifications: trackingUpdatesEmailsList.length > 0
+        ? trackingUpdatesEmailsList.map((email) => ({ email }))
         : [],
     };
 
@@ -770,10 +770,10 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     const normalizedCarrier = carrier.toLowerCase();
     let token = getToken(normalizedCarrier);
-    
+
     if (!token || isTokenExpired(normalizedCarrier, 10)) {
       if (isSessionActive()) {
         const refreshed = await refreshToken(normalizedCarrier);
@@ -782,7 +782,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
         }
       }
     }
-    
+
     if (!token) {
       setError('Authentication required. Please login.');
       return;
@@ -810,7 +810,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
     if (!billToZipCode || !billToZipCode.trim()) validationErrors.push('Bill To ZIP Code is required');
     if (!billToPhone || !billToPhone.trim()) validationErrors.push('Bill To Phone Number is required');
     if (handlingUnits.length === 0) validationErrors.push('At least one handling unit is required');
-    
+
     handlingUnits.forEach((unit, index) => {
       if (unit.items.length === 0) {
         validationErrors.push(`Handling Unit ${index + 1}: At least one item is required`);
@@ -821,7 +821,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
         }
       }
     });
-    
+
     if (validationErrors.length > 0) {
       setError(`Please fill in all required fields:\n${validationErrors.join('\n')}`);
       return;
@@ -856,8 +856,8 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           if (errorData.message) {
             errorMessage = errorData.message;
           } else if (errorData.error) {
-            errorMessage = typeof errorData.error === 'string' 
-              ? errorData.error 
+            errorMessage = typeof errorData.error === 'string'
+              ? errorData.error
               : errorData.error.message || errorMessage;
           }
         } catch (parseError) {
@@ -871,7 +871,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
       const data = await res.json();
       setResponseData(data);
       setShowResponsePreview(true);
-      
+
       // Store pickup prefill data in cache for redirect
       const pickupPrefillData = {
         originName,
@@ -897,28 +897,28 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
         doNotStack: handlingUnits.some(unit => unit.doNotStack),
         rateQuoteData: quoteData,
       };
-      
+
       storePickupPrefillData(order.id, pickupPrefillData);
-      
+
       // Automatically show pickup request form after a short delay
       setTimeout(() => {
         setShowPickupRequest(true);
       }, 1500); // 1.5 second delay to show success message
-      
+
       // Save BOL response with Shipping Type, SubSKU, and PDF file to database
       try {
         const sku = getJsonbValue(order.jsonb, 'SKU') || '';
         const marketplace = order.orderOnMarketPlace || '';
         const finalShippingType = shippingType || 'LTL'; // Use provided shipping type or default to LTL
-        
+
         if (sku && marketplace) {
           // Prepare BOL PDF file if available
           const bolFiles: File[] = [];
-          if (responseData?.data?.images?.bol) {
+          if (data?.data?.images?.bol) {
             try {
-              const base64String = responseData.data.images.bol;
+              const base64String = data.data.images.bol;
               console.log('📄 Creating PDF from base64, length:', base64String?.length);
-              
+
               if (!base64String || base64String.trim() === '') {
                 console.warn('⚠️ Base64 string is empty');
               } else {
@@ -928,17 +928,27 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
                   bytes[i] = binaryString.charCodeAt(i);
                 }
                 const blob = new Blob([bytes], { type: 'application/pdf' });
-                const proNumber = responseData?.data?.referenceNumbers?.pro || 'BOL';
-                const fileName = `BillOfLading_${proNumber}_${Date.now()}.pdf`;
+                const proNumber = data?.data?.referenceNumbers?.pro || 'BOL';
+
+                // Use formatted filename: Customer Marketplace OrderNumber
+                const orderJsonb = order.jsonb as Record<string, unknown>;
+                const customerName = getJsonbValue(orderJsonb, 'Customer Name') || 'Customer';
+                const orderNumber = getJsonbValue(orderJsonb, 'Order Number') ||
+                  getJsonbValue(orderJsonb, 'PO#') ||
+                  getJsonbValue(orderJsonb, 'PO Number') || 'Order';
+
+                const baseFileName = getFormattedBOLFilename(customerName, marketplace, orderNumber);
+                const fileName = `${baseFileName}.pdf`;
+
                 const pdfFile = new File([blob], fileName, { type: 'application/pdf' });
-                
+
                 console.log('✅ PDF file created:', {
                   name: pdfFile.name,
                   size: pdfFile.size,
                   type: pdfFile.type,
                   isFile: pdfFile instanceof File,
                 });
-                
+
                 bolFiles.push(pdfFile);
               }
             } catch (pdfError) {
@@ -946,36 +956,36 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
             }
           } else {
             console.warn('⚠️ No BOL image in response data:', {
-              hasData: !!responseData?.data,
-              hasImages: !!responseData?.data?.images,
-              hasBol: !!responseData?.data?.images?.bol,
+              hasData: !!data?.data,
+              hasImages: !!data?.data?.images,
+              hasBol: !!data?.data?.images?.bol,
             });
           }
-          
+
           // Save BOL files directly to cache immediately so they're available for email attachment
           if (bolFiles.length > 0) {
             updateCachedOrder(order.id, { estesBolFiles: bolFiles });
             // Also store in state to pass directly to email modal (more reliable)
-            console.log('📦 Setting bolFilesForEmail state with', bolFiles.length, 'file(s):', bolFiles.map(f => ({ 
-              name: f.name, 
-              size: f.size, 
+            console.log('📦 Setting bolFilesForEmail state with', bolFiles.length, 'file(s):', bolFiles.map(f => ({
+              name: f.name,
+              size: f.size,
               type: f.type,
-              isFile: f instanceof File 
+              isFile: f instanceof File
             })));
             setBolFilesForEmail(bolFiles);
             console.log('✅ BOL files saved to cache and state for email attachment:', bolFiles.map(f => f.name));
           } else {
             console.warn('⚠️ No BOL files to save - bolFiles array is empty');
           }
-          
+
           // Dispatch event for cache update (for LTL orders)
           dispatchBOLData(order.id, 'estes', data, bolFiles.length > 0 ? bolFiles : undefined);
-          
+
           // Get cached rate quotes if available
           const cachedOrder = getCachedOrder(order.id);
           let rateQuotesRequestJsonb: Record<string, unknown> | undefined = undefined;
           let rateQuotesResponseJsonb: Record<string, unknown> | undefined = undefined;
-          
+
           // Include rate quotes from cache if available
           if (cachedOrder) {
             if (cachedOrder.xpoRateQuoteRequest && cachedOrder.xpoRateQuoteResponse) {
@@ -986,14 +996,14 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
               rateQuotesResponseJsonb = { estes: cachedOrder.estesRateQuoteResponse };
             }
           }
-          
+
           // Prepare bolResponseJsonb - combine XPO and Estes if both exist
           const bolResponseJsonb: Record<string, unknown> = {};
           if (cachedOrder?.xpoBolResponse) {
             bolResponseJsonb.xpo = cachedOrder.xpoBolResponse;
           }
           bolResponseJsonb.estes = data; // Current Estes BOL
-          
+
           // Always create new order - don't check for duplicates by SKU
           // Updates should only be done using ID (not SKU)
           console.log('📤 Creating order with files:', {
@@ -1002,7 +1012,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
             filesCount: bolFiles.length,
             files: bolFiles.map(f => ({ name: f.name, size: f.size, type: f.type })),
           });
-          
+
           const createdOrder = await createShippedOrder({
             sku,
             orderOnMarketPlace: marketplace,
@@ -1014,17 +1024,17 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
             subSKUs: subSKUs.length > 0 ? subSKUs : undefined,
             files: bolFiles.length > 0 ? bolFiles : undefined,
           });
-          
+
           console.log('✅ Order created:', {
             id: createdOrder?.id,
             uploads: createdOrder?.uploads,
             uploadsLength: createdOrder?.uploads?.length,
           });
-          
+
           // Extract ID from response
           const logisticsOrderId = createdOrder?.id;
           console.log('✅ Created new order with BOL response, ID:', logisticsOrderId);
-          
+
           // Store logisticsOrderId in cache for pickup update (always use ID, not SKU)
           if (logisticsOrderId) {
             updateCachedOrder(order.id, { logisticsShippedOrderId: logisticsOrderId });
@@ -1035,22 +1045,22 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
         console.error('⚠️ Failed to save BOL to database:', saveError);
         // Don't throw error - BOL creation was successful, just log the save error
       }
-      
+
       // Open email compose modal with generated email content for LTL and Parcel orders
       // Show email modal regardless of pickup request visibility, with a delay to ensure it appears on top
       // Only show once - prevent duplicate emails
       const finalShippingType = shippingType || 'LTL'; // Use provided shipping type or default to LTL
-      
+
       if ((finalShippingType === 'LTL' || finalShippingType === 'Parcel') && !showEmailCompose) {
         const orderJsonb = order.jsonb as Record<string, unknown>;
         const customerName = getJsonbValue(orderJsonb, 'Customer Name');
-        const orderNumber = getJsonbValue(orderJsonb, 'Order Number') || 
-                           getJsonbValue(orderJsonb, 'PO#') || 
-                           getJsonbValue(orderJsonb, 'PO Number') || '';
-        
+        const orderNumber = getJsonbValue(orderJsonb, 'Order Number') ||
+          getJsonbValue(orderJsonb, 'PO#') ||
+          getJsonbValue(orderJsonb, 'PO Number') || '';
+
         let emailSubject = '';
         let emailBody = '';
-        
+
         if (finalShippingType === 'LTL') {
           emailSubject = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.subject(customerName, orderNumber);
           emailBody = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.body(orderJsonb, subSKUs);
@@ -1058,7 +1068,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           emailSubject = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.subject(customerName, orderNumber);
           emailBody = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.body(orderJsonb, subSKUs);
         }
-        
+
         console.log('📧 Preparing to show email compose modal:', {
           shippingType: finalShippingType,
           customerName,
@@ -1066,7 +1076,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           hasSubject: !!emailSubject,
           hasBody: !!emailBody,
         });
-        
+
         // Open email compose modal after a delay (longer than pickup request to ensure it appears on top)
         // The email modal has z-index 9999, so it will appear above the pickup request form
         setTimeout(() => {
@@ -1084,7 +1094,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           console.log('⚠️ Email modal not shown - shippingType is not LTL or Parcel:', finalShippingType);
         }
       }
-      
+
       if (onSuccess) {
         onSuccess(data);
       }
@@ -1123,8 +1133,19 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
     if (!pdfUrl) return;
     const link = document.createElement('a');
     link.href = pdfUrl;
-    const proNumber = responseData?.data?.referenceNumbers?.pro || 'BOL';
-    link.download = `BillOfLading_${proNumber}.pdf`;
+
+    const orderJsonb = order.jsonb as Record<string, unknown>;
+    const customerName = getJsonbValue(orderJsonb, 'Customer Name') || 'Customer';
+    const marketplace = order.orderOnMarketPlace ||
+      getJsonbValue(orderJsonb, 'Marketplace') ||
+      getJsonbValue(orderJsonb, 'Order on Marketplace') || '';
+
+    const orderNumber = getJsonbValue(orderJsonb, 'Order Number') ||
+      getJsonbValue(orderJsonb, 'PO#') ||
+      getJsonbValue(orderJsonb, 'PO Number') || 'Order';
+
+    const baseFileName = getFormattedBOLFilename(customerName, marketplace, orderNumber);
+    link.download = `${baseFileName}.pdf`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1154,7 +1175,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
             Back to Quotes
           </button>
         </div>
-        
+
         <div className="bg-white rounded-lg border border-slate-200 p-4">
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Account Information */}
@@ -1546,14 +1567,14 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
       {showEmailCompose && (() => {
         const orderJsonb = order.jsonb as Record<string, unknown>;
         const customerName = getJsonbValue(orderJsonb, 'Customer Name');
-        const orderNumber = getJsonbValue(orderJsonb, 'Order Number') || 
-                           getJsonbValue(orderJsonb, 'PO#') || 
-                           getJsonbValue(orderJsonb, 'PO Number') || '';
-        
+        const orderNumber = getJsonbValue(orderJsonb, 'Order Number') ||
+          getJsonbValue(orderJsonb, 'PO#') ||
+          getJsonbValue(orderJsonb, 'PO Number') || '';
+
         const finalShippingType = shippingType || 'LTL';
         let emailSubject = '';
         let emailBody = '';
-        
+
         if (finalShippingType === 'LTL') {
           emailSubject = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.subject(customerName, orderNumber);
           emailBody = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.body(orderJsonb, subSKUs);
@@ -1561,7 +1582,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           emailSubject = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.subject(customerName, orderNumber);
           emailBody = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.body(orderJsonb, subSKUs);
         }
-        
+
         console.log('📧 Rendering email compose modal:', {
           isOpen: showEmailCompose,
           shippingType: finalShippingType,
@@ -1570,7 +1591,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           bolFilesForEmailCount: bolFilesForEmail.length,
           bolFilesForEmail: bolFilesForEmail.map(f => ({ name: f.name, size: f.size, type: f.type }))
         });
-        
+
         return (
           <EmailComposeModal
             isOpen={showEmailCompose}

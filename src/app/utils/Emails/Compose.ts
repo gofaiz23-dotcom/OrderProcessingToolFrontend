@@ -45,7 +45,7 @@ const preparePayload = (state: ComposeFormState): ComposeEmailPayload => {
     .map((value) => value.trim())
     .filter(Boolean)
     .slice(0, MAX_RECIPIENTS);
-  
+
   return {
     to: toList,
     cc: ccList.length > 0 ? ccList.join(',') : undefined,
