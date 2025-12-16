@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ArrowLeft, FileText, X, Loader2, Download, Printer, Copy, Send } from 'lucide-react';
 import { buildApiUrl } from '../../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
@@ -260,6 +260,18 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
     referenceNumbers: true,
     notifications: true,
   });
+
+  const pickupRequestRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to pickup request when it becomes visible
+  useEffect(() => {
+    if (showPickupRequest && pickupRequestRef.current) {
+      // Small timeout to ensure DOM is rendered and layout is settled
+      setTimeout(() => {
+        pickupRequestRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [showPickupRequest]);
 
   // Helper function to format description with subSKUs
   const formatDescriptionWithSubSKUs = useCallback((description: string): string => {
@@ -1527,7 +1539,7 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
 
           {/* Pickup Request Form - Show after BOL is created */}
           {showPickupRequest && (
-            <div className="mt-8 pt-8 border-t-2 border-slate-300">
+            <div ref={pickupRequestRef} className="mt-8 pt-8 border-t-2 border-slate-300">
               <ESTESPickupRequest
                 order={order}
                 bolData={{

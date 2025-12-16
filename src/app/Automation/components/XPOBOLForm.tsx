@@ -90,6 +90,7 @@ export const XPOBOLForm = ({
   const [payloadPreview, setPayloadPreview] = useState<Record<string, unknown> | null>(null);
   const [showEmailCompose, setShowEmailCompose] = useState(false);
   const [bolFilesForEmail, setBolFilesForEmail] = useState<File[]>([]); // Store BOL files to pass to email modal
+  const hasShownEmailCompose = useRef(false); // Track if we've shown the email compose modal
 
   // Helper function to format description with subSKUs
   const formatDescriptionWithSubSKUs = (baseDescription: string, subSKUsArray: string[]): string => {
@@ -834,6 +835,28 @@ export const XPOBOLForm = ({
         setLoading(false);
         return;
       }
+
+      // Validate Pickup Location (Shipper) fields
+      if (!pickupLocation.company || !pickupLocation.streetAddress || !pickupLocation.city || !pickupLocation.state || !pickupLocation.postalCode) {
+        setError(new Error('Please fill in all required Pickup Location fields (Company, Address, City, State, Zip) for Pickup Request'));
+        setLoading(false);
+        return;
+      }
+
+      // Validate Delivery Location Zip (for destZip6)
+      if (!deliveryLocation.postalCode) {
+        setError(new Error('Delivery Location Zip Code is required for Pickup Request'));
+        setLoading(false);
+        return;
+      }
+
+      // Validate Commodity Weight
+      const invalidWeight = commodities.some(c => !c.grossWeight?.weight || c.grossWeight.weight <= 0);
+      if (invalidWeight) {
+        setError(new Error('All commodities must have a valid weight greater than 0 for Pickup Request'));
+        setLoading(false);
+        return;
+      }
     }
 
     try {
@@ -966,6 +989,9 @@ export const XPOBOLForm = ({
             console.log('XPO Pickup Request:', JSON.stringify(finalPickupPayload, null, 2));
           }
 
+          // Log the request payload for debugging
+          console.log('Sending pickup request with payload:', JSON.stringify(finalPickupPayload, null, 2));
+
           const pickupRes = await fetch(buildApiUrl('/Logistics/create-pickup-request'), {
             method: 'POST',
             headers: {
@@ -978,23 +1004,35 @@ export const XPOBOLForm = ({
           if (!pickupRes.ok) {
             const pickupErrorText = await pickupRes.text();
             let pickupErrorMessage = `Pickup request creation failed: ${pickupRes.status} ${pickupRes.statusText}`;
+            let errorDetails = pickupErrorText;
 
             try {
               if (pickupErrorText && pickupErrorText.trim()) {
                 if (pickupErrorText.trim().startsWith('{') || pickupErrorText.trim().startsWith('[')) {
                   const pickupErrorData = JSON.parse(pickupErrorText);
+                  errorDetails = JSON.stringify(pickupErrorData, null, 2);
                   pickupErrorMessage = pickupErrorData.message || pickupErrorData.error?.message || pickupErrorMessage;
                 } else {
+                  errorDetails = pickupErrorText;
                   pickupErrorMessage = pickupErrorText.substring(0, 200);
                 }
               }
-            } catch {
-              // Use default error message
+            } catch (e) {
+              console.error('Error parsing error response:', e);
+              errorDetails = pickupErrorText || 'No additional error details available';
             }
 
-            // Log the error but don't fail the entire flow - BOL was created successfully
-            console.error('Pickup Request Creation Error:', pickupErrorMessage);
-            // You might want to show a warning to the user here
+            // Log detailed error information
+            console.error('Pickup Request Creation Error:', {
+              status: pickupRes.status,
+              statusText: pickupRes.statusText,
+              message: pickupErrorMessage,
+              details: errorDetails,
+              requestPayload: finalPickupPayload
+            });
+
+            // Show a more detailed error to the user
+            setError(new Error(`Failed to create pickup request: ${pickupErrorMessage}`));
           } else {
             const pickupData = await pickupRes.json();
             if (process.env.NODE_ENV === 'development') {
@@ -1116,17 +1154,17 @@ export const XPOBOLForm = ({
             bolFiles.push(pdfFile);
           }
 
-          // Save BOL files directly to cache immediately so they're available for email attachment
+          // First, update the cache with BOL files
           if (bolFiles.length > 0) {
-            updateCachedOrder(order.id, { xpoBolFiles: bolFiles });
-            // Also store in state to pass directly to email modal (more reliable)
+            // Store in state to pass directly to email modal
             setBolFilesForEmail(bolFiles);
-            console.log('✅ BOL files saved to cache and state for email attachment:', bolFiles.map(f => f.name));
+            console.log('✅ BOL files stored for email attachment:', bolFiles.map(f => f.name));
           }
 
-          // Dispatch event for cache update (for LTL orders)
-          dispatchBOLData(order.id, 'xpo', data, bolFiles.length > 0 ? bolFiles : undefined);
+          // Dispatch event for cache update (for LTL orders) - don't pass files here to avoid duplication
+          dispatchBOLData(order.id, 'xpo', data, undefined);
 
+          // Remove the updateCachedOrder call since dispatchBOLData will handle the cache update
           // Get cached rate quotes if available
           const cachedOrder = getCachedOrder(order.id);
           let rateQuotesRequestJsonb: Record<string, unknown> | undefined = undefined;
@@ -1159,6 +1197,7 @@ export const XPOBOLForm = ({
             files: bolFiles.map(f => ({ name: f.name, size: f.size, type: f.type })),
           });
 
+          // Create the order with BOL files
           const createdOrder = await createShippedOrder({
             sku,
             orderOnMarketPlace: marketplace,
@@ -1168,7 +1207,7 @@ export const XPOBOLForm = ({
             rateQuotesResponseJsonb: rateQuotesResponseJsonb,
             shippingType: finalShippingType,
             subSKUs: subSKUs.length > 0 ? subSKUs : undefined,
-            files: bolFiles.length > 0 ? bolFiles : undefined,
+            files: bolFiles, // Include the BOL files here
           });
 
           console.log('✅ Order created:', {
@@ -1247,20 +1286,21 @@ export const XPOBOLForm = ({
 
         // Open email compose modal after a delay (longer than pickup request to ensure it appears on top)
         // The email modal has z-index 9999, so it will appear above the pickup request form
-        setTimeout(() => {
-          if (!showEmailCompose) {
-            console.log('📧 Opening email compose modal');
-            setShowEmailCompose(true);
-          } else {
-            console.log('⚠️ Email modal already open, skipping duplicate');
-          }
-        }, 3000); // 3 second delay to ensure pickup request form is visible first, then email modal appears on top
-      } else {
-        if (showEmailCompose) {
-          console.log('⚠️ Email modal already shown, skipping');
+        if (!hasShownEmailCompose.current) {
+          setTimeout(() => {
+            if (!showEmailCompose) {
+              console.log('📧 Opening email compose modal');
+              hasShownEmailCompose.current = true;
+              setShowEmailCompose(true);
+            } else {
+              console.log('⚠️ Email modal already open, skipping duplicate');
+            }
+          }, 3000); // 3 second delay to ensure pickup request form is visible first, then email modal appears on top
         } else {
-          console.log('⚠️ Email modal not shown - shippingType is not LTL or Parcel:', finalShippingType);
+          console.log('⚠️ Email modal already shown in this session, not showing again');
         }
+      } else {
+        console.log('⚠️ Email modal not shown - shippingType is not LTL or Parcel:', finalShippingType);
       }
 
       if (onSuccess) {
