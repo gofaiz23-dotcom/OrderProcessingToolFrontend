@@ -379,10 +379,27 @@ export const EmailComposeModal = ({
     setSelectedAttachment(null);
   };
 
-  const MAX_ATTACHMENT_COUNT = 15;
+  const MAX_ATTACHMENT_COUNT = 50;
+  const MAX_TOTAL_SIZE = 25 * 1024 * 1024; // 25 MB
+
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
+
+    // Calculate current total size
+    const currentTotalSize = attachments.reduce((acc, file) => acc + file.size, 0);
+    const newFilesTotalSize = files.reduce((acc, file) => acc + file.size, 0);
+
+    if (currentTotalSize + newFilesTotalSize > MAX_TOTAL_SIZE) {
+      setSendStatus({
+        type: 'error',
+        message: `Total attachment size exceeds 25MB limit. Current size: ${formatFileSize(currentTotalSize)}.`,
+      });
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
 
     if (attachments.length + files.length > MAX_ATTACHMENT_COUNT) {
       setSendStatus({
@@ -445,6 +462,17 @@ export const EmailComposeModal = ({
         setSendStatus({
           type: 'error',
           message: `Too many files! Maximum ${MAX_ATTACHMENT_COUNT} allowed, but you have ${attachments.length}. Please remove some files.`
+        });
+        setIsSending(false);
+        return;
+      }
+
+      // 2. Validate Total Size BEFORE sending
+      const totalSize = attachments.reduce((acc, file) => acc + file.size, 0);
+      if (totalSize > MAX_TOTAL_SIZE) {
+        setSendStatus({
+          type: 'error',
+          message: `Total attachment size (${formatFileSize(totalSize)}) exceeds the 25MB limit. Please remove some files.`
         });
         setIsSending(false);
         return;
