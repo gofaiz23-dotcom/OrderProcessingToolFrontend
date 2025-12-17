@@ -65,15 +65,16 @@ export const LTLRateQuoteModal = ({
 
   // Listen for quote selection events
   useEffect(() => {
-    const handleQuoteSelected = (e: CustomEvent) => {
-      const { carrier } = e.detail;
+    const handleQuoteSelected = (e: Event) => {
+      const customEvent = e as CustomEvent<{ carrier: 'xpo' | 'estes' }>;
+      const { carrier } = customEvent.detail;
       if (carrier === 'xpo' || carrier === 'estes') {
         setSelectedCarrier(carrier);
       }
     };
-    window.addEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
+    window.addEventListener('quoteSelected', handleQuoteSelected);
     return () => {
-      window.removeEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
+      window.removeEventListener('quoteSelected', handleQuoteSelected);
     };
   }, []);
 
@@ -134,7 +135,7 @@ export const LTLRateQuoteModal = ({
 
   return (
     <div
-      className="fixed inset-y-0 left-56 sm:left-64 right-0 z-[110] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-y-0 left-56 sm:left-64 right-0 z-110 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
       <div
@@ -142,7 +143,7 @@ export const LTLRateQuoteModal = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="p-4 sm:p-6 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
+        <div className="p-4 sm:p-6 border-b border-slate-200 flex items-center justify-between shrink-0">
           <h2 className="text-lg sm:text-xl font-bold text-slate-900">
             {showBOLForm 
               ? `${selectedCarrier === 'xpo' ? 'XPO' : 'Estes'} Bill of Lading - Order #${order.id}`
@@ -193,39 +194,47 @@ export const LTLRateQuoteModal = ({
         <div className="flex-1 overflow-hidden flex flex-col sm:flex-row relative">
           {/* XPO Rate Quote - Left Side */}
           <div 
-            className={`flex-1 border-r-2 border-blue-300 overflow-y-auto bg-blue-50/30 transition-all ${
+            className={`flex-1 flex flex-col border-r-2 border-blue-300 bg-blue-50/30 transition-all ${
               showBOLForm && selectedCarrier !== 'xpo' ? 'hidden' : ''
             } ${showBOLForm && selectedCarrier === 'xpo' ? 'border-r-0' : ''}`}
           >
-            <div className="p-4 sm:p-6">
-              {!showBOLForm && (
-                <h3 className="text-base font-semibold text-blue-900 mb-4 pb-2 border-b-2 border-blue-300">
+            {!showBOLForm && (
+              <div className="sticky top-0 z-10 bg-blue-50/30 backdrop-blur-sm border-b-2 border-blue-300 px-4 sm:px-6 py-3 shrink-0">
+                <h3 className="text-base font-semibold text-blue-900">
                   XPO Rate Quote
                 </h3>
-              )}
-              <XPORateQuote ref={xpoRef} order={order} subSKUs={subSKUs} shippingType={shippingType} />
+              </div>
+            )}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-4 sm:p-6">
+                <XPORateQuote ref={xpoRef} order={order} subSKUs={subSKUs} shippingType={shippingType} />
+              </div>
             </div>
           </div>
 
           {/* Estes Rate Quote - Right Side */}
           <div 
-            className={`flex-1 overflow-y-auto bg-green-50/30 transition-all ${
+            className={`flex-1 flex flex-col overflow-hidden bg-green-50/30 transition-all ${
               showBOLForm && selectedCarrier !== 'estes' ? 'hidden' : ''
             } ${showBOLForm && selectedCarrier === 'estes' ? 'border-l-0' : ''}`}
           >
-            <div className="p-4 sm:p-6">
-              {!showBOLForm && (
-                <h3 className="text-base font-semibold text-green-900 mb-4 pb-2 border-b-2 border-green-300">
+            {!showBOLForm && (
+              <div className="sticky top-0 z-10 bg-green-50/30 backdrop-blur-sm border-b-2 border-green-300 px-4 sm:px-6 py-3 shrink-0">
+                <h3 className="text-base font-semibold text-green-900">
                   Estes Rate Quote
                 </h3>
-              )}
-              <EstesRateQuote ref={estesRef} order={order} subSKUs={subSKUs} shippingType={shippingType} />
+              </div>
+            )}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-4 sm:p-6">
+                <EstesRateQuote ref={estesRef} order={order} subSKUs={subSKUs} shippingType={shippingType} />
+              </div>
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="p-4 sm:p-6 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-3 flex-shrink-0">
+        <div className="p-4 sm:p-6 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-3 shrink-0">
         
         </div>
       </div>
