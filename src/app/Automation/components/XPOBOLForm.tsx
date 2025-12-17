@@ -80,6 +80,60 @@ const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
   return '';
 };
 
+// Helper function to parse address string into components
+const parseAddressString = (addressStr: string): { streetAddress: string; addressLine2: string; city: string; state: string; zip: string } => {
+  if (!addressStr || addressStr.trim() === '') {
+    return { streetAddress: '', addressLine2: '', city: '', state: '', zip: '' };
+  }
+
+  const cleaned = addressStr.trim().replace(/\s+US\s+(\d{5})$/, ' $1');
+  const zipMatch = cleaned.match(/(\d{5})$/);
+  const zip = zipMatch ? zipMatch[1] : '';
+  const withoutZip = cleaned.replace(/\s+\d{5}$/, '').trim();
+  const stateMatch = withoutZip.match(/\s+([A-Z]{2})\s*$/);
+  const state = stateMatch ? stateMatch[1] : '';
+  let withoutStateZip = withoutZip.replace(/\s+[A-Z]{2}\s*$/, '').trim();
+  withoutStateZip = withoutStateZip.replace(/#\s*B([A-Z])/gi, '# B $1');
+
+  const parts = withoutStateZip.split(/\s+/);
+  const streetAbbrevs = ['ST', 'AVE', 'DR', 'RD', 'PKWY', 'BLVD', 'CIR', 'CT', 'FWY', 'HWY', 'LN', 'PL', 'WAY', 'STREET'];
+  const addressIndicators = ['STE', 'SUITE', '#', 'UNIT', 'APT', 'FLOOR', 'FL'];
+
+  let cityStartIndex = parts.length;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const word = parts[i].toUpperCase();
+    if (streetAbbrevs.includes(word) || addressIndicators.includes(word)) {
+      cityStartIndex = i + 1;
+      break;
+    }
+  }
+
+  if (cityStartIndex === parts.length) {
+    cityStartIndex = Math.max(1, parts.length - 2);
+  }
+
+  const streetParts = parts.slice(0, cityStartIndex);
+  const cityParts = parts.slice(cityStartIndex);
+  const city = cityParts.join(' ').toUpperCase();
+  const streetAddressFull = streetParts.join(' ');
+
+  let streetAddress = streetAddressFull;
+  let addressLine2 = '';
+  const steMatch = streetAddressFull.match(/^(.+?)\s+(STE|SUITE|#|UNIT|APT|FLOOR|FL\.?)\s*(.+)$/i);
+  if (steMatch) {
+    streetAddress = steMatch[1].trim();
+    addressLine2 = `${steMatch[2].toUpperCase()} ${steMatch[3].trim()}`.trim();
+  }
+
+  return {
+    streetAddress: streetAddress || '',
+    addressLine2: addressLine2 || '',
+    city: city || '',
+    state: state || '',
+    zip: zip || '',
+  };
+};
+
 export const XPOBOLForm = ({
   order,
   quoteData,
@@ -228,10 +282,10 @@ export const XPOBOLForm = ({
     comments: false,
   });
 
-  // Auto-populate from order data
+  // Auto-populate delivery location from order data (always, regardless of quoteData)
   useEffect(() => {
     if (order?.jsonb) {
-      // Populate delivery location (consignee) from order - check all possible field name variations
+      // Always populate delivery location (consignee) from order - check all possible field name variations
       const deliveryAddress = getJsonbValue(order.jsonb, 'Ship to Address 1') ||
         getJsonbValue(order.jsonb, 'Shipping Address') ||
         getJsonbValue(order.jsonb, 'Customer Address') ||
@@ -294,7 +348,7 @@ export const XPOBOLForm = ({
         getJsonbValue(order.jsonb, 'Email') ||
         getJsonbValue(order.jsonb, 'Shipping Email');
 
-      // Only update if we have at least some address data
+      // Always populate delivery location from order if we have at least some address data
       if (deliveryAddress || deliveryCity || deliveryState || deliveryZip) {
         setDeliveryLocation(prev => ({
           ...prev,
@@ -310,32 +364,36 @@ export const XPOBOLForm = ({
         }));
       }
 
-      // Populate commodity weight
-      const weight = getJsonbValue(order.jsonb, 'Weight') ||
-        getJsonbValue(order.jsonb, 'Total Weight');
-      if (weight) {
-        const weightNum = parseFloat(weight);
-        if (!isNaN(weightNum) && weightNum > 0) {
-          setCommodities(prev => {
-            if (prev.length > 0) {
-              return [{
-                ...prev[0],
-                grossWeight: {
-                  ...prev[0].grossWeight,
-                  weight: weightNum,
-                },
-              }];
-            }
-            return prev;
-          });
+      // Populate commodity weight from order (only if not already set from quoteData)
+      if (!quoteData) {
+        const weight = getJsonbValue(order.jsonb, 'Weight') ||
+          getJsonbValue(order.jsonb, 'Total Weight');
+        if (weight) {
+          const weightNum = parseFloat(weight);
+          if (!isNaN(weightNum) && weightNum > 0) {
+            setCommodities(prev => {
+              if (prev.length > 0) {
+                return [{
+                  ...prev[0],
+                  grossWeight: {
+                    ...prev[0].grossWeight,
+                    weight: weightNum,
+                  },
+                }];
+              }
+              return prev;
+            });
+          }
         }
       }
     }
-  }, [order]);
+  }, [order, quoteData]);
 
   // Populate from quoteData
   useEffect(() => {
     if (quoteData) {
+      console.log('📋 XPOBOLForm: quoteData received:', quoteData);
+      
       // Extract confirmationNbr from quoteData
       let confirmationNbr: string | undefined;
 
@@ -361,24 +419,59 @@ export const XPOBOLForm = ({
       // Populate pickup location and commodities from quoteData
       let rateQuote: any = null;
 
+      // Try multiple possible structures
       if ((quoteData as any)?.data?.data?.rateQuote) {
         rateQuote = (quoteData as any).data.data.rateQuote;
+        console.log('📋 Found rateQuote at data.data.rateQuote');
+      } else if ((quoteData as any)?.data?.data && (quoteData as any).data.data.shipmentInfo) {
+        // Sometimes the rateQuote is at data.data level directly
+        rateQuote = (quoteData as any).data.data;
+        console.log('📋 Found rateQuote at data.data (with shipmentInfo)');
       } else if ((quoteData as any)?.quote?.shipmentInfo) {
         rateQuote = (quoteData as any).quote;
+        console.log('📋 Found rateQuote at quote');
       } else if ((quoteData as any)?.shipmentInfo) {
         rateQuote = quoteData;
+        console.log('📋 Found rateQuote at root level');
+      } else if ((quoteData as any)?.data?.rateQuote) {
+        rateQuote = (quoteData as any).data.rateQuote;
+        console.log('📋 Found rateQuote at data.rateQuote');
       }
+
+      console.log('📋 Extracted rateQuote:', rateQuote);
+      console.log('📋 rateQuote.shipmentInfo:', rateQuote?.shipmentInfo);
 
       if (rateQuote?.shipmentInfo) {
         const shipmentInfo = rateQuote.shipmentInfo;
+        console.log('📋 Processing shipmentInfo:', shipmentInfo);
 
-        // Populate shipper/pickup location
+        // Populate shipper/pickup location from rate quote
         if (shipmentInfo.shipper) {
           const shipper = shipmentInfo.shipper;
+          console.log('📋 Processing shipper:', shipper);
 
           if (shipper.address) {
-            // Preserve existing phone number when populating from quoteData
-            setPickupLocation((prev) => ({
+            // Extract contact info from shipper if available
+            const contactInfo = shipper.contactInfo || {};
+            const phone = contactInfo.phone?.phoneNbr || 
+                         (typeof contactInfo.phone === 'string' ? contactInfo.phone : '') ||
+                         '';
+            const email = contactInfo.email?.emailAddr || 
+                         (typeof contactInfo.email === 'string' ? contactInfo.email : '') ||
+                         '';
+            
+            console.log('📋 Populating pickup location from rate quote:', {
+              company: shipper.address.name,
+              streetAddress: shipper.address.addressLine1,
+              city: shipper.address.cityName,
+              state: shipper.address.stateCd,
+              postalCode: shipper.address.postalCd,
+              phone,
+              email,
+            });
+            
+            // Populate pickup location from rate quote (overwrite defaults)
+            setPickupLocation({
               searchValue: shipper.address.name || '',
               company: shipper.address.name || '',
               careOf: '',
@@ -388,11 +481,15 @@ export const XPOBOLForm = ({
               state: shipper.address.stateCd || '',
               postalCode: shipper.address.postalCd || '',
               country: shipper.address.countryCd || 'US',
-              phone: prev.phone || '', // Preserve existing phone number
-              extension: prev.extension || '', // Preserve existing extension
-              email: prev.email || '', // Preserve existing email
-            }));
+              phone: phone,
+              extension: '',
+              email: email,
+            });
+          } else {
+            console.warn('📋 Shipper address not found in rate quote');
           }
+        } else {
+          console.warn('📋 Shipper not found in shipmentInfo');
         }
 
         // Populate commodity information
@@ -400,6 +497,12 @@ export const XPOBOLForm = ({
           const firstCommodity = shipmentInfo.commodity[0];
           const baseDescription = ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription;
           const formattedDescription = formatDescriptionWithSubSKUs(baseDescription, subSKUs);
+
+          console.log('📋 Populating commodity from rate quote:', {
+            weight: firstCommodity.grossWeight?.weight,
+            nmfcClass: firstCommodity.nmfcClass,
+            desc: formattedDescription,
+          });
 
           setCommodities(prev => {
             const updated = [...prev];
@@ -422,8 +525,14 @@ export const XPOBOLForm = ({
             }
             return updated;
           });
+        } else {
+          console.warn('📋 Commodity not found in shipmentInfo');
         }
+      } else {
+        console.warn('📋 shipmentInfo not found in rateQuote. Available keys:', rateQuote ? Object.keys(rateQuote) : 'rateQuote is null');
       }
+    } else {
+      console.log('📋 XPOBOLForm: No quoteData provided');
     }
   }, [quoteData, subSKUs]);
 
@@ -1319,9 +1428,9 @@ export const XPOBOLForm = ({
         if (!hasShownEmailCompose.current) {
           setTimeout(() => {
             if (!showEmailCompose) {
-              // console.log('📧 Opening email compose modal');
-              // hasShownEmailCompose.current = true;
-              // setShowEmailCompose(true);
+              console.log('📧 Opening email compose modal');
+              hasShownEmailCompose.current = true;
+              setShowEmailCompose(true);
             } else {
               console.log('⚠️ Email modal already open, skipping duplicate');
             }
@@ -1419,34 +1528,28 @@ export const XPOBOLForm = ({
                 title="Pickup Location"
                 data={pickupLocation}
                 onDataChange={(updatedData) => {
-                  // Properly merge the update to preserve all fields
-                  setPickupLocation((prev) => {
-                    // If phone is explicitly in updatedData (even if empty), use it
-                    // Otherwise, preserve the previous phone value
-                    const phoneValue = 'phone' in updatedData
-                      ? (updatedData.phone || '')
-                      : (prev.phone || '');
-
-                    return {
-                      ...prev,
-                      ...updatedData,
-                      phone: phoneValue,
-                    };
-                  });
+                  // Directly set the updated data - LocationSection handles complete updates
+                  setPickupLocation(updatedData);
                 }}
                 onZipLookup={(zip) => lookupZipCode(zip, 'pickup')}
                 loadingZip={pickupLoadingZip}
-                addressBookOptions={XPO_SHIPPER_ADDRESS_BOOK.map(addr => ({
-                  value: `ammana-${addr.id}`,
-                  label: `${addr.name} - ${addr.state || ''} - ${addr.address || ''}`,
-                  company: addr.name,
-                  streetAddress: addr.address || '',
-                  city: addr.city || '',
-                  state: addr.state || '',
-                  zip: addr.zip || '',
-                  country: 'US',
-                  phone: addr.phone || '',
-                }))}
+                addressBookOptions={XPO_SHIPPER_ADDRESS_BOOK.map(addr => {
+                  // Parse the address string to extract components
+                  const parsed = parseAddressString(addr.address || '');
+                  return {
+                    value: `ammana-${addr.id}`,
+                    label: `${addr.name} - ${parsed.state || addr.state || ''} - ${addr.address || ''}`,
+                    company: addr.name,
+                    streetAddress: parsed.streetAddress,
+                    addressLine2: parsed.addressLine2,
+                    city: parsed.city || addr.city || '',
+                    state: parsed.state || addr.state || '',
+                    zip: parsed.zip || addr.zip || '',
+                    country: 'US',
+                    phone: addr.phone || '',
+                    extension: addr.extension || '',
+                  };
+                })}
               />
             </div>
           )}

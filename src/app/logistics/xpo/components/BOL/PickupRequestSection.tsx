@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect } from 'react';
-import { Calendar, Clock } from 'lucide-react';
 
 type PickupRequestSectionProps = {
   schedulePickup: boolean;
@@ -121,27 +120,24 @@ export const PickupRequestSection = ({
                 <label className="block text-sm font-semibold text-slate-900">
                   Pickup Date <span className="text-red-500">*</span>
                 </label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    value={displayDate}
-                    onChange={(e) => {
-                      const selectedDate = e.target.value;
-                      const today = getTodayDate();
-                      // Only allow today or future dates
-                      if (selectedDate >= today && onPickupDateChange) {
-                        onPickupDateChange(selectedDate);
-                      } else if (onPickupDateChange) {
-                        // If past date is selected, reset to today
-                        onPickupDateChange(today);
-                      }
-                    }}
-                    min={getTodayDate()}
-                    className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
-                    required
-                  />
-                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                </div>
+                <input
+                  type="date"
+                  value={displayDate}
+                  onChange={(e) => {
+                    const selectedDate = e.target.value;
+                    const today = getTodayDate();
+                    // Only allow today or future dates
+                    if (selectedDate >= today && onPickupDateChange) {
+                      onPickupDateChange(selectedDate);
+                    } else if (onPickupDateChange) {
+                      // If past date is selected, reset to today
+                      onPickupDateChange(today);
+                    }
+                  }}
+                  min={getTodayDate()}
+                  className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
               </div>
             )}
 
@@ -155,10 +151,9 @@ export const PickupRequestSection = ({
                     type="time"
                     value={pickupReadyTime}
                     onChange={(e) => onPickupReadyTimeChange(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                    className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   />
-                  <Clock className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
                 </div>
               </div>
             )}
@@ -173,10 +168,9 @@ export const PickupRequestSection = ({
                     type="time"
                     value={dockCloseTime}
                     onChange={(e) => onDockCloseTimeChange(e.target.value)}
-                    className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                    className="w-full px-4 py-2 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   />
-                  <Clock className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={18} />
                 </div>
               </div>
             )}
