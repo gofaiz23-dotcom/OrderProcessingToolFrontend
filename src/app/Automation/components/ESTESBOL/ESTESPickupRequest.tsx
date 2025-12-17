@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Send, Loader2, CheckCircle2, Plus, Trash2 } from 'lucide-react';
+import { Send, Loader2, CheckCircle2, Plus, Trash2, ChevronUp, ChevronDown, TrendingUp } from 'lucide-react';
 import { createEstesPickupRequest, type EstesPickupData } from '@/app/api/3plGigaFedexApi/estesPickupApi';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
