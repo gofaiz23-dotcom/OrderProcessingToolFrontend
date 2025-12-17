@@ -1,6 +1,114 @@
 import * as XLSX from 'xlsx';
 import type { Order } from '@/app/types/order';
 
+// Validation helper functions for Excel column constraints
+
+/**
+ * Check if value contains POBOX patterns (not allowed)
+ */
+const containsPOBOX = (value: string): boolean => {
+  const upperValue = value.toUpperCase();
+  const poBoxPatterns = ['POBOX', 'P.O.BOX', 'POSTBOX', 'POSTOFFICEBOX'];
+  return poBoxPatterns.some(pattern => upperValue.includes(pattern));
+};
+
+/**
+ * Check if value contains APO/FPO patterns (not allowed for Address2)
+ */
+const containsAPOFPO = (value: string): boolean => {
+  const upperValue = value.toUpperCase();
+  const apoFpoPatterns = ['APO', 'FPO', 'ARMYPOSTOFFICE', 'FLEETPOSTOFFICE'];
+  return apoFpoPatterns.some(pattern => upperValue.includes(pattern));
+};
+
+/**
+ * Truncate string to max length
+ */
+const truncateToMaxLength = (value: string, maxLength: number): string => {
+  if (value.length <= maxLength) return value;
+  return value.substring(0, maxLength);
+};
+
+/**
+ * Validate and format postal code (5 or 9 digits, extract first 5)
+ */
+const formatPostalCode = (value: string): string => {
+  // Remove all non-digit characters
+  const digits = value.replace(/\D/g, '');
+  // Must be 5 or 9 digits
+  if (digits.length === 5 || digits.length === 9) {
+    // Return first 5 digits as per requirement
+    return digits.substring(0, 5);
+  }
+  // If invalid, return empty (will fail required validation)
+  return '';
+};
+
+/**
+ * Validate state - must not be in unsupported list
+ */
+const isValidState = (value: string): boolean => {
+  const upperValue = value.toUpperCase().trim();
+  const unsupportedStates = ['AA', 'AE', 'AP', 'PR', 'AK', 'HI', 'GU', 'AS', 'MP', 'VI'];
+  return !unsupportedStates.includes(upperValue);
+};
+
+/**
+ * Format phone number according to EXT rules
+ * If EXT exists: remove country code, 10-15 digits before EXT, up to 6 digits after EXT
+ * Example: "987654321012345EXT123"
+ */
+const formatPhoneNumber = (value: string): string => {
+  if (!value || value.trim() === '') return '';
+  
+  const upperValue = value.toUpperCase();
+  const extIndex = upperValue.indexOf('EXT');
+  
+  if (extIndex !== -1) {
+    // Has EXT
+    const beforeExt = value.substring(0, extIndex).replace(/\D/g, ''); // Remove non-digits
+    const afterExt = value.substring(extIndex + 3).replace(/\D/g, ''); // Remove non-digits after EXT
+    
+    // Remove country code (assume +1 or 1 at start)
+    let cleanedBefore = beforeExt;
+    if (cleanedBefore.startsWith('1') && cleanedBefore.length > 10) {
+      cleanedBefore = cleanedBefore.substring(1);
+    }
+    
+    // Validate: 10-15 digits before EXT, up to 6 digits after EXT
+    if (cleanedBefore.length >= 10 && cleanedBefore.length <= 15 && afterExt.length <= 6) {
+      return `${cleanedBefore}EXT${afterExt}`;
+    }
+    // If validation fails, return cleaned version anyway (might still work)
+    return cleanedBefore.length >= 10 ? `${cleanedBefore}EXT${afterExt.substring(0, 6)}` : '';
+  } else {
+    // No EXT - just clean phone number (remove country code if present)
+    const digits = value.replace(/\D/g, '');
+    if (digits.startsWith('1') && digits.length > 10) {
+      return digits.substring(1);
+    }
+    // Ensure at least 10 digits for US phone number
+    return digits.length >= 10 ? digits : '';
+  }
+};
+
+/**
+ * Validate number with max value and decimal places
+ */
+const formatNumber = (value: string, maxValue: number, maxDecimals: number = 2): string => {
+  if (!value || value.trim() === '') return '';
+  
+  // Try to parse as number
+  const num = parseFloat(value);
+  if (isNaN(num)) return '';
+  
+  // Check max value
+  if (num > maxValue) return '';
+  
+  // Format to max decimal places
+  return num.toFixed(maxDecimals).replace(/\.?0+$/, ''); // Remove trailing zeros
+};
+
 // Helper function to extract value from JSONB with flexible key matching
 const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
   if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '';
@@ -48,6 +156,270 @@ const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
   }
   
   return '';
+};
+
+/**
+ * Preview data structure for Excel generation
+ */
+export interface ExcelPreviewData {
+  headers: string[];
+  rows: Array<Record<string, string>>;
+  totalRows: number;
+  lockedRows?: Array<Record<string, string>>; // Template rows 1-3 (locked headers)
+}
+
+/**
+ * Generate Excel file from JSON template and orders (for Parcel with SubSKUs)
+ * Uses JSON template with 3 header rows, fills data starting from row 4
+ * @param templatePath - Path to the JSON template file (public path, defaults to /3PL_TEMPLATE.json)
+ * @param orders - Array of orders to add to the Excel
+ * @param subSKUsMap - Map of order IDs to their SubSKU arrays
+ * @returns Object containing blob and preview data
+ */
+export const generateExcelFromTemplateForParcel = async (
+  templatePath: string = '/3PL_TEMPLATE.json',
+  orders: Order[],
+  subSKUsMap: Record<number, string[]>
+): Promise<{ blob: Blob; preview: ExcelPreviewData }> => {
+  try {
+    // Fetch the JSON template file
+    const response = await fetch(templatePath);
+    if (!response.ok) {
+      throw new Error(`Failed to load template: ${response.statusText}`);
+    }
+
+    const templateData: string[][] = await response.json();
+    
+    if (!Array.isArray(templateData) || templateData.length < 3) {
+      throw new Error('Invalid template format: Expected array with at least 3 rows');
+    }
+
+    // Extract headers from row 2 (index 1) - column headers
+    const headers: string[] = templateData[1] || [];
+    
+    if (headers.length === 0) {
+      throw new Error('Template has no column headers');
+    }
+
+    // Constants
+    const SHIPPING_WAREHOUSE = 'G108-CA-91789'; // Required - must be filled
+    const COUNTRY = 'US'; // Required - only supports "US"
+
+    // Debug: Log headers to help diagnose mapping issues (only in development)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Using JSON Template Headers:', headers);
+    }
+
+    // Map orders to rows - one row per SubSKU
+    // Each SubSKU creates a separate row/item with the same order data
+    const dataRows: string[][] = [];
+    const previewRows: Array<Record<string, string>> = [];
+
+    orders.forEach((order) => {
+      const subSKUs = subSKUsMap[order.id] || [];
+      
+      // Debug: Log order data to help diagnose mapping issues (only in development)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Order data for mapping:', {
+          orderId: order.id,
+          orderOnMarketPlace: order.orderOnMarketPlace,
+          jsonbKeys: order.jsonb ? Object.keys(order.jsonb as Record<string, unknown>) : [],
+          subSKUs,
+        });
+      }
+      
+      // If no SubSKUs, create one row with empty SubSKU
+      const subSKUsToProcess = subSKUs.length > 0 ? subSKUs : [''];
+
+      // Create one row per SubSKU - each row has the same order data but different SubSKU
+      subSKUsToProcess.forEach((subSKU) => {
+        const row: string[] = [];
+        const previewRow: Record<string, string> = {};
+        
+        // Extract order fields
+        const customerName = getJsonbValue(order.jsonb, 'Customer Name') || '';
+        const shippingAddress = getJsonbValue(order.jsonb, 'Customer Shipping Address') ||
+                              getJsonbValue(order.jsonb, 'Shipping Address') ||
+                              getJsonbValue(order.jsonb, 'Ship to Address 1') ||
+                              getJsonbValue(order.jsonb, 'Address') || '';
+        const address2 = getJsonbValue(order.jsonb, 'Address Line 2') || 
+                        getJsonbValue(order.jsonb, 'Address2') || 
+                        getJsonbValue(order.jsonb, 'Address Line2') || '';
+        const zip = getJsonbValue(order.jsonb, 'Zip') || '';
+        const city = getJsonbValue(order.jsonb, 'City') || '';
+        const state = getJsonbValue(order.jsonb, 'State') || '';
+        const customerPhone = getJsonbValue(order.jsonb, 'Customer Phone Number') ||
+                            getJsonbValue(order.jsonb, 'Customer Phone') ||
+                            getJsonbValue(order.jsonb, 'Phone') || '';
+        const weight = getJsonbValue(order.jsonb, 'Weight') || 
+                      getJsonbValue(order.jsonb, 'Item Weight') || '';
+        const length = getJsonbValue(order.jsonb, 'Length') || 
+                      getJsonbValue(order.jsonb, 'Item Length') || '';
+        const width = getJsonbValue(order.jsonb, 'Width') || 
+                     getJsonbValue(order.jsonb, 'Item Width') || '';
+        const height = getJsonbValue(order.jsonb, 'Height') || 
+                      getJsonbValue(order.jsonb, 'Item Height') || '';
+        const poNumber = getJsonbValue(order.jsonb, 'PO#') || '';
+        const invoiceNo = getJsonbValue(order.jsonb, 'Invoice No') || 
+                         getJsonbValue(order.jsonb, 'Invoice Number') || '';
+        const departmentNo = getJsonbValue(order.jsonb, 'Department') || 
+                            getJsonbValue(order.jsonb, 'Department No.') || '';
+        
+        // Process each column based on header
+        headers.forEach((header, colIndex) => {
+          const headerLower = header.toLowerCase().trim();
+          let value = '';
+
+          // Map based on header name and column index
+          switch (colIndex) {
+            case 0: // Shipping Warehouse
+              value = SHIPPING_WAREHOUSE;
+              break;
+            case 1: // Company
+              value = '';
+              break;
+            case 2: // Contact Name
+              value = customerName || '';
+              if (containsPOBOX(value)) {
+                value = value.replace(/POBOX|P\.O\.BOX|POSTBOX|POSTOFFICEBOX/gi, '').trim();
+              }
+              value = truncateToMaxLength(value, 35);
+              break;
+            case 3: // Address 1
+              value = shippingAddress || '';
+              if (containsPOBOX(value)) {
+                value = value.replace(/POBOX|P\.O\.BOX|POSTBOX|POSTOFFICEBOX/gi, '').trim();
+              }
+              value = truncateToMaxLength(value, 35);
+              break;
+            case 4: // Address 2
+              value = address2 || '';
+              if (containsPOBOX(value) || containsAPOFPO(value)) {
+                value = value.replace(/POBOX|P\.O\.BOX|POSTBOX|POSTOFFICEBOX|APO|FPO|ARMYPOSTOFFICE|FLEETPOSTOFFICE/gi, '').trim();
+              }
+              value = truncateToMaxLength(value, 35);
+              break;
+            case 5: // ZIP
+              value = formatPostalCode(zip);
+              break;
+            case 6: // City
+              value = city || '';
+              if (containsPOBOX(value) || containsAPOFPO(value)) {
+                value = value.replace(/POBOX|P\.O\.BOX|POSTBOX|POSTOFFICEBOX|APO|FPO|ARMYPOSTOFFICE|FLEETPOSTOFFICE/gi, '').trim();
+              }
+              value = truncateToMaxLength(value, 35);
+              break;
+            case 7: // State
+              value = state || '';
+              if (!isValidState(value)) {
+                value = '';
+              }
+              break;
+            case 8: // Country/Territory
+              value = COUNTRY;
+              break;
+            case 9: // Phone No.
+              value = formatPhoneNumber(customerPhone);
+              break;
+            case 10: // Weight(lb)
+              value = formatNumber(weight, 149, 2);
+              break;
+            case 11: // Length(in)
+              value = formatNumber(length, 107, 2);
+              break;
+            case 12: // Width(in)
+              value = formatNumber(width, 107, 2);
+              break;
+            case 13: // Height(in)
+              value = formatNumber(height, 107, 2);
+              break;
+            case 14: // Your Reference
+              value = subSKU || '';
+              value = truncateToMaxLength(value, 35);
+              break;
+            case 15: // P.O. No.
+              value = poNumber || '';
+              value = truncateToMaxLength(value, 30);
+              break;
+            case 16: // Invoice No.
+              value = invoiceNo || '';
+              value = truncateToMaxLength(value, 30);
+              break;
+            case 17: // Department No.
+              value = departmentNo || '';
+              value = truncateToMaxLength(value, 30);
+              break;
+            case 18: // Declared Value(USD)
+              value = '';
+              break;
+            case 19: // Signature
+              value = '';
+              break;
+            case 20: // Service Type
+              value = '';
+              break;
+            case 21: // Default Return Address
+              value = '';
+              break;
+            default:
+              value = '';
+          }
+
+          row.push(value);
+          previewRow[header] = value;
+        });
+
+        dataRows.push(row);
+        previewRows.push(previewRow);
+      });
+    });
+
+    // Combine template rows (1-3) with data rows (4+)
+    const allData: string[][] = [
+      ...templateData, // Rows 1-3: Section headers, Column headers, Requirements
+      ...dataRows,     // Rows 4+: Data rows
+    ];
+
+    // Create worksheet from all data
+    const worksheet = XLSX.utils.aoa_to_sheet(allData);
+
+    // Create workbook
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+
+    // Generate Excel file as blob
+    const excelBuffer = XLSX.write(workbook, { 
+      type: 'array', 
+      bookType: 'xlsx',
+    });
+
+    const blob = new Blob([excelBuffer], { 
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+    });
+
+    // Prepare preview data with locked rows
+    const lockedRowsPreview: Array<Record<string, string>> = [];
+    templateData.forEach((templateRow, rowIndex) => {
+      const previewRow: Record<string, string> = {};
+      headers.forEach((header, colIndex) => {
+        previewRow[header] = templateRow[colIndex] || '';
+      });
+      lockedRowsPreview.push(previewRow);
+    });
+
+    return {
+      blob,
+      preview: {
+        headers,
+        rows: previewRows,
+        totalRows: previewRows.length,
+        lockedRows: lockedRowsPreview,
+      },
+    };
+  } catch (error) {
+    console.error('Error generating Excel file:', error);
+    throw new Error(`Failed to generate Excel file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
 };
 
 /**

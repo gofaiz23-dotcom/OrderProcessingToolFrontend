@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, FileText, Download, Copy, ChevronDown, ChevronUp, Loader2, Send, Eye, X, Upload } from 'lucide-react';
 import { createLogisticsShippedOrder } from '@/app/api/LogisticsApi/LogisticsShippedOrders';
 import { Toast } from '@/app/components/shared/Toast';
@@ -30,8 +30,6 @@ export const ResponseSummary = ({
   bolResponseJsonb,
   pickupResponseJsonb,
   files: initialFiles,
-  pdfUrl,
-  onDownloadPDF,
   orderId,
   onSubmitSuccess,
   onFilesChange,
@@ -135,19 +133,21 @@ export const ResponseSummary = ({
         
         // Try different possible field names for SKU
         if (!sku) {
-          sku = (ordersJsonb as any)?.SKU || 
-                (ordersJsonb as any)?.sku || 
-                (ordersJsonb as any)?.Sku ||
-                (ordersJsonb as any)?.orderId ||
+          const jsonb = ordersJsonb as Record<string, unknown>;
+          sku = (jsonb?.SKU as string) || 
+                (jsonb?.sku as string) || 
+                (jsonb?.Sku as string) ||
+                (jsonb?.orderId as string) ||
                 '';
         }
         
         // Try different possible field names for marketplace
         if (!orderOnMarketPlace) {
-          orderOnMarketPlace = (ordersJsonb as any)?.orderOnMarketPlace ||
-                               (ordersJsonb as any)?.marketplace ||
-                               (ordersJsonb as any)?.Marketplace ||
-                               (ordersJsonb as any)?.marketPlace ||
+          const jsonb = ordersJsonb as Record<string, unknown>;
+          orderOnMarketPlace = (jsonb?.orderOnMarketPlace as string) ||
+                               (jsonb?.marketplace as string) ||
+                               (jsonb?.Marketplace as string) ||
+                               (jsonb?.marketPlace as string) ||
                                '';
         }
       }
@@ -174,49 +174,18 @@ export const ResponseSummary = ({
         orderOnMarketPlace: orderOnMarketPlaceStr,
         ordersJsonb: orderData?.ordersJsonb || {},
         ...(hasRateQuotesRequest && { rateQuotesRequestJsonb: rateQuotesRequestJsonb }),
-        rateQuotesResponseJsonb: rateQuotesResponseJsonb,
-        bolResponseJsonb: bolResponseJsonb,
-        pickupResponseJsonb: pickupResponseJsonb,
+        ...(rateQuotesResponseJsonb && { rateQuotesResponseJsonb: rateQuotesResponseJsonb }),
+        ...(bolResponseJsonb && { bolResponseJsonb: bolResponseJsonb }),
+        ...(pickupResponseJsonb && { pickupResponseJsonb: pickupResponseJsonb }),
         files: files || [],
       };
 
-      // Debug: Log payload structure in development
-      if (process.env.NODE_ENV === 'development') {
-        console.log('ResponseSummary - Submitting payload:', {
-          sku: payload.sku,
-          orderOnMarketPlace: payload.orderOnMarketPlace,
-          hasRateQuotesRequestJsonb: !!payload.rateQuotesRequestJsonb,
-          rateQuotesRequestJsonbValue: payload.rateQuotesRequestJsonb,
-          rateQuotesRequestJsonbType: typeof payload.rateQuotesRequestJsonb,
-          rateQuotesRequestJsonbKeys: payload.rateQuotesRequestJsonb && typeof payload.rateQuotesRequestJsonb === 'object' 
-            ? Object.keys(payload.rateQuotesRequestJsonb) 
-            : [],
-          shippingCompany: payload.rateQuotesRequestJsonb && typeof payload.rateQuotesRequestJsonb === 'object' 
-            ? (payload.rateQuotesRequestJsonb as any)?.shippingCompany 
-            : 'N/A',
-          hasRateQuotesResponseJsonb: !!payload.rateQuotesResponseJsonb,
-          hasBolResponseJsonb: !!payload.bolResponseJsonb,
-          hasPickupResponseJsonb: !!payload.pickupResponseJsonb,
-          filesCount: payload.files?.length || 0,
-        });
-        console.log('ResponseSummary - Original rateQuotesRequestJsonb prop:', {
-          value: rateQuotesRequestJsonb,
-          type: typeof rateQuotesRequestJsonb,
-          isObject: typeof rateQuotesRequestJsonb === 'object',
-          keys: rateQuotesRequestJsonb && typeof rateQuotesRequestJsonb === 'object' 
-            ? Object.keys(rateQuotesRequestJsonb) 
-            : 'N/A',
-        });
-      }
-
-      // Step 1: Save to database first
+      // Save to database
       const response = await createLogisticsShippedOrder(payload);
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Order saved to database successfully:', response);
-      }
 
       // Store rateQuotesRequestJsonb in localStorage for later retrieval (frontend workaround)
       // Key format: rateQuotesRequestJsonb_{orderId} or rateQuotesRequestJsonb_{sku}
+      // Use original SKU (not unique SKU) for localStorage keys
       if (hasRateQuotesRequest && rateQuotesRequestJsonb) {
         try {
           const orderId = response?.data?.id;
@@ -225,7 +194,7 @@ export const ResponseSummary = ({
             : `rateQuotesRequestJsonb_${skuStr}_${Date.now()}`;
           localStorage.setItem(storageKey, JSON.stringify(rateQuotesRequestJsonb));
           
-          // Also store with SKU as key for fallback lookup
+          // Also store with original SKU as key for fallback lookup
           if (skuStr) {
             localStorage.setItem(`rateQuotesRequestJsonb_sku_${skuStr}`, JSON.stringify(rateQuotesRequestJsonb));
           }
@@ -273,7 +242,7 @@ export const ResponseSummary = ({
     <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6 pb-4 sm:pb-8 px-3 sm:px-0">
       <div className="bg-white rounded-lg border border-slate-200 p-3 sm:p-4 lg:p-6">
         <div className="flex items-center gap-3 mb-4 sm:mb-6">
-          <div className="p-2 bg-green-100 rounded-lg flex-shrink-0">
+          <div className="p-2 bg-green-100 rounded-lg shrink-0">
             <CheckCircle2 className="text-green-600 sm:w-6 sm:h-6" size={20} />
           </div>
           <div className="flex-1">
@@ -705,17 +674,19 @@ export const ResponseSummary = ({
                 if (!sku || !orderOnMarketPlace) {
                   const ordersJsonb = orderData?.ordersJsonb || {};
                   if (!sku) {
-                    sku = (ordersJsonb as any)?.SKU || 
-                          (ordersJsonb as any)?.sku || 
-                          (ordersJsonb as any)?.Sku ||
-                          (ordersJsonb as any)?.orderId ||
+                    const jsonb = ordersJsonb as Record<string, unknown>;
+                    sku = (jsonb?.SKU as string) || 
+                          (jsonb?.sku as string) || 
+                          (jsonb?.Sku as string) ||
+                          (jsonb?.orderId as string) ||
                           '';
                   }
                   if (!orderOnMarketPlace) {
-                    orderOnMarketPlace = (ordersJsonb as any)?.orderOnMarketPlace ||
-                                         (ordersJsonb as any)?.marketplace ||
-                                         (ordersJsonb as any)?.Marketplace ||
-                                         (ordersJsonb as any)?.marketPlace ||
+                    const jsonb = ordersJsonb as Record<string, unknown>;
+                    orderOnMarketPlace = (jsonb?.orderOnMarketPlace as string) ||
+                                         (jsonb?.marketplace as string) ||
+                                         (jsonb?.Marketplace as string) ||
+                                         (jsonb?.marketPlace as string) ||
                                          '';
                   }
                 }

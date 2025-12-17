@@ -34,22 +34,22 @@ export const createSKULookupMap = async (): Promise<Map<string, SKULookupData>> 
         let shippingType: string | null = order.shippingType || null;
         
         if (!shippingType && order.ordersJsonb && typeof order.ordersJsonb === 'object') {
-          const ordersData = order.ordersJsonb as any;
-          shippingType = ordersData?.shiptypes || 
+          const ordersData = order.ordersJsonb as Record<string, unknown>;
+          const shiptypesValue = ordersData?.shiptypes || 
                         ordersData?.shippingType || 
                         ordersData?.ShippingType ||
                         ordersData?.shipType ||
-                        ordersData?.ShipType ||
-                        null;
+                        ordersData?.ShipType;
+          shippingType = typeof shiptypesValue === 'string' ? shiptypesValue : null;
         }
         
         // Get subSKUs - try direct field first, then ordersJsonb
         let subSKUs: string[] = [];
         
         if (order.subSKUs && Array.isArray(order.subSKUs) && order.subSKUs.length > 0) {
-          subSKUs = order.subSKUs;
+          subSKUs = order.subSKUs.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
         } else if (order.ordersJsonb && typeof order.ordersJsonb === 'object') {
-          const ordersData = order.ordersJsonb as any;
+          const ordersData = order.ordersJsonb as Record<string, unknown>;
           const subSKUsValue = ordersData?.subSKUs || 
                               ordersData?.subSKU || 
                               ordersData?.SubSKUs ||
@@ -57,7 +57,7 @@ export const createSKULookupMap = async (): Promise<Map<string, SKULookupData>> 
           
           // Handle both array and string formats
           if (Array.isArray(subSKUsValue)) {
-            subSKUs = subSKUsValue;
+            subSKUs = subSKUsValue.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
           } else if (typeof subSKUsValue === 'string' && subSKUsValue.trim()) {
             // If it's a string, try to split by comma or use as single value
             subSKUs = subSKUsValue.split(',').map(s => s.trim()).filter(s => s.length > 0);
@@ -72,7 +72,7 @@ export const createSKULookupMap = async (): Promise<Map<string, SKULookupData>> 
         // Extract Order# from ordersJsonb
         let orderNumber: string | undefined = undefined;
         if (order.ordersJsonb && typeof order.ordersJsonb === 'object') {
-          const ordersData = order.ordersJsonb as any;
+          const ordersData = order.ordersJsonb as Record<string, unknown>;
           const orderNum = ordersData['Order#'] || 
                           ordersData['Order Number'] || 
                           ordersData['orderNumber'] ||
