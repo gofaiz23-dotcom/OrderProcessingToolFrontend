@@ -82,7 +82,7 @@ export const ParcelModal = ({ isOpen, onClose, orders, subSKUsMap, initialExcelB
         );
         setFile(generatedFile);
         setExcelBlob(initialExcelBlob);
-        setExcelPreviewData(initialExcelPreviewData);
+        setExcelPreviewData(initialExcelPreviewData ?? null);
         
         // Set the file in the file input element
         if (fileInputRef.current) {
