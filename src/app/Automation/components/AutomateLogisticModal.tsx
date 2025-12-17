@@ -815,10 +815,13 @@ export const AutomateLogisticModal = ({
     }
   }, [orders, shippingTypes, subSKUs]);
 
-  // Check if ALL selected orders have SubSKUs (required for preview)
-  const hasParcelOrdersReady = orders.length > 0 && orders.every(order => 
-    (subSKUs[order.id]?.length || 0) > 0
-  );
+  // Check if ALL selected orders are Parcel (not LTL) and have SubSKUs (required for preview)
+  const hasParcelOrdersReady = orders.length > 0 && 
+    orders.every(order => 
+      shippingTypes[order.id] === 'Parcel' && 
+      (subSKUs[order.id]?.length || 0) > 0
+    ) &&
+    !orders.some(order => shippingTypes[order.id] === 'LTL');
 
   // Handle Escape key to close modal
   useEffect(() => {
@@ -1170,6 +1173,12 @@ export const AutomateLogisticModal = ({
                                 ...prev,
                                 [order.id]: false,
                               }));
+                              
+                              // Open LTL Rate Quote Modal if order has SubSKUs
+                              if (subSKUs[order.id] && subSKUs[order.id].length > 0) {
+                                setSelectedOrderForLTL(order);
+                                setLtlModalOpen(true);
+                              }
                             }}
                             className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${shippingTypes[order.id] === 'LTL' ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
                               }`}
