@@ -118,29 +118,6 @@ export const getFormattedBOLFilename = (
 };
 
 /**
- * Pickup Scheduled Email Body
- */
-const getPickupScheduledEmailBody = (
-  carrier: Carrier,
-  orderId: number,
-  orderNumber?: string,
-  sku?: string
-): string => {
-  const orderRef = orderNumber || `Order ${orderId}`;
-  const skuInfo = sku ? `\nSKU: ${sku}` : '';
-  const carrierName = carrier === 'estes' ? 'Estes Express' : 'XPO Logistics';
-  
-  return `Pickup has been scheduled for ${orderRef}.${skuInfo}
-
-Carrier: ${carrierName}
-Order ID: ${orderId}
-
-Please proceed with the pickup as scheduled.
-
-Thank You.`;
-};
-
-/**
  * EMAIL TEMPLATES (Pickup BODY REMOVED)
  */
 export const EMAIL_TEMPLATES = {
@@ -175,13 +152,14 @@ export const EMAIL_TEMPLATES = {
  * Pickup Scheduled Email Body
  */
 export const getPickupScheduledEmailBody = (
-  carrier: string,
+  carrier: Carrier | string,
   orderId: number,
   orderNumber?: string,
   sku?: string
 ): string => {
   const orderRef = orderNumber || `Order ${orderId}`;
-  const carrierName = carrier.toLowerCase() === 'estes' ? 'Estes Express' : 'XPO Logistics';
+  const carrierLower = typeof carrier === 'string' ? carrier.toLowerCase() : carrier;
+  const carrierName = carrierLower === 'estes' ? 'Estes Express' : 'XPO Logistics';
 
   return `Team,
 
