@@ -1115,7 +1115,7 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                   </div>
                   </div>
                 </>
-              )}
+              ) : null}
               <button
                 type="submit"
                 disabled={loading}
