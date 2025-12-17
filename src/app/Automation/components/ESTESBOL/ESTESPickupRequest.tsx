@@ -1086,7 +1086,6 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                     <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">
                       {pickupStatus?.status?.toUpperCase() || 'INITIALIZING'}
                     </div>
-                  </div>
 
                   {/* Progress Bar */}
                   <div className="space-y-2">
