@@ -8,6 +8,49 @@ import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/a
 import type { Order } from '@/app/types/order';
 import { dispatchPickupData } from '../../utils/ltlOrderCache';
 
+// Helper function to extract value from JSONB
+const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
+  if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '';
+  const obj = jsonb as Record<string, unknown>;
+  
+  const normalizedKey = key.trim();
+  const keyWithoutHash = normalizedKey.replace(/#/g, '');
+  const keyLower = normalizedKey.toLowerCase();
+  const keyWithoutHashLower = keyWithoutHash.toLowerCase();
+  
+  const keysToTry = [
+    normalizedKey,
+    keyWithoutHash,
+    `#${keyWithoutHash}`,
+    keyLower,
+    keyWithoutHashLower,
+    `#${keyWithoutHashLower}`,
+  ];
+  
+  for (const k of keysToTry) {
+    if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') {
+      return String(obj[k]);
+    }
+  }
+  
+  const allKeys = Object.keys(obj);
+  for (const objKey of allKeys) {
+    const objKeyLower = objKey.toLowerCase();
+    if (
+      objKeyLower === keyLower ||
+      objKeyLower === keyWithoutHashLower ||
+      objKeyLower.includes(keyWithoutHashLower)
+    ) {
+      const value = obj[objKey];
+      if (value !== undefined && value !== null && value !== '') {
+        return String(value);
+      }
+    }
+  }
+  
+  return '';
+};
+
 type Shipment = {
   id: string;
   type: string;
