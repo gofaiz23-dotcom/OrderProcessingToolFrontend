@@ -178,9 +178,9 @@ export const ResponseSummary = ({
         orderOnMarketPlace: orderOnMarketPlaceStr,
         ordersJsonb: orderData?.ordersJsonb || {},
         ...(hasRateQuotesRequest && { rateQuotesRequestJsonb: rateQuotesRequestJsonb }),
-        rateQuotesResponseJsonb: rateQuotesResponseJsonb,
-        bolResponseJsonb: bolResponseJsonb,
-        pickupResponseJsonb: pickupResponseJsonb,
+        ...(rateQuotesResponseJsonb && { rateQuotesResponseJsonb: rateQuotesResponseJsonb }),
+        ...(bolResponseJsonb && { bolResponseJsonb: bolResponseJsonb }),
+        ...(pickupResponseJsonb && { pickupResponseJsonb: pickupResponseJsonb }),
         files: files || [],
       };
 
@@ -192,6 +192,7 @@ export const ResponseSummary = ({
 
       // Store rateQuotesRequestJsonb in localStorage for later retrieval (frontend workaround)
       // Key format: rateQuotesRequestJsonb_{orderId} or rateQuotesRequestJsonb_{sku}
+      // Use original SKU (not unique SKU) for localStorage keys
       if (hasRateQuotesRequest && rateQuotesRequestJsonb) {
         try {
           const orderId = response?.data?.id;
@@ -200,7 +201,7 @@ export const ResponseSummary = ({
             : `rateQuotesRequestJsonb_${skuStr}_${Date.now()}`;
           localStorage.setItem(storageKey, JSON.stringify(rateQuotesRequestJsonb));
           
-          // Also store with SKU as key for fallback lookup
+          // Also store with original SKU as key for fallback lookup
           if (skuStr) {
             localStorage.setItem(`rateQuotesRequestJsonb_sku_${skuStr}`, JSON.stringify(rateQuotesRequestJsonb));
           }
