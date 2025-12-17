@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { Send, Loader2, CheckCircle2, Plus, Trash2, ChevronUp, ChevronDown, TrendingUp } from 'lucide-react';
-import { createEstesPickupRequest, type EstesPickupData } from '@/app/api/3plGigaFedexApi/estesPickupApi';
+import { createEstesPickupRequest, getAllEstesPickupStatus, type EstesPickupData, type EstesPickupStatusItem } from '@/app/api/3plGigaFedexApi/estesPickupApi';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 import type { Order } from '@/app/types/order';
 import { dispatchPickupData } from '../../utils/ltlOrderCache';
+import { logger } from '@/utils/logger';
 
 // Helper function to extract value from JSONB
 const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
@@ -246,7 +247,7 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
             }
           }
         } catch (err) {
-          console.error('Error fetching automation status:', err);
+          logger.error('Error fetching automation status:', err);
         }
       };
 
@@ -428,7 +429,7 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                   response,
                 },
               });
-              console.log('✅ Updated existing order with pickup response');
+              logger.log('Updated existing order with pickup response');
             } else {
               // Create new order with pickup response
               await createShippedOrder({
@@ -441,11 +442,11 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                   response,
                 },
               });
-              console.log('✅ Created new order with pickup response');
+              logger.log('Created new order with pickup response');
             }
           }
         } catch (saveError) {
-          console.error('⚠️ Failed to save pickup response to database:', saveError);
+          logger.error('Failed to save pickup response to database:', saveError);
           // Don't throw error - pickup request was successful, just log the save error
         }
         // Dispatch pickup data to cache - this will trigger final DB save in AutomateLogisticModal
@@ -455,7 +456,7 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
           response,
           carrier: 'estes', // Explicitly set carrier
         });
-        console.log('✅ Pickup data cached and will trigger final DB save with all cached data');
+        logger.log('Pickup data cached and will trigger final DB save with all cached data');
       }
 
       if (onSuccess) {
