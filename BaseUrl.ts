@@ -1,5 +1,6 @@
-// const DEFAULT_API_BASE_URL = 'http://localhost:5000/api/v1';
-const DEFAULT_API_BASE_URL = 'http://192.168.0.100:5000/api/v1';
+// const DEFAULT_API_BASE_URL = 'https://orderprocessingtoolbackend.onrender.com/api/v1';
+const DEFAULT_API_BASE_URL = 'http://localhost:5000/api/v1';
+// const DEFAULT_API_BASE_URL = 'http://192.168.0.100:5000/api/v1';
 // const DEFAULT_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://192.168.0.23:5000/api/v1' || 'http://localhost:5000/api/v1';
 
 const isDevelopment = process.env.NODE_ENV === 'development';
@@ -74,7 +75,7 @@ export const buildFileUrl = (filePath: string) => {
     }
     return url;
   }
-  
+ 
   // If filePath starts with 'uploads/', replace with uploadPath
   if (cleanFilePath.startsWith('uploads/')) {
     cleanFilePath = cleanFilePath.replace(/^uploads\//, '');
@@ -84,7 +85,7 @@ export const buildFileUrl = (filePath: string) => {
     }
     return url;
   }
-  
+ 
   // Otherwise, prepend upload path
   const cleanUploadPath = uploadPath.replace(/\/$/, '');
   const url = `${backendUrl}/${cleanUploadPath}/${cleanFilePath}`;
@@ -95,3 +96,5 @@ export const buildFileUrl = (filePath: string) => {
 };
 
 export default API_BASE_URL;
+
+
