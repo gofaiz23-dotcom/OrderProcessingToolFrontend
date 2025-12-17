@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Trash2, Edit, Info, ChevronLeft, ChevronRight, Calendar, PackageSearch, FileText, Loader2, X, Truck } from 'lucide-react';
+import { Search, Trash2, Edit, Info, ChevronLeft, ChevronRight, Calendar, PackageSearch, FileText, Loader2, X, Truck, Mail } from 'lucide-react';
 import { buildFileUrl, getBackendBaseUrl } from '../../../../BaseUrl';
 import type { ShippedOrder } from '../utils/shippedOrdersApi';
 import type { PaginationMeta } from '@/app/types/order';
@@ -12,6 +12,8 @@ import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { DateRangeDeleteModal } from './DateRangeDeleteModal';
 import { GetStatusModal } from './GetStatusModal';
 import { DateFilter } from '@/app/components/shared/DateFilter';
+import { EmailComposeModal } from '@/app/Automation/components/EmailComposeModal';
+import { EMAIL_TEMPLATES } from '@/app/Automation/constants/emailTemplates';
 
 type DateFilterOption = 'all' | 'today' | 'thisWeek' | 'specificDate' | 'custom';
 
@@ -84,6 +86,14 @@ export const ProcessedOrdersList = ({
   const [getStatusModalOpen, setGetStatusModalOpen] = useState(false);
   const [selectedOrderForStatus, setSelectedOrderForStatus] = useState<ShippedOrder | null>(null);
   const [previewFile, setPreviewFile] = useState<{ url: string; filename: string; isPDF: boolean } | null>(null);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [selectedOrderForEmail, setSelectedOrderForEmail] = useState<ShippedOrder | null>(null);
+  const [selectedOrdersForEmail, setSelectedOrdersForEmail] = useState<ShippedOrder[]>([]);
+  const [emailAttachments, setEmailAttachments] = useState<File[]>([]);
+  const [emailTo, setEmailTo] = useState<string>('');
+  const [emailCc, setEmailCc] = useState<string>('');
+  const [emailSubject, setEmailSubject] = useState<string>('');
+  const [emailBody, setEmailBody] = useState<string>('');
 
   // Close logistics dropdown when clicking outside
   useEffect(() => {
@@ -514,6 +524,186 @@ export const ProcessedOrdersList = ({
     return totalSize > 0 ? totalSize : null;
   };
 
+  // Download BOL PDF files from order uploads
+  const downloadBOLFiles = async (order: ShippedOrder): Promise<File[]> => {
+    if (!order.uploads || order.uploads.length === 0) {
+      return [];
+    }
+
+    const backendUrl = getBackendBaseUrl();
+    const files: File[] = [];
+
+    for (const upload of order.uploads) {
+      const isString = typeof upload === 'string';
+      const filePath = isString ? upload : (upload.path || upload.filename || '');
+      const filename = isString
+        ? filePath.split('/').pop() || filePath
+        : (upload.filename || filePath.split('/').pop() || 'Unknown');
+      
+      // Only download PDF files (BOL files are typically PDFs)
+      const mimetype = isString ? 'application/octet-stream' : (upload.mimetype || 'application/octet-stream');
+      const isPDF = mimetype === 'application/pdf' || filename.toLowerCase().endsWith('.pdf');
+      
+      if (isPDF) {
+        try {
+          const cleanFilename = filename.split('/').pop() || filename.split('\\').pop() || filename;
+          const fileUrl = `${backendUrl}/FhsOrdersMedia/ShippingDocuments/${cleanFilename}`;
+          
+          const response = await fetch(fileUrl);
+          if (!response.ok) {
+            console.warn(`Failed to download file: ${filename}`, response.statusText);
+            continue;
+          }
+          
+          const blob = await response.blob();
+          const file = new File([blob], filename, { type: 'application/pdf' });
+          files.push(file);
+        } catch (error) {
+          console.error(`Error downloading file ${filename}:`, error);
+        }
+      }
+    }
+
+    return files;
+  };
+
+  // Determine which email template to use based on order type and carrier
+  const getEmailTemplate = (order: ShippedOrder) => {
+    const shippingType = order.shippingType || 
+      (order.ordersJsonb && typeof order.ordersJsonb === 'object' 
+        ? (order.ordersJsonb as any)?.shippingType || (order.ordersJsonb as any)?.shiptypes
+        : null);
+    
+    const logisticsCompany = getLogisticsCompany(order);
+    
+    // If Parcel, use PROCESSED_PARCEL template
+    if (shippingType === 'Parcel' || shippingType?.toLowerCase() === 'parcel') {
+      return EMAIL_TEMPLATES.PROCESSED_PARCEL;
+    }
+    
+    // If LTL with Estes, use PROCESSED_ESTES template
+    if (logisticsCompany === 'Estes') {
+      return EMAIL_TEMPLATES.PROCESSED_ESTES;
+    }
+    
+    // If LTL with XPO, use PROCESSED_XPO template
+    if (logisticsCompany === 'XPO') {
+      return EMAIL_TEMPLATES.PROCESSED_XPO;
+    }
+    
+    // Default to PROCESSED_PARCEL if we can't determine
+    return EMAIL_TEMPLATES.PROCESSED_PARCEL;
+  };
+
+  // Helper function to extract JSONB value
+  const getJsonbValue = (jsonb: Record<string, unknown>, key: string): string => {
+    if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '';
+    const normalizedKey = key.trim().toLowerCase();
+    for (const k of Object.keys(jsonb)) {
+      if (k.toLowerCase() === normalizedKey || k.toLowerCase().includes(normalizedKey)) {
+        const value = jsonb[k];
+        if (value !== undefined && value !== null && value !== '') {
+          return String(value);
+        }
+      }
+    }
+    return '';
+  };
+
+  // Handle email button click
+  const handleEmailClick = async () => {
+    if (selectedOrderIds.size === 0) {
+      alert('Please select at least one order to send an email.');
+      return;
+    }
+
+    const selectedOrderIdsArray = Array.from(selectedOrderIds);
+    const selectedOrders = displayOrders.filter(order => selectedOrderIdsArray.includes(order.id));
+    
+    if (selectedOrders.length === 0) {
+      alert('Selected orders not found.');
+      return;
+    }
+
+    try {
+      let allBolFiles: File[] = [];
+      let subject = '';
+      let body = '';
+      let toEmails: string[] = [];
+      let ccEmails: string[] = [];
+
+      // If multiple orders, use PROCESSED_MULTIPLE template
+      if (selectedOrders.length > 1) {
+        // Download BOL files from all orders
+        for (const order of selectedOrders) {
+          const bolFiles = await downloadBOLFiles(order);
+          allBolFiles = [...allBolFiles, ...bolFiles];
+        }
+
+        // Prepare order data for multiple orders template
+        const ordersData = selectedOrders.map(order => {
+          const orderJsonb = order.ordersJsonb || {};
+          const customerName = getJsonbValue(orderJsonb, 'Customer Name') || 'Customer';
+          const orderNumber = getJsonbValue(orderJsonb, 'Order Number') || 
+            getJsonbValue(orderJsonb, 'PO#') || 
+            getJsonbValue(orderJsonb, 'PO Number') || 
+            String(order.id);
+          const subSKUs = order.subSKUs || [];
+          
+          return {
+            orderId: order.id,
+            orderNumber,
+            customerName,
+            subSKUs,
+          };
+        });
+
+        const template = EMAIL_TEMPLATES.PROCESSED_MULTIPLE;
+        subject = template.subject(selectedOrders.length);
+        body = template.body(ordersData);
+        toEmails = template.to();
+        ccEmails = template.cc();
+        
+        setSelectedOrdersForEmail(selectedOrders);
+        setSelectedOrderForEmail(null);
+      } else {
+        // Single order - use existing template logic
+        const selectedOrder = selectedOrders[0];
+        const bolFiles = await downloadBOLFiles(selectedOrder);
+        allBolFiles = bolFiles;
+        
+        const template = getEmailTemplate(selectedOrder);
+        const orderJsonb = selectedOrder.ordersJsonb || {};
+        const subSKUs = selectedOrder.subSKUs || [];
+        
+        const customerName = getJsonbValue(orderJsonb, 'Customer Name') || 'Customer';
+        const orderNumber = getJsonbValue(orderJsonb, 'Order Number') || 
+          getJsonbValue(orderJsonb, 'PO#') || 
+          getJsonbValue(orderJsonb, 'PO Number') || 
+          String(selectedOrder.id);
+        
+        subject = template.subject(customerName, orderNumber);
+        body = template.body(orderJsonb, subSKUs);
+        toEmails = template.to();
+        ccEmails = template.cc();
+        
+        setSelectedOrderForEmail(selectedOrder);
+        setSelectedOrdersForEmail([]);
+      }
+      
+      // Set state and open modal
+      setEmailAttachments(allBolFiles);
+      setEmailTo(toEmails.join(', '));
+      setEmailCc(ccEmails.join(', '));
+      setEmailSubject(subject);
+      setEmailBody(body);
+      setEmailModalOpen(true);
+    } catch (error) {
+      console.error('Error preparing email:', error);
+      alert('Failed to prepare email. Please try again.');
+    }
+  };
+
   if (loading && orders.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -645,6 +835,16 @@ export const ProcessedOrdersList = ({
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          {selectedOrderIds.size > 0 && (
+            <button
+              onClick={handleEmailClick}
+              className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium w-full sm:w-auto justify-center"
+            >
+              <Mail className="h-4 w-4" />
+              <span className="hidden sm:inline">Email {selectedOrderIds.size > 1 ? `(${selectedOrderIds.size})` : ''}</span>
+              <span className="sm:hidden">Email {selectedOrderIds.size > 1 ? `(${selectedOrderIds.size})` : ''}</span>
+            </button>
+          )}
           {orderType === 'All' && (
             <button
               onClick={handleEstesPickup}
@@ -1162,6 +1362,29 @@ export const ProcessedOrdersList = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Email Compose Modal */}
+      {emailModalOpen && (
+        <EmailComposeModal
+          isOpen={emailModalOpen}
+          onClose={() => {
+            setEmailModalOpen(false);
+            setSelectedOrderForEmail(null);
+            setSelectedOrdersForEmail([]);
+            setEmailAttachments([]);
+            setEmailTo('');
+            setEmailCc('');
+            setEmailSubject('');
+            setEmailBody('');
+          }}
+          orderId={selectedOrderForEmail?.id || selectedOrdersForEmail[0]?.id || 0}
+          defaultTo={emailTo}
+          defaultCc={emailCc}
+          defaultSubject={emailSubject}
+          defaultBody={emailBody}
+          initialAttachments={emailAttachments}
+        />
       )}
     </div>
   );
