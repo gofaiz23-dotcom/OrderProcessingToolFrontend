@@ -172,6 +172,28 @@ export const EMAIL_TEMPLATES = {
 } as const;
 
 /**
+ * Pickup Scheduled Email Body
+ */
+export const getPickupScheduledEmailBody = (
+  carrier: string,
+  orderId: number,
+  orderNumber?: string,
+  sku?: string
+): string => {
+  const orderRef = orderNumber || `Order ${orderId}`;
+  const carrierName = carrier.toLowerCase() === 'estes' ? 'Estes Express' : 'XPO Logistics';
+
+  return `Team,
+
+Pickup has been scheduled for ${orderRef}${sku ? ` (SKU: ${sku})` : ''} via ${carrierName}.
+
+Please ensure the shipment is ready for pickup.
+
+Thank You.
+`;
+};
+
+/**
  * LTL Order Draft Subject
  */
 export const getLTLOrderDraftEmailSubject = (

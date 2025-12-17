@@ -61,9 +61,19 @@ const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
   if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '';
   const obj = jsonb as Record<string, unknown>;
   const normalizedKey = key.trim().toLowerCase();
+  const normalizedKeyNoSpaces = normalizedKey.replace(/\s+/g, '');
 
   for (const [k, v] of Object.entries(obj)) {
-    if (k.toLowerCase() === normalizedKey && v !== undefined && v !== null && v !== '') {
+    const kLower = k.toLowerCase();
+    const kLowerNoSpaces = kLower.replace(/\s+/g, '');
+
+    // Check for exact match (case-insensitive)
+    if (kLower === normalizedKey && v !== undefined && v !== null && v !== '') {
+      return String(v);
+    }
+
+    // Check for match ignoring spaces (e.g. "PostalCode" matches "Postal Code")
+    if (kLowerNoSpaces === normalizedKeyNoSpaces && v !== undefined && v !== null && v !== '') {
       return String(v);
     }
   }
@@ -245,13 +255,20 @@ export const XPOBOLForm = ({
         getJsonbValue(order.jsonb, 'Ship to State/Province') ||
         getJsonbValue(order.jsonb, 'State');
 
-      const deliveryZip = getJsonbValue(order.jsonb, 'Ship to Zip Code') ||
+      let deliveryZip = getJsonbValue(order.jsonb, 'Ship to Zip Code') ||
         getJsonbValue(order.jsonb, 'Shipping Zip Code') ||
         getJsonbValue(order.jsonb, 'Customer Zip Code') ||
+        getJsonbValue(order.jsonb, 'Shipping Zip') ||
+        getJsonbValue(order.jsonb, 'Ship to Zip') ||
         getJsonbValue(order.jsonb, 'Zip') ||
         getJsonbValue(order.jsonb, 'Postal Code') ||
         getJsonbValue(order.jsonb, 'Ship to Postal Code') ||
+        getJsonbValue(order.jsonb, 'Postal') ||
         getJsonbValue(order.jsonb, 'ZIP Code');
+
+      if (deliveryZip && deliveryZip.length === 4) {
+        deliveryZip = `0${deliveryZip}`;
+      }
 
       const deliveryCountry = getJsonbValue(order.jsonb, 'Ship to Country') ||
         getJsonbValue(order.jsonb, 'Shipping Country') ||
@@ -1023,16 +1040,29 @@ export const XPOBOLForm = ({
             }
 
             // Log detailed error information
-            console.error('Pickup Request Creation Error:', {
+            // Log detailed error information
+            console.error('Pickup Request Creation Error - Status:', pickupRes.status, pickupRes.statusText);
+            console.error('Pickup Request Creation Error - Details:', errorDetails);
+            console.error('Pickup Request Creation Error - Payload:', JSON.stringify(finalPickupPayload, null, 2));
+
+            // Show a more detailed error to the user
+            let userErrorMessage = `Failed to create pickup request: ${pickupRes.status} ${pickupRes.statusText}`;
+            if (pickupErrorMessage) {
+              userErrorMessage += ` - ${pickupErrorMessage}`;
+            }
+            if (pickupRes.status === 504 || pickupRes.status === 500) {
+              userErrorMessage += " (The request may have been processed by the carrier. Please check the portal before retrying.)";
+            }
+
+            console.error('Pickup Request Creation Error Object:', {
               status: pickupRes.status,
               statusText: pickupRes.statusText,
               message: pickupErrorMessage,
               details: errorDetails,
-              requestPayload: finalPickupPayload
             });
 
             // Show a more detailed error to the user
-            setError(new Error(`Failed to create pickup request: ${pickupErrorMessage}`));
+            setError(new Error(userErrorMessage));
           } else {
             const pickupData = await pickupRes.json();
             if (process.env.NODE_ENV === 'development') {
@@ -1289,9 +1319,9 @@ export const XPOBOLForm = ({
         if (!hasShownEmailCompose.current) {
           setTimeout(() => {
             if (!showEmailCompose) {
-              console.log('📧 Opening email compose modal');
-              hasShownEmailCompose.current = true;
-              setShowEmailCompose(true);
+              // console.log('📧 Opening email compose modal');
+              // hasShownEmailCompose.current = true;
+              // setShowEmailCompose(true);
             } else {
               console.log('⚠️ Email modal already open, skipping duplicate');
             }

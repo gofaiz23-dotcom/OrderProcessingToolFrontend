@@ -73,12 +73,12 @@ interface XPORequestPayload {
 const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
   if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '';
   const obj = jsonb as Record<string, unknown>;
-  
+
   const normalizedKey = key.trim();
   const keyWithoutHash = normalizedKey.replace(/#/g, '');
   const keyLower = normalizedKey.toLowerCase();
   const keyWithoutHashLower = keyWithoutHash.toLowerCase();
-  
+
   const keysToTry = [
     normalizedKey,
     keyWithoutHash,
@@ -87,13 +87,13 @@ const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
     keyWithoutHashLower,
     `#${keyWithoutHashLower}`,
   ];
-  
+
   for (const k of keysToTry) {
     if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') {
       return String(obj[k]);
     }
   }
-  
+
   const allKeys = Object.keys(obj);
   for (const objKey of allKeys) {
     const objKeyLower = objKey.toLowerCase();
@@ -108,7 +108,7 @@ const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
       }
     }
   }
-  
+
   return '';
 };
 
@@ -126,11 +126,11 @@ const parseAddressString = (addressStr: string): { streetAddress: string; addres
   const state = stateMatch ? stateMatch[1] : '';
   let withoutStateZip = withoutZip.replace(/\s+[A-Z]{2}\s*$/, '').trim();
   withoutStateZip = withoutStateZip.replace(/#\s*B([A-Z])/gi, '# B $1');
-  
+
   const parts = withoutStateZip.split(/\s+/);
   const streetAbbrevs = ['ST', 'AVE', 'DR', 'RD', 'PKWY', 'BLVD', 'CIR', 'CT', 'FWY', 'HWY', 'LN', 'PL', 'WAY', 'STREET'];
   const addressIndicators = ['STE', 'SUITE', '#', 'UNIT', 'APT', 'FLOOR', 'FL'];
-  
+
   let cityStartIndex = parts.length;
   for (let i = parts.length - 1; i >= 0; i--) {
     const word = parts[i].toUpperCase();
@@ -139,11 +139,11 @@ const parseAddressString = (addressStr: string): { streetAddress: string; addres
       break;
     }
   }
-  
+
   if (cityStartIndex === parts.length) {
     cityStartIndex = Math.max(1, parts.length - 2);
   }
-  
+
   const streetParts = parts.slice(0, cityStartIndex);
   const cityParts = parts.slice(cityStartIndex);
   const city = cityParts.join(' ').toUpperCase();
@@ -156,7 +156,7 @@ const parseAddressString = (addressStr: string): { streetAddress: string; addres
     streetAddress = steMatch[1].trim();
     addressLine2 = `${steMatch[2].toUpperCase()} ${steMatch[3].trim()}`.trim();
   }
-  
+
   return {
     streetAddress: streetAddress || '',
     addressLine2: addressLine2 || '',
@@ -193,8 +193,8 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
     if (quotes.length > 0 && quotesRef.current) {
       // Small delay to ensure DOM is updated
       setTimeout(() => {
-        quotesRef.current?.scrollIntoView({ 
-          behavior: 'smooth', 
+        quotesRef.current?.scrollIntoView({
+          behavior: 'smooth',
           block: 'start',
           inline: 'nearest'
         });
@@ -218,7 +218,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
   // Convert MM/DD/YYYY or datetime-local to ISO 8601
   const convertToISO8601 = (dateString: string): string => {
     if (!dateString) return '';
-    
+
     // Handle MM/DD/YYYY format
     if (dateString.includes('/')) {
       const parts = dateString.split('/');
@@ -232,7 +232,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
         }
       }
     }
-    
+
     // Handle ISO format or other formats
     const date = new Date(dateString);
     if (!isNaN(date.getTime())) {
@@ -317,7 +317,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
   const [referenceNumbers, setReferenceNumbers] = useState<string>('');
 
   // Commodity
-  const [commodities, setCommodities] = useState<XPORateQuoteCommodity[]>([{ 
+  const [commodities, setCommodities] = useState<XPORateQuoteCommodity[]>([{
     pieceCnt: 1,
     packageCode: XPO_RATE_QUOTE_DEFAULTS.packaging,
     grossWeight: {
@@ -342,7 +342,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
     return `${baseDescription} ${subSKUsString}`;
   };
 
-  const [commodityDescriptions, setCommodityDescriptions] = useState<Record<number, string>>({ 
+  const [commodityDescriptions, setCommodityDescriptions] = useState<Record<number, string>>({
     0: formatDescriptionWithSubSKUs(ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription, subSKUs)
   });
   const [freezableProtection, setFreezableProtection] = useState<boolean>(false);
@@ -354,13 +354,25 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
   // Auto-populate from order data
   useEffect(() => {
     // Destination ZIP
-    const zip = getJsonbValue(order.jsonb, 'Zip') || 
-                getJsonbValue(order.jsonb, 'Postal Code') ||
-                getJsonbValue(order.jsonb, 'ZIP Code');
+    const zip = getJsonbValue(order.jsonb, 'Zip') ||
+      getJsonbValue(order.jsonb, 'Postal Code') ||
+      getJsonbValue(order.jsonb, 'ZIP Code') ||
+      getJsonbValue(order.jsonb, 'Ship to Zip Code') ||
+      getJsonbValue(order.jsonb, 'Shipping Zip Code') ||
+      getJsonbValue(order.jsonb, 'Customer Zip Code') ||
+      getJsonbValue(order.jsonb, 'Shipping Zip') ||
+      getJsonbValue(order.jsonb, 'Ship to Zip') ||
+      getJsonbValue(order.jsonb, 'Postal') ||
+      getJsonbValue(order.jsonb, 'Ship to Postal Code');
     if (zip) {
-      const zipMatch = zip.match(/\d{5}/);
-      if (zipMatch) {
-        setDeliveryPostalCode(zipMatch[0]);
+      const cleanZip = zip.trim();
+      if (cleanZip.length === 4) {
+        setDeliveryPostalCode(`0${cleanZip}`);
+      } else {
+        const zipMatch = cleanZip.match(/\d{5}/);
+        if (zipMatch) {
+          setDeliveryPostalCode(zipMatch[0]);
+        }
       }
     }
 
@@ -433,15 +445,15 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
     if (e) {
       e.preventDefault();
     }
-    
+
     let currentToken = getToken('xpo') || storedToken;
-    
+
     // If no token, trigger auto-login and wait for it
     if (!currentToken) {
       setLoading(true);
       setError(null);
       setError(new Error('Logging in automatically...'));
-      
+
       try {
         const loginSuccess = await autoLogin('xpo');
         if (loginSuccess) {
@@ -480,7 +492,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
       // Validate
       const shipperZip = pickupPostalCode?.trim();
       const consigneeZip = deliveryPostalCode?.trim();
-      
+
       if (useManualAccountId) {
         if (!manualAccountId || manualAccountId.trim() === '') {
           throw new Error('Account ID is required when using manual account ID');
@@ -493,7 +505,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
           throw new Error('Pickup location or valid postal code is required');
         }
       }
-      
+
       if (!consigneeZip || consigneeZip.length < 5) {
         throw new Error('Valid delivery postal code (5 digits minimum) is required');
       }
@@ -506,7 +518,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
       if (!commodities || commodities.length === 0) {
         throw new Error('At least one commodity is required');
       }
-      
+
       // Validate commodity data
       for (let i = 0; i < commodities.length; i++) {
         const commodity = commodities[i];
@@ -523,7 +535,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
       if (!shipmentDateISO) {
         throw new Error('Invalid pickup date format. Please use MM/DD/YYYY format.');
       }
-      
+
       // Get shipper account ID
       let shipperAcctInstId: string | undefined = undefined;
       if (useManualAccountId && manualAccountId) {
@@ -583,7 +595,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
 
       // Store request payload for UI display
       setRequestPayload(payload);
-      
+
       // Log request payload for debugging
       console.log('🚀 XPO Rate Quote Request Payload:', JSON.stringify(payload, null, 2));
 
@@ -601,7 +613,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
         if (res.status === 401) {
           throw new Error('Your session has expired. Auto-login will refresh your token shortly.');
         }
-        
+
         let errorMessage = `Rate quote failed: ${res.statusText}`;
         let errorData: unknown = null;
         try {
@@ -617,7 +629,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
         } catch {
           // If JSON parsing fails, use status text
         }
-        
+
         // Store error response for UI display
         setErrorResponse({
           status: res.status,
@@ -626,7 +638,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
           errorData,
         });
         setShowErrorResponse(true);
-        
+
         // Log error response for debugging
         console.error('❌ XPO Rate Quote Error Response:', {
           status: res.status,
@@ -634,13 +646,13 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
           errorMessage,
           errorData: errorData ? JSON.stringify(errorData, null, 2) : 'Could not parse error response',
         });
-        
+
         throw new Error(errorMessage);
       }
 
       const data = await res.json();
       setResponse(data);
-      
+
       // Log response for debugging
       console.log('✅ XPO Rate Quote Response:', JSON.stringify(data, null, 2));
       
@@ -700,9 +712,9 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
           const date = new Date(shipmentDateValue);
           shipmentDate = date.toLocaleDateString('en-US', { 
             weekday: 'short',
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric' 
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
           });
         }
 
@@ -817,7 +829,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
       // Transform all quotes
       const transformedQuotes = rawQuotes.map(quote => transformQuote(quote, transitTime || undefined));
       setQuotes(transformedQuotes);
-      
+
       // Close form content and pickup details dropdown when quotes are generated
       setShowFormContent(false);
       setShowPickupDetails(false);
@@ -873,654 +885,654 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
         {showFormContent && !showBOLForm && (
           <div className="p-4">
             <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Error Display */}
-        {errorMessage && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-800 font-semibold text-sm">Error:</p>
-            <p className="text-red-700 text-xs mt-1">
-              {errorMessage}
-            </p>
-          </div>
-        )}
-
-        {/* Requester Section */}
-        <section className="space-y-3">
-          <h3 className="text-sm font-bold text-slate-900">Requester (For This Quote I Am The)</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-900">
-                Role <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={requesterRole}
-                onChange={(e) => setRequesterRole(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                {XPO_ROLE_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-900">
-                Pickup Date <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <input
-                  ref={dateInputRef}
-                  type="date"
-                  value={convertToDateInputFormat(pickupDate)}
-                  onChange={handlePickupDateChange}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-8"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={handleCalendarIconClick}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <Calendar size={16} />
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* From (Pickup Location) Section */}
-        <section className="space-y-3">
-          <h3 className="text-sm font-bold text-slate-900">From (Pickup Location)</h3>
-          <div className="space-y-2">
-            <SearchableDropdown
-              options={XPO_SHIPPER_ADDRESS_BOOK.map(addr => {
-                if (addr.id && addr.name && addr.address) {
-                  const parsed = parseAddressString(addr.address);
-                  const addressParts = [parsed.streetAddress, parsed.addressLine2, parsed.city, parsed.state, parsed.zip].filter(Boolean);
-                  const formattedAddress = addressParts.join(', ');
-                  return {
-                    value: `ammana-${addr.id}`,
-                    label: `${addr.name} - ${parsed.state} - ${formattedAddress}`,
-                    id: addr.id,
-                    name: addr.name,
-                    address: addr.address,
-                    city: parsed.city,
-                    state: parsed.state,
-                    zip: parsed.zip,
-                  };
-                }
-                return {
-                  value: addr.value || '',
-                  label: addr.label || '',
-                  id: addr.id,
-                  city: addr.city,
-                  state: addr.state,
-                  zip: addr.zip,
-                };
-              }) as SearchableDropdownOption[]}
-              value={pickupLocation}
-              onChange={(value) => {
-                setPickupLocation(value);
-                if (!value) {
-                  // Clear fields when selection is cleared
-                  setPickupCompany('');
-                  setPickupStreetAddress('');
-                  setPickupAddressLine2('');
-                  setPickupCity('');
-                  setPickupState('');
-                  setPickupPostalCode('');
-                  setPickupCountry('United States');
-                  setPickupPhone('');
-                  setPickupExtension('');
-                  setPickupContactName('');
-                }
-              }}
-              onSelect={(option: SearchableDropdownOption) => {
-                const addressId = option.value?.replace('ammana-', '');
-                const address = XPO_SHIPPER_ADDRESS_BOOK.find(opt => 
-                  (opt.id && addressId && opt.id.toString() === addressId) || 
-                  opt.value === option.value
-                );
-                if (address) {
-                  if (address.id && address.name && address.address) {
-                    const parsed = parseAddressString(address.address);
-                    setPickupCompany(address.name);
-                    setPickupStreetAddress(parsed.streetAddress);
-                    setPickupAddressLine2(parsed.addressLine2);
-                    setPickupCity(parsed.city);
-                    setPickupState(parsed.state);
-                    setPickupPostalCode(parsed.zip);
-                    setPickupCountry('United States');
-                    setPickupPhone(address.phone || '');
-                    setPickupExtension(address.extension || '');
-                    setPickupContactName(address.contactName || '');
-                  } else {
-                    setPickupCompany(address.company || address.label?.split(' - ')[0] || '');
-                    setPickupStreetAddress(address.streetAddress || '');
-                    setPickupAddressLine2(address.addressLine2 || '');
-                    setPickupCity(address.city || '');
-                    setPickupState(address.state || '');
-                    setPickupPostalCode(address.zip || '');
-                    setPickupCountry(address.country || 'United States');
-                    setPickupPhone(address.phone || '');
-                    setPickupExtension(address.extension || '');
-                    setPickupContactName(address.contactName || '');
-                  }
-                }
-              }}
-              label="Pickup Location"
-              placeholder="Search or select pickup location..."
-              required={!useManualAccountId}
-              disabled={useManualAccountId}
-              filterKeys={['label', 'name', 'city', 'state', 'zip']}
-            />
-            
-            <label className="flex items-center gap-2 text-xs">
-              <input
-                type="checkbox"
-                checked={useManualAccountId}
-                onChange={(e) => {
-                  setUseManualAccountId(e.target.checked);
-                  if (e.target.checked) {
-                    // Clear dropdown selection when enabling manual entry
-                    setPickupLocation('');
-                    setPickupCompany('');
-                    setPickupStreetAddress('');
-                    setPickupAddressLine2('');
-                    setPickupCity('');
-                    setPickupState('');
-                    setPickupPostalCode('');
-                  } else {
-                    // Clear manual account ID when disabling
-                    setManualAccountId('');
-                  }
-                }}
-                className="w-3.5 h-3.5 text-blue-600 rounded"
-              />
-              <span className="text-slate-700">Use Manual Account ID</span>
-            </label>
-            
-            {useManualAccountId && (
-              <div className="space-y-1.5 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <label className="block text-xs font-semibold text-slate-900">
-                  Account ID <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={manualAccountId}
-                  onChange={(e) => setManualAccountId(e.target.value.replace(/\D/g, ''))}
-                  placeholder="Enter XPO account ID"
-                  className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required={useManualAccountId}
-                />
-                <div className="space-y-1.5 mt-2">
-                  <label className="block text-xs font-semibold text-slate-900">
-                    Postal Code <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={pickupPostalCode}
-                    onChange={(e) => setPickupPostalCode(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required={useManualAccountId}
-                  />
+              {/* Error Display */}
+              {errorMessage && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-800 font-semibold text-sm">Error:</p>
+                  <p className="text-red-700 text-xs mt-1">
+                    {errorMessage}
+                  </p>
                 </div>
-              </div>
-            )}
-            
-            <button
-              type="button"
-              onClick={() => setShowPickupDetails(!showPickupDetails)}
-              className="text-blue-600 hover:text-blue-700 text-xs underline"
-            >
-              {showPickupDetails ? 'Hide Details' : 'Show Details'}
-            </button>
-            {showPickupDetails && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">Company</label>
-                  <input
-                    type="text"
-                    value={pickupCompany}
-                    onChange={(e) => setPickupCompany(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">Street Address</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={pickupStreetAddress}
-                      onChange={(e) => setPickupStreetAddress(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-8"
-                    />
-                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                      <Search className="w-3 h-3 text-slate-400" />
+              )}
+
+              {/* Requester Section */}
+              <section className="space-y-3">
+                <h3 className="text-sm font-bold text-slate-900">Requester (For This Quote I Am The)</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-slate-900">
+                      Role <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={requesterRole}
+                      onChange={(e) => setRequesterRole(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    >
+                      {XPO_ROLE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-slate-900">
+                      Pickup Date <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        ref={dateInputRef}
+                        type="date"
+                        value={convertToDateInputFormat(pickupDate)}
+                        onChange={handlePickupDateChange}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-8"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCalendarIconClick}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        <Calendar size={16} />
+                      </button>
                     </div>
                   </div>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">Address Line 2 (Optional)</label>
-                  <input
-                    type="text"
-                    value={pickupAddressLine2}
-                    onChange={(e) => setPickupAddressLine2(e.target.value)}
-                    placeholder="Apartment, suite, unit, etc."
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">City</label>
-                  <input
-                    type="text"
-                    value={pickupCity}
-                    onChange={(e) => setPickupCity(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">State/Province</label>
-                  <select
-                    value={pickupState}
-                    onChange={(e) => setPickupState(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select State</option>
-                    {US_STATES_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">Postal Code</label>
-                  <input
-                    type="text"
-                    value={pickupPostalCode}
-                    onChange={(e) => setPickupPostalCode(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">Country</label>
-                  <select
-                    value={pickupCountry}
-                    onChange={(e) => setPickupCountry(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {XPO_COUNTRY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">Phone</label>
-                  <input
-                    type="text"
-                    value={pickupPhone}
-                    onChange={(e) => setPickupPhone(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">Extension (Optional)</label>
-                  <input
-                    type="text"
-                    value={pickupExtension}
-                    onChange={(e) => setPickupExtension(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <label className="block text-xs font-semibold text-slate-900">Contact Full Name</label>
-                  <input
-                    type="text"
-                    value={pickupContactName}
-                    onChange={(e) => setPickupContactName(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
+              </section>
 
-        {/* TO (Delivery Location) Section */}
-        <section className="space-y-3">
-          <h3 className="text-sm font-bold text-slate-900">TO (Delivery Location)</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-900">
-                To Country <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={deliveryCountry}
-                onChange={(e) => setDeliveryCountry(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              >
-                {XPO_COUNTRY_OPTIONS.map((option: { value: string; label: string }) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-900">
-                To Postal Code <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={deliveryPostalCode}
-                onChange={(e) => setDeliveryPostalCode(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                required
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-900">
-              Payment Terms <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={paymentTermCd}
-              onChange={(e) => setPaymentTermCd(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            >
-                {XPO_PAYMENT_TERM_OPTIONS.map((option: { value: string; label: string }) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-            </select>
-          </div>
-        </section>
-
-        {/* Commodity Details Section */}
-        <section className="space-y-3">
-          <h3 className="text-sm font-bold text-slate-900">Commodity Details</h3>
-          {commodities.map((commodity, index) => (
-            <div key={index} className="p-3 border border-slate-200 rounded-lg space-y-3">
-              <div className="space-y-1.5 sm:col-span-2">
-                <label className="block text-xs font-semibold text-slate-900">
-                  Commodity Description (Optional)
-                </label>
-                <textarea
-                  rows={2}
-                  value={commodityDescriptions[index] || ''}
-                  onChange={(e) => setCommodityDescriptions(prev => ({ ...prev, [index]: e.target.value }))}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">
-                    Total Weight (lbs) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    value={commodity.grossWeight?.weight ?? ''}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      const numValue = value === '' ? 0 : Number(value);
-                      if (!isNaN(numValue) && numValue >= 0) {
-                        updateCommodity(index, 'grossWeight', { 
-                          ...commodity.grossWeight, 
-                          weight: numValue
-                        });
+              {/* From (Pickup Location) Section */}
+              <section className="space-y-3">
+                <h3 className="text-sm font-bold text-slate-900">From (Pickup Location)</h3>
+                <div className="space-y-2">
+                  <SearchableDropdown
+                    options={XPO_SHIPPER_ADDRESS_BOOK.map(addr => {
+                      if (addr.id && addr.name && addr.address) {
+                        const parsed = parseAddressString(addr.address);
+                        const addressParts = [parsed.streetAddress, parsed.addressLine2, parsed.city, parsed.state, parsed.zip].filter(Boolean);
+                        const formattedAddress = addressParts.join(', ');
+                        return {
+                          value: `ammana-${addr.id}`,
+                          label: `${addr.name} - ${parsed.state} - ${formattedAddress}`,
+                          id: addr.id,
+                          name: addr.name,
+                          address: addr.address,
+                          city: parsed.city,
+                          state: parsed.state,
+                          zip: parsed.zip,
+                        };
+                      }
+                      return {
+                        value: addr.value || '',
+                        label: addr.label || '',
+                        id: addr.id,
+                        city: addr.city,
+                        state: addr.state,
+                        zip: addr.zip,
+                      };
+                    }) as SearchableDropdownOption[]}
+                    value={pickupLocation}
+                    onChange={(value) => {
+                      setPickupLocation(value);
+                      if (!value) {
+                        // Clear fields when selection is cleared
+                        setPickupCompany('');
+                        setPickupStreetAddress('');
+                        setPickupAddressLine2('');
+                        setPickupCity('');
+                        setPickupState('');
+                        setPickupPostalCode('');
+                        setPickupCountry('United States');
+                        setPickupPhone('');
+                        setPickupExtension('');
+                        setPickupContactName('');
                       }
                     }}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                    min="0"
-                    step="0.01"
+                    onSelect={(option: SearchableDropdownOption) => {
+                      const addressId = option.value?.replace('ammana-', '');
+                      const address = XPO_SHIPPER_ADDRESS_BOOK.find(opt =>
+                        (opt.id && addressId && opt.id.toString() === addressId) ||
+                        opt.value === option.value
+                      );
+                      if (address) {
+                        if (address.id && address.name && address.address) {
+                          const parsed = parseAddressString(address.address);
+                          setPickupCompany(address.name);
+                          setPickupStreetAddress(parsed.streetAddress);
+                          setPickupAddressLine2(parsed.addressLine2);
+                          setPickupCity(parsed.city);
+                          setPickupState(parsed.state);
+                          setPickupPostalCode(parsed.zip);
+                          setPickupCountry('United States');
+                          setPickupPhone(address.phone || '');
+                          setPickupExtension(address.extension || '');
+                          setPickupContactName(address.contactName || '');
+                        } else {
+                          setPickupCompany(address.company || address.label?.split(' - ')[0] || '');
+                          setPickupStreetAddress(address.streetAddress || '');
+                          setPickupAddressLine2(address.addressLine2 || '');
+                          setPickupCity(address.city || '');
+                          setPickupState(address.state || '');
+                          setPickupPostalCode(address.zip || '');
+                          setPickupCountry(address.country || 'United States');
+                          setPickupPhone(address.phone || '');
+                          setPickupExtension(address.extension || '');
+                          setPickupContactName(address.contactName || '');
+                        }
+                      }
+                    }}
+                    label="Pickup Location"
+                    placeholder="Search or select pickup location..."
+                    required={!useManualAccountId}
+                    disabled={useManualAccountId}
+                    filterKeys={['label', 'name', 'city', 'state', 'zip']}
                   />
+
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={useManualAccountId}
+                      onChange={(e) => {
+                        setUseManualAccountId(e.target.checked);
+                        if (e.target.checked) {
+                          // Clear dropdown selection when enabling manual entry
+                          setPickupLocation('');
+                          setPickupCompany('');
+                          setPickupStreetAddress('');
+                          setPickupAddressLine2('');
+                          setPickupCity('');
+                          setPickupState('');
+                          setPickupPostalCode('');
+                        } else {
+                          // Clear manual account ID when disabling
+                          setManualAccountId('');
+                        }
+                      }}
+                      className="w-3.5 h-3.5 text-blue-600 rounded"
+                    />
+                    <span className="text-slate-700">Use Manual Account ID</span>
+                  </label>
+
+                  {useManualAccountId && (
+                    <div className="space-y-1.5 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <label className="block text-xs font-semibold text-slate-900">
+                        Account ID <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={manualAccountId}
+                        onChange={(e) => setManualAccountId(e.target.value.replace(/\D/g, ''))}
+                        placeholder="Enter XPO account ID"
+                        className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        required={useManualAccountId}
+                      />
+                      <div className="space-y-1.5 mt-2">
+                        <label className="block text-xs font-semibold text-slate-900">
+                          Postal Code <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={pickupPostalCode}
+                          onChange={(e) => setPickupPostalCode(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required={useManualAccountId}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setShowPickupDetails(!showPickupDetails)}
+                    className="text-blue-600 hover:text-blue-700 text-xs underline"
+                  >
+                    {showPickupDetails ? 'Hide Details' : 'Show Details'}
+                  </button>
+                  {showPickupDetails && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">Company</label>
+                        <input
+                          type="text"
+                          value={pickupCompany}
+                          onChange={(e) => setPickupCompany(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">Street Address</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={pickupStreetAddress}
+                            onChange={(e) => setPickupStreetAddress(e.target.value)}
+                            className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-8"
+                          />
+                          <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                            <Search className="w-3 h-3 text-slate-400" />
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">Address Line 2 (Optional)</label>
+                        <input
+                          type="text"
+                          value={pickupAddressLine2}
+                          onChange={(e) => setPickupAddressLine2(e.target.value)}
+                          placeholder="Apartment, suite, unit, etc."
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">City</label>
+                        <input
+                          type="text"
+                          value={pickupCity}
+                          onChange={(e) => setPickupCity(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">State/Province</label>
+                        <select
+                          value={pickupState}
+                          onChange={(e) => setPickupState(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="">Select State</option>
+                          {US_STATES_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">Postal Code</label>
+                        <input
+                          type="text"
+                          value={pickupPostalCode}
+                          onChange={(e) => setPickupPostalCode(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">Country</label>
+                        <select
+                          value={pickupCountry}
+                          onChange={(e) => setPickupCountry(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          {XPO_COUNTRY_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">Phone</label>
+                        <input
+                          type="text"
+                          value={pickupPhone}
+                          onChange={(e) => setPickupPhone(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">Extension (Optional)</label>
+                        <input
+                          type="text"
+                          value={pickupExtension}
+                          onChange={(e) => setPickupExtension(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <label className="block text-xs font-semibold text-slate-900">Contact Full Name</label>
+                        <input
+                          type="text"
+                          value={pickupContactName}
+                          onChange={(e) => setPickupContactName(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              {/* TO (Delivery Location) Section */}
+              <section className="space-y-3">
+                <h3 className="text-sm font-bold text-slate-900">TO (Delivery Location)</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-slate-900">
+                      To Country <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={deliveryCountry}
+                      onChange={(e) => setDeliveryCountry(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    >
+                      {XPO_COUNTRY_OPTIONS.map((option: { value: string; label: string }) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-slate-900">
+                      To Postal Code <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={deliveryPostalCode}
+                      onChange={(e) => setDeliveryPostalCode(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold text-slate-900">
-                    Freight Class <span className="text-red-500">*</span>
+                    Payment Terms <span className="text-red-500">*</span>
                   </label>
                   <select
-                    value={commodity.nmfcClass || ''}
-                    onChange={(e) => updateCommodity(index, 'nmfcClass', e.target.value)}
+                    value={paymentTermCd}
+                    onChange={(e) => setPaymentTermCd(e.target.value)}
                     className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     required
                   >
-                    <option value="">Select Class</option>
-                    {FREIGHT_CLASS_OPTIONS.map((option) => (
+                    {XPO_PAYMENT_TERM_OPTIONS.map((option: { value: string; label: string }) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
                     ))}
                   </select>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">
-                    Length (Inches) (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    value={commodity.dimensions?.length || ''}
-                    onChange={(e) => updateCommodity(index, 'dimensions', { ...commodity.dimensions, length: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    min="0"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">
-                    Width (Inches) (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    value={commodity.dimensions?.width || ''}
-                    onChange={(e) => updateCommodity(index, 'dimensions', { ...commodity.dimensions, width: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    min="0"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">
-                    Height (Inches) (Optional)
-                  </label>
-                  <input
-                    type="number"
-                    value={commodity.dimensions?.height || ''}
-                    onChange={(e) => updateCommodity(index, 'dimensions', { ...commodity.dimensions, height: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    min="0"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-900">Pieces/Quantity</label>
-                  <input
-                    type="number"
-                    value={commodity.pieceCnt || 1}
-                    onChange={(e) => updateCommodity(index, 'pieceCnt', parseInt(e.target.value) || 1)}
-                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    min="1"
-                  />
-                </div>
-              </div>
-              {index === 0 && (
-                <div className="mt-3 pt-3 border-t border-slate-200">
-                  <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+              </section>
+
+              {/* Commodity Details Section */}
+              <section className="space-y-3">
+                <h3 className="text-sm font-bold text-slate-900">Commodity Details</h3>
+                {commodities.map((commodity, index) => (
+                  <div key={index} className="p-3 border border-slate-200 rounded-lg space-y-3">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <label className="block text-xs font-semibold text-slate-900">
+                        Commodity Description (Optional)
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={commodityDescriptions[index] || ''}
+                        onChange={(e) => setCommodityDescriptions(prev => ({ ...prev, [index]: e.target.value }))}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">
+                          Total Weight (lbs) <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="number"
+                          value={commodity.grossWeight?.weight ?? ''}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            const numValue = value === '' ? 0 : Number(value);
+                            if (!isNaN(numValue) && numValue >= 0) {
+                              updateCommodity(index, 'grossWeight', {
+                                ...commodity.grossWeight,
+                                weight: numValue
+                              });
+                            }
+                          }}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required
+                          min="0"
+                          step="0.01"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">
+                          Freight Class <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          value={commodity.nmfcClass || ''}
+                          onChange={(e) => updateCommodity(index, 'nmfcClass', e.target.value)}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required
+                        >
+                          <option value="">Select Class</option>
+                          {FREIGHT_CLASS_OPTIONS.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">
+                          Length (Inches) (Optional)
+                        </label>
+                        <input
+                          type="number"
+                          value={commodity.dimensions?.length || ''}
+                          onChange={(e) => updateCommodity(index, 'dimensions', { ...commodity.dimensions, length: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min="0"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">
+                          Width (Inches) (Optional)
+                        </label>
+                        <input
+                          type="number"
+                          value={commodity.dimensions?.width || ''}
+                          onChange={(e) => updateCommodity(index, 'dimensions', { ...commodity.dimensions, width: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min="0"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">
+                          Height (Inches) (Optional)
+                        </label>
+                        <input
+                          type="number"
+                          value={commodity.dimensions?.height || ''}
+                          onChange={(e) => updateCommodity(index, 'dimensions', { ...commodity.dimensions, height: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min="0"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="block text-xs font-semibold text-slate-900">Pieces/Quantity</label>
+                        <input
+                          type="number"
+                          value={commodity.pieceCnt || 1}
+                          onChange={(e) => updateCommodity(index, 'pieceCnt', parseInt(e.target.value) || 1)}
+                          className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          min="1"
+                        />
+                      </div>
+                    </div>
+                    {index === 0 && (
+                      <div className="mt-3 pt-3 border-t border-slate-200">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-end gap-3">
+                          <div className="space-y-1.5">
+                            <label className="block text-xs font-semibold text-slate-900">Packaging</label>
+                            <select
+                              value={commodity.packageCode || 'PLT'}
+                              onChange={(e) => updateCommodity(index, 'packageCode', e.target.value)}
+                              className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-40"
+                            >
+                              {XPO_PACKAGE_CODE_OPTIONS.map((option: { value: string; label: string }) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex items-center gap-4 flex-wrap flex-1">
+                            <label className="flex items-center gap-2 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={freezableProtection}
+                                onChange={(e) => setFreezableProtection(e.target.checked)}
+                                className="w-3.5 h-3.5 text-blue-600 rounded"
+                              />
+                              <span className="text-slate-700">Freezable Protection</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={hazmatItem}
+                                onChange={(e) => setHazmatItem(e.target.checked)}
+                                className="w-3.5 h-3.5 text-blue-600 rounded"
+                              />
+                              <span className="text-slate-700">Hazmat Item</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {/* Additional Commodity Options */}
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-slate-900">Additional Commodity</label>
+                    <select
+                      value={additionalCommodity}
+                      onChange={(e) => setAdditionalCommodity(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select Commodity</option>
+                      {ADDITIONAL_COMMODITY_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-semibold text-slate-900">Packaging</label>
+                      <label className="block text-xs font-semibold text-slate-900">Excessive Length</label>
                       <select
-                        value={commodity.packageCode || 'PLT'}
-                        onChange={(e) => updateCommodity(index, 'packageCode', e.target.value)}
-                        className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 sm:w-40"
+                        value={excessiveLength}
+                        onChange={(e) => setExcessiveLength(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
-                        {XPO_PACKAGE_CODE_OPTIONS.map((option: { value: string; label: string }) => (
+                        {EXCESSIVE_LENGTH_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>
                             {option.label}
                           </option>
                         ))}
                       </select>
                     </div>
-                    <div className="flex items-center gap-4 flex-wrap flex-1">
-                      <label className="flex items-center gap-2 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={freezableProtection}
-                          onChange={(e) => setFreezableProtection(e.target.checked)}
-                          className="w-3.5 h-3.5 text-blue-600 rounded"
-                        />
-                        <span className="text-slate-700">Freezable Protection</span>
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-slate-900">
+                        $ Excess Value Coverage (USD) (Optional)
                       </label>
-                      <label className="flex items-center gap-2 text-xs">
-                        <input
-                          type="checkbox"
-                          checked={hazmatItem}
-                          onChange={(e) => setHazmatItem(e.target.checked)}
-                          className="w-3.5 h-3.5 text-blue-600 rounded"
-                        />
-                        <span className="text-slate-700">Hazmat Item</span>
-                      </label>
+                      <input
+                        type="text"
+                        value={excessValueCoverage}
+                        onChange={(e) => setExcessValueCoverage(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      <p className="text-xs text-slate-500">USD</p>
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
-          ))}
-          
-          {/* Additional Commodity Options */}
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <label className="block text-xs font-semibold text-slate-900">Additional Commodity</label>
-              <select
-                value={additionalCommodity}
-                onChange={(e) => setAdditionalCommodity(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Select Commodity</option>
-                {ADDITIONAL_COMMODITY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-900">Excessive Length</label>
-                <select
-                  value={excessiveLength}
-                  onChange={(e) => setExcessiveLength(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {EXCESSIVE_LENGTH_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
+              </section>
+
+              {/* Pickup Services Section */}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Pickup Services</h3>
+                  <Info className="text-blue-500" size={14} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {XPO_PICKUP_SERVICES.map((service: { value: string; label: string }) => (
+                    <label key={service.value} className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={pickupServices.includes(service.value)}
+                        onChange={(e) => handlePickupServiceChange(service.value, e.target.checked)}
+                        className="w-3.5 h-3.5 text-blue-600 rounded"
+                      />
+                      <span className="text-slate-700">{service.label}</span>
+                    </label>
                   ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <label className="block text-xs font-semibold text-slate-900">
-                  $ Excess Value Coverage (USD) (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={excessValueCoverage}
-                  onChange={(e) => setExcessValueCoverage(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <p className="text-xs text-slate-500">USD</p>
-              </div>
-            </div>
-          </div>
-        </section>
+                </div>
+              </section>
 
-        {/* Pickup Services Section */}
-        <section className="space-y-3">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-slate-900">Pickup Services</h3>
-            <Info className="text-blue-500" size={14} />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {XPO_PICKUP_SERVICES.map((service: { value: string; label: string }) => (
-              <label key={service.value} className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={pickupServices.includes(service.value)}
-                  onChange={(e) => handlePickupServiceChange(service.value, e.target.checked)}
-                  className="w-3.5 h-3.5 text-blue-600 rounded"
-                />
-                <span className="text-slate-700">{service.label}</span>
-              </label>
-            ))}
-          </div>
-        </section>
+              {/* Delivery Services Section */}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Delivery Services</h3>
+                  <Info className="text-blue-500" size={14} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {XPO_DELIVERY_SERVICES.map((service: { value: string; label: string }) => (
+                    <label key={service.value} className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={deliveryServices.includes(service.value)}
+                        onChange={(e) => handleDeliveryServiceChange(service.value, e.target.checked)}
+                        className="w-3.5 h-3.5 text-blue-600 rounded"
+                      />
+                      <span className="text-slate-700">{service.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </section>
 
-        {/* Delivery Services Section */}
-        <section className="space-y-3">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-slate-900">Delivery Services</h3>
-            <Info className="text-blue-500" size={14} />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {XPO_DELIVERY_SERVICES.map((service: { value: string; label: string }) => (
-              <label key={service.value} className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={deliveryServices.includes(service.value)}
-                  onChange={(e) => handleDeliveryServiceChange(service.value, e.target.checked)}
-                  className="w-3.5 h-3.5 text-blue-600 rounded"
-                />
-                <span className="text-slate-700">{service.label}</span>
-              </label>
-            ))}
-          </div>
-        </section>
+              {/* Premium Services Section */}
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900">Premium Services</h3>
+                  <Info className="text-blue-500" size={14} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {XPO_PREMIUM_SERVICES.map((service: { value: string; label: string }) => (
+                    <label key={service.value} className="flex items-center gap-2 text-xs">
+                      <input
+                        type="checkbox"
+                        checked={premiumServices.includes(service.value)}
+                        onChange={(e) => handlePremiumServiceChange(service.value, e.target.checked)}
+                        className="w-3.5 h-3.5 text-blue-600 rounded"
+                      />
+                      <span className="text-slate-700">{service.label}</span>
+                      {service.value === 'FREEZABLE' && (
+                        <Info className="text-blue-500" size={12} />
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </section>
 
-        {/* Premium Services Section */}
-        <section className="space-y-3">
-          <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-slate-900">Premium Services</h3>
-            <Info className="text-blue-500" size={14} />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {XPO_PREMIUM_SERVICES.map((service: { value: string; label: string }) => (
-              <label key={service.value} className="flex items-center gap-2 text-xs">
-                <input
-                  type="checkbox"
-                  checked={premiumServices.includes(service.value)}
-                  onChange={(e) => handlePremiumServiceChange(service.value, e.target.checked)}
-                  className="w-3.5 h-3.5 text-blue-600 rounded"
-                />
-                <span className="text-slate-700">{service.label}</span>
-                {service.value === 'FREEZABLE' && (
-                  <Info className="text-blue-500" size={12} />
-                )}
-              </label>
-            ))}
-          </div>
-        </section>
+              {/* Reference Numbers Section */}
+              <section className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-slate-900">
+                    Reference Numbers (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={referenceNumbers}
+                    onChange={(e) => setReferenceNumbers(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </section>
 
-        {/* Reference Numbers Section */}
-        <section className="space-y-3">
-          <div className="space-y-1.5">
-            <label className="block text-xs font-semibold text-slate-900">
-              Reference Numbers (Optional)
-            </label>
-            <input
-              type="text"
-              value={referenceNumbers}
-              onChange={(e) => setReferenceNumbers(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </section>
-
-      </form>
+            </form>
           </div>
         )}
       </div>
@@ -1569,7 +1581,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
                   </pre>
                 </div>
               )}
-              
+
               {/* Response Payload */}
               {response && (
                 <div>
