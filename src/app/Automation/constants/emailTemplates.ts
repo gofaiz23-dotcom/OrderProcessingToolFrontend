@@ -118,6 +118,29 @@ export const getFormattedBOLFilename = (
 };
 
 /**
+ * Pickup Scheduled Email Body
+ */
+const getPickupScheduledEmailBody = (
+  carrier: Carrier,
+  orderId: number,
+  orderNumber?: string,
+  sku?: string
+): string => {
+  const orderRef = orderNumber || `Order ${orderId}`;
+  const skuInfo = sku ? `\nSKU: ${sku}` : '';
+  const carrierName = carrier === 'estes' ? 'Estes Express' : 'XPO Logistics';
+  
+  return `Pickup has been scheduled for ${orderRef}.${skuInfo}
+
+Carrier: ${carrierName}
+Order ID: ${orderId}
+
+Please proceed with the pickup as scheduled.
+
+Thank You.`;
+};
+
+/**
  * EMAIL TEMPLATES (Pickup BODY REMOVED)
  */
 export const EMAIL_TEMPLATES = {
@@ -135,6 +158,16 @@ export const EMAIL_TEMPLATES = {
     body: (orderJsonb: Record<string, unknown>, subSKUs: string[] = []) =>
       getParcelOrderDraftEmailBody(orderJsonb, subSKUs),
     cc: () => [],
+  },
+
+  PICKUP_SCHEDULED: {
+    subject: (carrier: Carrier, orderId: number, orderNumber?: string) =>
+      carrier === 'estes'
+        ? getEstesPickupScheduledEmailSubject(orderId, orderNumber)
+        : getXPOPickupScheduledEmailSubject(orderId, orderNumber),
+    body: (carrier: Carrier, orderId: number, orderNumber?: string, sku?: string) =>
+      getPickupScheduledEmailBody(carrier, orderId, orderNumber, sku),
+    cc: (carrier: Carrier) => getDefaultCCEmails(carrier),
   },
 } as const;
 
