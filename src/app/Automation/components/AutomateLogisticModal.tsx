@@ -468,16 +468,18 @@ export const AutomateLogisticModal = ({
         
         if (logisticsOrderId) {
           // Update existing order
+          const formData = new FormData();
+          formData.append('sku', sku);
+          formData.append('orderOnMarketPlace', order.orderOnMarketPlace);
+          formData.append('ordersJsonb', JSON.stringify(ordersJsonb));
+          formData.append('shippingType', shippingType);
+          if (subSKUList.length > 0) {
+            formData.append('subSKUs', JSON.stringify(subSKUList));
+          }
+
           const response = await fetch(buildApiUrl(`/Logistics/shipped-orders/${logisticsOrderId}`), {
             method: 'PUT',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              sku: sku,
-              orderOnMarketPlace: order.orderOnMarketPlace,
-              ordersJsonb: ordersJsonb,
-            }),
+            body: formData,
           });
 
           if (!response.ok) {
@@ -508,16 +510,18 @@ export const AutomateLogisticModal = ({
           setShowToast(true);
         } else {
           // Create new order
+          const formData = new FormData();
+          formData.append('sku', sku);
+          formData.append('orderOnMarketPlace', order.orderOnMarketPlace);
+          formData.append('ordersJsonb', JSON.stringify(ordersJsonb));
+          formData.append('shippingType', shippingType);
+          if (subSKUList.length > 0) {
+            formData.append('subSKUs', JSON.stringify(subSKUList));
+          }
+
           const response = await fetch(buildApiUrl('/Logistics/shipped-orders'), {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              sku: sku,
-              orderOnMarketPlace: order.orderOnMarketPlace,
-              ordersJsonb: ordersJsonb,
-            }),
+            body: formData,
           });
 
           if (!response.ok) {
@@ -583,16 +587,20 @@ export const AutomateLogisticModal = ({
       if (!logisticsOrderId) {
         // If ID is not in cache, create a new order
         // Don't search by SKU - always create new orders
+        const createFormData = new FormData();
+        createFormData.append('sku', cachedOrder.sku);
+        createFormData.append('orderOnMarketPlace', cachedOrder.orderOnMarketPlace);
+        createFormData.append('ordersJsonb', JSON.stringify(cachedOrder.ordersJsonb));
+        if (cachedOrder.shippingType) {
+          createFormData.append('shippingType', cachedOrder.shippingType);
+        }
+        if (cachedOrder.subSKUs && cachedOrder.subSKUs.length > 0) {
+          createFormData.append('subSKUs', JSON.stringify(cachedOrder.subSKUs));
+        }
+
         const createResponse = await fetch(buildApiUrl('/Logistics/shipped-orders'), {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            sku: cachedOrder.sku,
-            orderOnMarketPlace: cachedOrder.orderOnMarketPlace,
-            ordersJsonb: cachedOrder.ordersJsonb,
-          }),
+          body: createFormData,
         });
 
         if (!createResponse.ok) {
@@ -655,6 +663,12 @@ export const AutomateLogisticModal = ({
 
       // Add JSON fields to FormData
       formData.append('ordersJsonb', JSON.stringify(finalOrdersJsonb));
+      if (cachedOrder.shippingType) {
+        formData.append('shippingType', cachedOrder.shippingType);
+      }
+      if (cachedOrder.subSKUs && cachedOrder.subSKUs.length > 0) {
+        formData.append('subSKUs', JSON.stringify(cachedOrder.subSKUs));
+      }
       if (rateQuotesRequestJsonb && Object.keys(rateQuotesRequestJsonb).length > 0) {
         formData.append('rateQuotesRequestJsonb', JSON.stringify(rateQuotesRequestJsonb));
       }

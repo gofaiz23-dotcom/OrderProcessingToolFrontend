@@ -225,6 +225,76 @@ export const EmailComposeModal = ({
     });
   }, [attachments]);
 
+  // Function to attach delete buttons to existing images
+  const attachDeleteButtonsToImages = () => {
+    if (!editorRef.current) return;
+    
+    const images = editorRef.current.querySelectorAll('img:not(.inline-image-wrapper img)');
+    images.forEach((img) => {
+      // Skip if already wrapped
+      if (img.parentElement?.classList.contains('inline-image-wrapper')) {
+        return;
+      }
+      
+      // Create wrapper
+      const wrapper = document.createElement('div');
+      wrapper.className = 'inline-image-wrapper';
+      wrapper.style.position = 'relative';
+      wrapper.style.display = 'inline-block';
+      wrapper.style.width = '100%';
+      wrapper.style.margin = '8px 0';
+      
+      // Create delete button
+      const deleteBtn = document.createElement('button');
+      deleteBtn.type = 'button';
+      deleteBtn.innerHTML = '×';
+      deleteBtn.className = 'inline-image-delete-btn';
+      deleteBtn.style.position = 'absolute';
+      deleteBtn.style.top = '4px';
+      deleteBtn.style.right = '4px';
+      deleteBtn.style.width = '24px';
+      deleteBtn.style.height = '24px';
+      deleteBtn.style.borderRadius = '50%';
+      deleteBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+      deleteBtn.style.color = 'white';
+      deleteBtn.style.border = 'none';
+      deleteBtn.style.cursor = 'pointer';
+      deleteBtn.style.display = 'flex';
+      deleteBtn.style.alignItems = 'center';
+      deleteBtn.style.justifyContent = 'center';
+      deleteBtn.style.fontSize = '18px';
+      deleteBtn.style.fontWeight = 'bold';
+      deleteBtn.style.lineHeight = '1';
+      deleteBtn.style.opacity = '0';
+      deleteBtn.style.transition = 'opacity 0.2s';
+      deleteBtn.title = 'Remove image';
+      
+      // Show delete button on hover
+      wrapper.addEventListener('mouseenter', () => {
+        deleteBtn.style.opacity = '1';
+      });
+      wrapper.addEventListener('mouseleave', () => {
+        deleteBtn.style.opacity = '0';
+      });
+      
+      // Handle delete button click
+      deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        if (wrapper.parentNode) {
+          wrapper.parentNode.removeChild(wrapper);
+          handleEditorChange();
+        }
+      });
+      
+      // Wrap the image
+      if (img.parentNode) {
+        img.parentNode.insertBefore(wrapper, img);
+        wrapper.appendChild(img);
+      }
+    });
+  };
+
   // Initialize or restore editor content
   useEffect(() => {
     if (isOpen && !isMinimized && editorRef.current) {
@@ -232,6 +302,8 @@ export const EmailComposeModal = ({
         // Restore saved content (e.g. from minimize)
         if (editorRef.current.innerHTML !== htmlContent) {
           editorRef.current.innerHTML = htmlContent;
+          // Attach delete buttons to any existing images
+          setTimeout(() => attachDeleteButtonsToImages(), 0);
         }
       } else if (defaultBody && isEditorEmpty) {
         // Initial load from props
@@ -240,6 +312,8 @@ export const EmailComposeModal = ({
         editorRef.current.innerHTML = htmlBody;
         setHtmlContent(htmlBody);
         setIsEditorEmpty(!defaultBody.trim());
+        // Attach delete buttons to any existing images
+        setTimeout(() => attachDeleteButtonsToImages(), 0);
       } else if (!htmlContent && !defaultBody) {
         // Empty state
         editorRef.current.innerHTML = '';
@@ -260,6 +334,69 @@ export const EmailComposeModal = ({
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showEmojiPicker]);
+
+  // Add styles for inline images in editor
+  useEffect(() => {
+    const styleId = 'email-editor-image-styles';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
+        .email-editor img {
+          max-width: 100% !important;
+          height: auto !important;
+          display: block !important;
+          border-radius: 4px !important;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+        }
+        .email-editor .inline-image-wrapper {
+          position: relative;
+          display: inline-block;
+          width: 100%;
+          margin: 8px 0;
+        }
+        .email-editor .inline-image-wrapper:hover img {
+          box-shadow: 0 2px 6px rgba(0,0,0,0.15) !important;
+        }
+        .email-editor .inline-image-delete-btn {
+          position: absolute;
+          top: 4px;
+          right: 4px;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background-color: rgba(0, 0, 0, 0.6);
+          color: white;
+          border: none;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 18px;
+          font-weight: bold;
+          line-height: 1;
+          opacity: 0;
+          transition: opacity 0.2s;
+          z-index: 10;
+        }
+        .email-editor .inline-image-wrapper:hover .inline-image-delete-btn {
+          opacity: 1 !important;
+        }
+        .email-editor .inline-image-delete-btn:hover {
+          background-color: rgba(220, 38, 38, 0.8);
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    return () => {
+      // Cleanup on unmount
+      const style = document.getElementById(styleId);
+      if (style) {
+        style.remove();
+      }
+    };
+  }, []);
 
   // Formatting functions
   const formatText = (command: string, value?: string) => {
@@ -330,19 +467,158 @@ export const EmailComposeModal = ({
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const imageUrl = event.target?.result as string;
-        if (editorRef.current) {
-          editorRef.current.focus();
-          document.execCommand('insertImage', false, imageUrl);
-        }
-      };
-      reader.readAsDataURL(file);
+      insertImageIntoEditor(file);
+    } else if (file) {
+      setSendStatus({
+        type: 'error',
+        message: 'Please select an image file.',
+      });
     }
+    // Reset input to allow selecting the same file again
     if (imageInputRef.current) {
       imageInputRef.current.value = '';
     }
+  };
+
+  // Insert image into editor with proper styling (like Gmail)
+  const insertImageIntoEditor = (file: File) => {
+    // First, add the file to attachments
+    setAttachments((prev) => {
+      // Check if file already exists
+      const exists = prev.some(f => f.name === file.name && f.size === file.size);
+      if (exists) return prev;
+      return [...prev, file];
+    });
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const imageUrl = event.target?.result as string;
+      if (editorRef.current) {
+        editorRef.current.focus();
+        
+        // Create a wrapper div for the image with delete button
+        const wrapper = document.createElement('div');
+        wrapper.className = 'inline-image-wrapper';
+        wrapper.style.position = 'relative';
+        wrapper.style.display = 'inline-block';
+        wrapper.style.width = '100%';
+        wrapper.style.margin = '8px 0';
+        // Store file reference in data attribute
+        wrapper.setAttribute('data-image-file', file.name);
+        
+        // Create an img element with inline styling (like Gmail)
+        // Use base64 for display, but we'll replace it with a placeholder before sending
+        const img = document.createElement('img');
+        img.src = imageUrl; // base64 data URL for display
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+        img.style.display = 'block';
+        img.style.borderRadius = '4px';
+        img.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
+        img.alt = file.name;
+        // Store file name for reference (used when replacing before send)
+        img.setAttribute('data-image-file', file.name);
+        img.setAttribute('data-image-placeholder', 'true'); // Mark as placeholder candidate
+        
+        // Create delete button (cross icon)
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.innerHTML = '×';
+        deleteBtn.className = 'inline-image-delete-btn';
+        deleteBtn.style.position = 'absolute';
+        deleteBtn.style.top = '4px';
+        deleteBtn.style.right = '4px';
+        deleteBtn.style.width = '24px';
+        deleteBtn.style.height = '24px';
+        deleteBtn.style.borderRadius = '50%';
+        deleteBtn.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+        deleteBtn.style.color = 'white';
+        deleteBtn.style.border = 'none';
+        deleteBtn.style.cursor = 'pointer';
+        deleteBtn.style.display = 'flex';
+        deleteBtn.style.alignItems = 'center';
+        deleteBtn.style.justifyContent = 'center';
+        deleteBtn.style.fontSize = '18px';
+        deleteBtn.style.fontWeight = 'bold';
+        deleteBtn.style.lineHeight = '1';
+        deleteBtn.style.opacity = '0';
+        deleteBtn.style.transition = 'opacity 0.2s';
+        deleteBtn.title = 'Remove image';
+        
+        // Show delete button on hover
+        wrapper.addEventListener('mouseenter', () => {
+          deleteBtn.style.opacity = '1';
+        });
+        wrapper.addEventListener('mouseleave', () => {
+          deleteBtn.style.opacity = '0';
+        });
+        
+        // Handle delete button click
+        deleteBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          // Remove from attachments
+          setAttachments((prev) => prev.filter(f => f.name !== file.name || f.size !== file.size));
+          // Remove from editor
+          if (wrapper.parentNode) {
+            wrapper.parentNode.removeChild(wrapper);
+            handleEditorChange();
+          }
+        });
+        
+        // Append image and delete button to wrapper
+        wrapper.appendChild(img);
+        wrapper.appendChild(deleteBtn);
+        
+        // Insert the wrapper at cursor position
+        const selection = window.getSelection();
+        let inserted = false;
+        
+        if (selection && selection.rangeCount > 0) {
+          try {
+            const range = selection.getRangeAt(0);
+            // Check if range is within editor
+            if (editorRef.current.contains(range.commonAncestorContainer)) {
+              range.deleteContents();
+              range.insertNode(wrapper);
+              
+              // Move cursor after the wrapper
+              range.setStartAfter(wrapper);
+              range.collapse(true);
+              selection.removeAllRanges();
+              selection.addRange(range);
+              inserted = true;
+            }
+          } catch (error) {
+            console.warn('Error inserting image at selection:', error);
+          }
+        }
+        
+        // Fallback: append to end if not inserted
+        if (!inserted) {
+          // If editor is empty, create a text node first to ensure proper insertion
+          if (!editorRef.current.hasChildNodes() || editorRef.current.textContent === '') {
+            const textNode = document.createTextNode('\u200B'); // Zero-width space
+            editorRef.current.appendChild(textNode);
+          }
+          editorRef.current.appendChild(wrapper);
+          
+          // Move cursor after the wrapper
+          const newRange = document.createRange();
+          newRange.setStartAfter(wrapper);
+          newRange.collapse(true);
+          const newSelection = window.getSelection();
+          if (newSelection) {
+            newSelection.removeAllRanges();
+            newSelection.addRange(newRange);
+          }
+        }
+        
+        // Trigger change event
+        handleEditorChange();
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleEditorChange = () => {
@@ -352,6 +628,9 @@ export const EmailComposeModal = ({
       setBody(text);
       setHtmlContent(html);
       setIsEditorEmpty(!text.trim());
+      
+      // Attach delete buttons to any new images that don't have them
+      attachDeleteButtonsToImages();
     }
   };
 
@@ -442,8 +721,94 @@ export const EmailComposeModal = ({
 
     try {
       // Get HTML content from editor
-      const htmlBody = editorRef.current?.innerHTML || '';
-      const plainBody = editorRef.current?.innerText || body;
+      let htmlBody = editorRef.current?.innerHTML || '';
+      let plainBody = editorRef.current?.innerText || body;
+
+      // Remove ALL base64 data URLs from HTML to avoid "Field value too long" error
+      // Replace them with CID references so images appear inline in the email
+      if (htmlBody) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlBody;
+        
+        // Remove wrapper divs and delete buttons, keep only img tags
+        const wrapperDivs = tempDiv.querySelectorAll('.inline-image-wrapper');
+        wrapperDivs.forEach(wrapper => {
+          const img = wrapper.querySelector('img');
+          const deleteBtn = wrapper.querySelector('.inline-image-delete-btn');
+          
+          // Remove delete button
+          if (deleteBtn) {
+            deleteBtn.remove();
+          }
+          
+          // If there's an img, replace the wrapper with just the img
+          if (img && img.parentNode) {
+            const parent = wrapper.parentNode;
+            if (parent) {
+              parent.insertBefore(img, wrapper);
+              wrapper.remove();
+            }
+          }
+        });
+        
+        // Find ALL img tags and replace base64 with CID
+        const allImages = tempDiv.querySelectorAll('img');
+        
+        allImages.forEach((imgElement) => {
+          const img = imgElement as HTMLImageElement;
+          const src = img.src || '';
+          
+          // Check if it's a base64 data URL or blob URL
+          if (src.startsWith('data:image/') || src.startsWith('blob:')) {
+            // Get the filename from data attribute or alt text
+            const fileName = img.getAttribute('data-image-file') || img.alt || 'image';
+            
+            // Find matching attachment file
+            let cidName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
+            
+            // Try to match with actual attachment filename
+            const matchingFile = attachments.find(f => 
+              f.type.startsWith('image/') && 
+              (f.name.toLowerCase() === fileName.toLowerCase() || 
+               f.name.replace(/[^a-zA-Z0-9._-]/g, '_').toLowerCase() === cidName.toLowerCase())
+            );
+            
+            if (matchingFile) {
+              // Use the actual filename (sanitized) for CID
+              cidName = matchingFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            }
+            
+            // Replace src with CID reference (Content-ID for inline images)
+            img.src = `cid:${cidName}`;
+            // Remove data attributes to reduce size
+            img.removeAttribute('data-image-file');
+            img.removeAttribute('data-image-placeholder');
+            // Ensure img has proper styling for email
+            img.style.maxWidth = '100%';
+            img.style.height = 'auto';
+            img.style.display = 'block';
+          }
+        });
+        
+        htmlBody = tempDiv.innerHTML;
+        
+        // Also remove any remaining base64 data URLs using regex (as a safety measure)
+        htmlBody = htmlBody.replace(/data:image\/[^;]+;base64,[^\s"']+/gi, 'cid:image');
+        
+        // Remove any remaining wrapper divs or delete buttons that might have been missed
+        // More precise: only remove wrapper divs that contain images
+        htmlBody = htmlBody.replace(/<div[^>]*class="[^"]*inline-image-wrapper[^"]*"[^>]*>([\s\S]*?)<\/div>/gi, (match, content) => {
+          // Extract just the img tag from the wrapper
+          const imgMatch = content.match(/<img[^>]*>/i);
+          return imgMatch ? imgMatch[0] : '';
+        });
+        htmlBody = htmlBody.replace(/<button[^>]*class="[^"]*inline-image-delete-btn[^"]*"[^>]*>.*?<\/button>/gi, '');
+      }
+      
+      // Also clean plain text body of any base64 data URLs
+      if (plainBody) {
+        plainBody = plainBody.replace(/data:image\/[^;]+;base64,[^\s"']+/gi, '[Image removed - sent as attachment]');
+      }
 
       // Parse recipients - handle multiple emails separated by commas
       const toList = to.split(',').map(email => email.trim()).filter(Boolean);
@@ -478,22 +843,48 @@ export const EmailComposeModal = ({
         return;
       }
 
+      // Final safety check: ensure HTML doesn't contain base64
+      if (htmlBody && htmlBody.includes('data:image/')) {
+        console.warn('⚠️ Warning: HTML still contains base64 data URLs, replacing with CID...');
+        htmlBody = htmlBody.replace(/data:image\/[^;]+;base64,[^\s"']+/gi, 'cid:image');
+      }
+      
+      // Remove any blob: URLs as well
+      if (htmlBody && htmlBody.includes('blob:')) {
+        htmlBody = htmlBody.replace(/blob:[^\s"']+/gi, (match) => {
+          // Try to find the filename from the image element context
+          return 'cid:image';
+        });
+      }
+      
+      // If HTML is empty or only contains whitespace, don't send it
+      let finalHtmlBody: string | undefined = htmlBody;
+      if (htmlBody) {
+        const cleanedHtml = htmlBody.replace(/<img[^>]*>/gi, '').trim();
+        if (!cleanedHtml || cleanedHtml.length === 0) {
+          finalHtmlBody = undefined;
+        }
+      }
+      
       console.log('📧 Sending email via API:', {
         to: toList,
         cc: ccList,
         bcc: bccList,
         subject: subject.trim(),
         attachments: attachments.length,
+        htmlBodyLength: finalHtmlBody?.length || 0,
+        textBodyLength: plainBody?.length || 0,
       });
 
       // Send email using backend API (same as main email compose page)
+      // Only send text or html, not both if one is empty
       const result = await sendEmail({
         to: toList,
         cc: ccList.length > 0 ? ccList.join(',') : undefined,
         bcc: bccList.length > 0 ? bccList.join(',') : undefined,
         subject: subject.trim(),
-        text: plainBody || undefined,
-        html: htmlBody || undefined,
+        text: plainBody && plainBody.trim() ? plainBody : undefined,
+        html: finalHtmlBody && finalHtmlBody.trim() ? finalHtmlBody : undefined,
         attachments: attachments,
       });
 
@@ -768,27 +1159,236 @@ export const EmailComposeModal = ({
               </div>
               <div
                 className="flex-1 relative flex flex-col min-h-0 overflow-y-auto custom-scrollbar"
-                onClick={() => editorRef.current?.focus()}
+                onClick={(e) => {
+                  // Only handle clicks on the container itself (empty space), not on editor or its children
+                  if (e.target === e.currentTarget && editorRef.current) {
+                    editorRef.current.focus();
+                    
+                    // Place cursor at the click position, not at the top
+                    const selection = window.getSelection();
+                    if (selection) {
+                      const range = document.caretRangeFromPoint 
+                        ? document.caretRangeFromPoint(e.clientX, e.clientY)
+                        : null;
+                      
+                      if (range) {
+                        // Check if the range is within the editor
+                        if (editorRef.current.contains(range.commonAncestorContainer)) {
+                          selection.removeAllRanges();
+                          selection.addRange(range);
+                        } else {
+                          // If click is outside editor content, place cursor at end
+                          const endRange = document.createRange();
+                          endRange.selectNodeContents(editorRef.current);
+                          endRange.collapse(false);
+                          selection.removeAllRanges();
+                          selection.addRange(endRange);
+                        }
+                      } else {
+                        // Fallback: place cursor at end
+                        const endRange = document.createRange();
+                        endRange.selectNodeContents(editorRef.current);
+                        endRange.collapse(false);
+                        selection.removeAllRanges();
+                        selection.addRange(endRange);
+                      }
+                    }
+                  }
+                }}
+                onDragEnter={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  // Prevent browser from opening the image
+                }}
+                onDragOver={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  // Prevent browser from opening the image
+                }}
+                onDrop={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  
+                  // Handle dropped files here as well (in case drop happens on empty space)
+                  const files = Array.from(e.dataTransfer.files);
+                  const imageFiles = files.filter(file => file.type.startsWith('image/'));
+                  
+                  if (imageFiles.length > 0 && editorRef.current) {
+                    // Insert first image inline in the editor
+                    insertImageIntoEditor(imageFiles[0]);
+                    
+                    // Add remaining images as attachments
+                    if (imageFiles.length > 1) {
+                      const remainingFiles = imageFiles.slice(1);
+                      setAttachments((prev) => [...prev, ...remainingFiles]);
+                    }
+                    
+                    // Add non-image files as attachments
+                    const nonImageFiles = files.filter(file => !file.type.startsWith('image/'));
+                    if (nonImageFiles.length > 0) {
+                      setAttachments((prev) => [...prev, ...nonImageFiles]);
+                    }
+                  } else if (files.length > 0) {
+                    // If no images, add all files as attachments
+                    setAttachments((prev) => [...prev, ...files]);
+                  }
+                }}
               >
                 <div
                   ref={editorRef}
-                  contentEditable
+                  contentEditable={true}
+                  suppressContentEditableWarning={true}
                   onInput={handleEditorChange}
-                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    // Let the browser handle cursor positioning naturally
+                    // Don't interfere with the browser's default click-to-position behavior
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Ensure editor has focus, but let browser handle cursor positioning
+                    if (editorRef.current) {
+                      editorRef.current.focus();
+                      
+                      // If clicking on empty space within editor, place cursor at click position
+                      const selection = window.getSelection();
+                      if (selection && selection.rangeCount === 0) {
+                        // No selection yet, try to place cursor at click position
+                        const range = document.caretRangeFromPoint 
+                          ? document.caretRangeFromPoint(e.clientX, e.clientY)
+                          : null;
+                        
+                        if (range && editorRef.current.contains(range.commonAncestorContainer)) {
+                          selection.removeAllRanges();
+                          selection.addRange(range);
+                        }
+                      }
+                    }
+                  }}
                   onFocus={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                  }}
+                  onKeyUp={(e) => {
                     e.stopPropagation();
                   }}
                   onPaste={(e) => {
                     e.stopPropagation();
-                    // Allow paste but strip formatting if needed
                     e.preventDefault();
-                    const text = e.clipboardData.getData('text/plain');
-                    document.execCommand('insertText', false, text);
+                    
+                    // Check if pasting an image
+                    const items = e.clipboardData.items;
+                    let hasImage = false;
+                    
+                    for (let i = 0; i < items.length; i++) {
+                      if (items[i].type.indexOf('image') !== -1) {
+                        hasImage = true;
+                        const file = items[i].getAsFile();
+                        if (file) {
+                          insertImageIntoEditor(file);
+                          return;
+                        }
+                      }
+                    }
+                    
+                    // If no image, paste as text
+                    if (!hasImage) {
+                      const text = e.clipboardData.getData('text/plain');
+                      document.execCommand('insertText', false, text);
+                    }
                   }}
-                  className="w-full px-4 py-3 text-sm text-black resize-none outline-none focus:ring-0"
+                  onDragEnter={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    // Prevent browser from navigating to the image
+                  }}
+                  onDrop={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    
+                    // Prevent browser from opening the image in a new tab
+                    e.dataTransfer.dropEffect = 'copy';
+                    
+                    // Handle dropped files
+                    const files = Array.from(e.dataTransfer.files);
+                    
+                    if (files.length === 0) {
+                      // Remove drag feedback
+                      if (editorRef.current) {
+                        editorRef.current.style.backgroundColor = '';
+                      }
+                      return;
+                    }
+                    
+                    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+                    
+                    if (imageFiles.length > 0) {
+                      // Insert first image inline in the editor at drop position
+                      const dropFile = imageFiles[0];
+                      
+                      // Try to get cursor position from drop coordinates
+                      const selection = window.getSelection();
+                      let range: Range | null = null;
+                      
+                      if (document.caretRangeFromPoint) {
+                        range = document.caretRangeFromPoint(e.clientX, e.clientY);
+                      }
+                      
+                      // If we have a valid range within the editor, use it
+                      if (range && editorRef.current && editorRef.current.contains(range.commonAncestorContainer)) {
+                        selection?.removeAllRanges();
+                        selection?.addRange(range);
+                      }
+                      
+                      // Insert the image
+                      insertImageIntoEditor(dropFile);
+                      
+                      // Add remaining images as attachments
+                      if (imageFiles.length > 1) {
+                        const remainingFiles = imageFiles.slice(1);
+                        setAttachments((prev) => [...prev, ...remainingFiles]);
+                      }
+                      
+                      // Add non-image files as attachments
+                      const nonImageFiles = files.filter(file => !file.type.startsWith('image/'));
+                      if (nonImageFiles.length > 0) {
+                        setAttachments((prev) => [...prev, ...nonImageFiles]);
+                      }
+                    } else {
+                      // If no images, add all files as attachments
+                      setAttachments((prev) => [...prev, ...files]);
+                    }
+                    
+                    // Remove drag feedback
+                    if (editorRef.current) {
+                      editorRef.current.style.backgroundColor = '';
+                    }
+                  }}
+                  onDragOver={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    // Add visual feedback
+                    if (editorRef.current) {
+                      editorRef.current.style.backgroundColor = 'rgba(59, 130, 246, 0.05)';
+                    }
+                  }}
+                  onDragLeave={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    // Remove visual feedback
+                    if (editorRef.current) {
+                      editorRef.current.style.backgroundColor = '';
+                    }
+                  }}
+                  className="w-full px-4 py-3 text-sm text-black resize-none outline-none focus:ring-0 email-editor"
                   style={{
                     minHeight: '150px',
                     whiteSpace: 'pre-wrap',
+                    userSelect: 'text',
+                    WebkitUserSelect: 'text',
+                    cursor: 'text',
                   }}
                 />
                 {isEditorEmpty && (
@@ -802,39 +1402,46 @@ export const EmailComposeModal = ({
 
               {/* Attachments - Fixed at bottom of content area */}
               {attachments.length > 0 && (
-                <div className="px-4 py-3 border-t border-slate-100 bg-white max-h-[140px] overflow-y-auto custom-scrollbar" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex flex-wrap gap-2">
-                    {attachments.map((file, index) => (
-                      <div
-                        key={index}
-                        className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 border border-slate-200 rounded-full hover:bg-slate-200 transition-colors cursor-pointer group max-w-[280px]"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAttachmentClick(file);
-                        }}
-                      >
-                        <Paperclip size={14} className="text-slate-600 flex-shrink-0" />
-                        <div className="flex flex-col min-w-0 flex-1">
-                          <span className="text-slate-700 text-xs font-medium truncate" title={file.name}>
-                            {file.name}
-                          </span>
-                          <span className="text-slate-500 text-[10px] leading-tight">
-                            {formatFileSize(file.size)}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
+                <div className="border-t border-slate-100 bg-white" onClick={(e) => e.stopPropagation()}>
+                  <div className="px-4 pt-3 pb-2">
+                    <span className="text-xs font-medium text-slate-600">
+                      Attachments ({attachments.length})
+                    </span>
+                  </div>
+                  <div className="px-4 pb-3 max-h-[120px] overflow-y-auto custom-scrollbar">
+                    <div className="grid grid-cols-2 gap-2">
+                      {attachments.map((file, index) => (
+                        <div
+                          key={index}
+                          className="inline-flex items-center gap-2 px-3 py-1 bg-slate-100 border border-slate-200 rounded-full hover:bg-slate-200 transition-colors cursor-pointer group w-full"
                           onClick={(e) => {
                             e.stopPropagation();
-                            removeAttachment(index);
+                            handleAttachmentClick(file);
                           }}
-                          className="p-0.5 text-slate-400 hover:text-red-600 rounded-full hover:bg-slate-300 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
-                          title="Remove attachment"
                         >
-                          <X size={14} />
-                        </button>
-                      </div>
-                    ))}
+                          <Paperclip size={14} className="text-slate-600 flex-shrink-0" />
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <span className="text-slate-700 text-xs font-medium truncate" title={file.name}>
+                              {file.name}
+                            </span>
+                            <span className="text-slate-500 text-[10px] leading-tight">
+                              {formatFileSize(file.size)}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeAttachment(index);
+                            }}
+                            className="p-0.5 text-slate-400 hover:text-red-600 rounded-full hover:bg-slate-300 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                            title="Remove attachment"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
@@ -1018,10 +1625,15 @@ export const EmailComposeModal = ({
                     e.stopPropagation();
                     fileInputRef.current?.click();
                   }}
-                  className="p-2 hover:bg-slate-200 rounded transition-colors"
+                  className="p-2 hover:bg-slate-200 rounded transition-colors relative"
                   title="Attach files"
                 >
                   <Paperclip size={16} className="text-slate-600" />
+                  {attachments.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-blue-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                      {attachments.length}
+                    </span>
+                  )}
                 </button>
                 <input
                   ref={fileInputRef}
