@@ -1031,20 +1031,21 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
           {success && automationId && (
             <div className="space-y-4">
               {pickupStatus?.status === 'success' || pickupStatus?.status === 'completed' ? (
-                <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 flex items-center gap-4 animate-in fade-in slide-in-from-top-4">
-                  <div className="p-3 bg-green-100 rounded-full">
-                    <CheckCircle2 size={32} className="text-green-600" />
-                  </div>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-bold text-green-800">Pickup request submitted successfully!</h3>
-                    <p className="text-sm text-green-700 mt-1">Automation ID: {automationId}</p>
-                    <div className="mt-3 flex items-center gap-2 text-sm text-green-600">
-                      <CheckCircle2 size={16} />
-                      <span>Process completed successfully</span>
+                <>
+                  <div className="bg-green-50 border-2 border-green-200 rounded-xl p-6 flex items-center gap-4 animate-in fade-in slide-in-from-top-4">
+                    <div className="p-3 bg-green-100 rounded-full">
+                      <CheckCircle2 size={32} className="text-green-600" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-lg font-bold text-green-800">Pickup request submitted successfully!</h3>
+                      <p className="text-sm text-green-700 mt-1">Automation ID: {automationId}</p>
+                      <div className="mt-3 flex items-center gap-2 text-sm text-green-600">
+                        <CheckCircle2 size={16} />
+                        <span>Process completed successfully</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-                <div className="border-t-2 border-slate-200 pt-4">
+                  <div className="border-t-2 border-slate-200 pt-4">
                   <h3 className="font-semibold text-slate-700 mb-4">Additional Contacts</h3>
                   <div className="space-y-4">
                     {contacts.map((contact) => (
@@ -1080,7 +1081,8 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                           )}
                         </div>
                       </div>
-                    </div>
+                    ))}
+                  </div>
                     <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">
                       {pickupStatus?.status?.toUpperCase() || 'INITIALIZING'}
                     </div>
@@ -1112,7 +1114,8 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                       Updating live...
                     </span>
                   </div>
-                </div>
+                  </div>
+                </>
               )}
               <button
                 type="submit"
