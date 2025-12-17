@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import { Loader2, Calendar, Info, CheckCircle2, Clock, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, Info, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Order } from '@/app/types/order';
 import { buildApiUrl } from '../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
@@ -24,10 +24,50 @@ type XPORateQuoteProps = {
 export type XPORateQuoteRef = {
   getQuote: () => Promise<void>;
   hasQuotes: () => boolean;
-  getSelectedQuote: () => any | null;
+  getSelectedQuote: () => XPORateQuoteResponse | null;
   showBOLForm: () => void;
   isBOLFormVisible: () => boolean;
 };
+
+// Type definitions for XPO Rate Quote responses
+interface XPORateQuoteResponse {
+  rateFound: boolean;
+  quoteRate?: {
+    totalCharges: string;
+    ratedAccessorials: Array<{ description: string; charge: string }>;
+  };
+  chargeItems?: Array<{ description: string; charge: string }>;
+  dates?: {
+    deliveryDate: string;
+    transitDeliveryDate: string;
+    shipmentDate: string;
+  };
+  transitDetails?: {
+    transitDays: number;
+  };
+  quoteId?: string;
+  pickupLocation?: string;
+  deliveryLocation?: string;
+  commoditiesText?: string;
+  totalWeightText?: string;
+  paymentTerms?: string;
+  basePrice?: number;
+  discountPct?: number;
+  ratingTariffName?: string;
+  [key: string]: unknown;
+}
+
+interface XPOErrorResponse {
+  status: number;
+  statusText: string;
+  errorMessage: string;
+  errorData: unknown;
+}
+
+interface XPORequestPayload {
+  shippingCompany: string;
+  [key: string]: unknown;
+}
 
 // Helper function to extract value from JSONB
 const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
@@ -78,10 +118,10 @@ const parseAddressString = (addressStr: string): { streetAddress: string; addres
     return { streetAddress: '', addressLine2: '', city: '', state: '', zip: '' };
   }
 
-  let cleaned = addressStr.trim().replace(/\s+US\s+(\d{5})$/, ' $1');
+  const cleaned = addressStr.trim().replace(/\s+US\s+(\d{5})$/, ' $1');
   const zipMatch = cleaned.match(/(\d{5})$/);
   const zip = zipMatch ? zipMatch[1] : '';
-  let withoutZip = cleaned.replace(/\s+\d{5}$/, '').trim();
+  const withoutZip = cleaned.replace(/\s+\d{5}$/, '').trim();
   const stateMatch = withoutZip.match(/\s+([A-Z]{2})\s*$/);
   const state = stateMatch ? stateMatch[1] : '';
   let withoutStateZip = withoutZip.replace(/\s+[A-Z]{2}\s*$/, '').trim();
@@ -107,8 +147,8 @@ const parseAddressString = (addressStr: string): { streetAddress: string; addres
   const streetParts = parts.slice(0, cityStartIndex);
   const cityParts = parts.slice(cityStartIndex);
   const city = cityParts.join(' ').toUpperCase();
-  let streetAddressFull = streetParts.join(' ');
-
+  const streetAddressFull = streetParts.join(' ');
+  
   let streetAddress = streetAddressFull;
   let addressLine2 = '';
   const steMatch = streetAddressFull.match(/^(.+?)\s+(STE|SUITE|#|UNIT|APT|FLOOR|FL\.?)\s*(.+)$/i);
@@ -129,18 +169,18 @@ const parseAddressString = (addressStr: string): { streetAddress: string; addres
 export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ order, subSKUs = [], shippingType }, ref) => {
   const { getToken, autoLogin } = useLogisticsStore();
   const [loading, setLoading] = useState(false);
-  const [quotes, setQuotes] = useState<any[]>([]);
+  const [quotes, setQuotes] = useState<XPORateQuoteResponse[]>([]);
   const [error, setError] = useState<unknown>(null);
   const [storedToken, setStoredToken] = useState<string>('');
-  const [response, setResponse] = useState<any>(null);
-  const [requestPayload, setRequestPayload] = useState<any>(null);
+  const [response, setResponse] = useState<Record<string, unknown> | null>(null);
+  const [requestPayload, setRequestPayload] = useState<XPORequestPayload | null>(null);
   const [showPayload, setShowPayload] = useState(false);
-  const [errorResponse, setErrorResponse] = useState<any>(null);
+  const [errorResponse, setErrorResponse] = useState<XPOErrorResponse | null>(null);
   const [showErrorResponse, setShowErrorResponse] = useState(false);
   const [showFormContent, setShowFormContent] = useState(true);
   const quotesRef = useRef<HTMLDivElement>(null);
   const [showBOLForm, setShowBOLForm] = useState(false);
-  const [selectedQuote, setSelectedQuote] = useState<any | null>(null);
+  const [selectedQuote, setSelectedQuote] = useState<XPORateQuoteResponse | null>(null);
 
   // Get token from store
   useEffect(() => {
@@ -174,14 +214,6 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
     }
   }, [showBOLForm]);
 
-  // Get today's date in datetime-local format
-  const getTodayDateTimeLocal = () => {
-    const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}T12:00`;
-  };
 
   // Convert MM/DD/YYYY or datetime-local to ISO 8601
   const convertToISO8601 = (dateString: string): string => {
@@ -250,7 +282,11 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
   };
 
   const handleCalendarIconClick = () => {
-    dateInputRef.current?.showPicker?.() || dateInputRef.current?.click();
+    if (dateInputRef.current?.showPicker) {
+      dateInputRef.current.showPicker();
+    } else {
+      dateInputRef.current?.click();
+    }
   };
 
   // Pickup Location
@@ -345,8 +381,8 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
     if (weightStr) {
       const weight = parseFloat(weightStr);
       if (!isNaN(weight) && weight > 0) {
-        setCommodities([{
-          ...commodities[0],
+        setCommodities((prev) => [{
+          ...prev[0],
           grossWeight: {
             weight: weight,
             weightUom: 'LBS',
@@ -391,12 +427,14 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
     }
   };
 
-  const updateCommodity = (index: number, field: keyof XPORateQuoteCommodity, value: any) => {
+  const updateCommodity = (index: number, field: keyof XPORateQuoteCommodity, value: unknown) => {
     const updated = [...commodities];
     if (field === 'grossWeight') {
-      updated[index] = { ...updated[index], grossWeight: { ...updated[index].grossWeight, ...value } };
+      const weightValue = value as Record<string, unknown>;
+      updated[index] = { ...updated[index], grossWeight: { ...updated[index].grossWeight, ...weightValue } };
     } else if (field === 'dimensions') {
-      updated[index] = { ...updated[index], dimensions: { ...updated[index].dimensions, ...value } };
+      const dimValue = value as Record<string, unknown>;
+      updated[index] = { ...updated[index], dimensions: { ...updated[index].dimensions, ...dimValue } };
     } else {
       updated[index] = { ...updated[index], [field]: value };
     }
@@ -577,17 +615,18 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
         }
 
         let errorMessage = `Rate quote failed: ${res.statusText}`;
-        let errorData: any = null;
+        let errorData: unknown = null;
         try {
           errorData = await res.json();
-          if (errorData.message) {
-            errorMessage = errorData.message;
-          } else if (errorData.error) {
-            errorMessage = typeof errorData.error === 'string'
-              ? errorData.error
-              : errorData.error.message || errorMessage;
+          if (errorData && typeof errorData === 'object' && 'message' in errorData) {
+            errorMessage = String(errorData.message);
+          } else if (errorData && typeof errorData === 'object' && 'error' in errorData) {
+            const error = errorData.error;
+            errorMessage = typeof error === 'string' 
+              ? error 
+              : (error && typeof error === 'object' && 'message' in error ? String(error.message) : errorMessage);
           }
-        } catch (parseError) {
+        } catch {
           // If JSON parsing fails, use status text
         }
 
@@ -616,53 +655,62 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
 
       // Log response for debugging
       console.log('✅ XPO Rate Quote Response:', JSON.stringify(data, null, 2));
-
-      // Store request payload in response object for later use
-      (data as any)._requestPayload = payload;
-
-      // Don't dispatch to cache yet - wait for user to select a quote
-      // The selected quote will be dispatched when user clicks on a quote card
-
+      
+      // Dispatch event for cache update (for LTL orders)
+      // Do NOT save to database here - only save when user submits from ResponseSummary
+      dispatchRateQuoteData(order.id, 'xpo', payload, data);
+      
       // Transform and extract quotes
-      const transformQuote = (quote: any, transitTime?: any) => {
+      const transformQuote = (quote: Record<string, unknown>, transitTime?: Record<string, unknown>): XPORateQuoteResponse => {
         // Extract total charges from totCharge array
-        const totalCharges = quote.totCharge && Array.isArray(quote.totCharge) && quote.totCharge.length > 0
-          ? quote.totCharge[0].amt?.toString() || '0'
+        const totCharge = quote.totCharge as Array<Record<string, unknown>> | undefined;
+        const totalCharges = totCharge && Array.isArray(totCharge) && totCharge.length > 0
+          ? String((totCharge[0].amt as number | string) || '0')
           : '0';
 
         // Extract accessorials/charge items
-        const chargeItems = quote.shipmentInfo?.accessorials?.map((acc: any) => ({
-          description: acc.accessorialDesc || acc.accessorialCd || '',
-          charge: acc.chargeAmt?.amt?.toString() || '0',
-        })) || [];
+        const shipmentInfo = quote.shipmentInfo as Record<string, unknown> | undefined;
+        const accessorials = shipmentInfo?.accessorials as Array<Record<string, unknown>> | undefined;
+        const chargeItems = accessorials?.map((acc) => {
+          const desc = acc.accessorialDesc || acc.accessorialCd || '';
+          const amt = acc.chargeAmt as Record<string, unknown> | undefined;
+          const charge = amt?.amt?.toString() || '0';
+          return {
+            description: String(desc),
+            charge: String(charge),
+          };
+        }) || [];
 
         // Add commodity charge if available
-        if (quote.shipmentInfo?.totCommodityCharge?.amt) {
+        const totCommodityCharge = shipmentInfo?.totCommodityCharge as Record<string, unknown> | undefined;
+        if (totCommodityCharge?.amt) {
           chargeItems.push({
             description: 'Commodity Charge',
-            charge: quote.shipmentInfo.totCommodityCharge.amt.toString(),
+            charge: String(totCommodityCharge.amt),
           });
         }
 
         // Use transitTime from parameter or from quote object
-        const transit = transitTime || quote.transitTime;
+        const transit = (transitTime || quote.transitTime) as Record<string, unknown> | undefined;
 
         // Format delivery date from transitTime
         let deliveryDate = '';
-        if (transit?.estdDlvrDate) {
-          const date = new Date(transit.estdDlvrDate);
-          deliveryDate = date.toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
+        const estdDlvrDate = transit?.estdDlvrDate as string | undefined;
+        if (estdDlvrDate) {
+          const date = new Date(estdDlvrDate);
+          deliveryDate = date.toLocaleDateString('en-US', { 
+            year: 'numeric', 
+            month: 'short', 
+            day: 'numeric' 
           });
         }
 
         // Format shipment date
         let shipmentDate = '';
-        if (quote.shipmentInfo?.shipmentDate) {
-          const date = new Date(quote.shipmentInfo.shipmentDate);
-          shipmentDate = date.toLocaleDateString('en-US', {
+        const shipmentDateValue = shipmentInfo?.shipmentDate as string | undefined;
+        if (shipmentDateValue) {
+          const date = new Date(shipmentDateValue);
+          shipmentDate = date.toLocaleDateString('en-US', { 
             weekday: 'short',
             year: 'numeric',
             month: 'short',
@@ -671,27 +719,34 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
         }
 
         // Format pickup location
-        const pickupLocation = quote.shipmentInfo?.shipper?.address
-          ? `${quote.shipmentInfo.shipper.address.cityName || ''}, ${quote.shipmentInfo.shipper.address.stateCd || ''} ${quote.shipmentInfo.shipper.address.postalCd || ''}`.trim()
+        const shipper = shipmentInfo?.shipper as Record<string, unknown> | undefined;
+        const shipperAddress = shipper?.address as Record<string, unknown> | undefined;
+        const pickupLocation = shipperAddress
+          ? `${String(shipperAddress.cityName || '')}, ${String(shipperAddress.stateCd || '')} ${String(shipperAddress.postalCd || '')}`.trim()
           : '';
 
         // Format delivery location
-        const deliveryLocation = quote.shipmentInfo?.consignee?.address
-          ? `${quote.shipmentInfo.consignee.address.cityName || ''}, ${quote.shipmentInfo.consignee.address.stateCd || ''} ${quote.shipmentInfo.consignee.address.postalCd || ''}`.trim()
+        const consignee = shipmentInfo?.consignee as Record<string, unknown> | undefined;
+        const consigneeAddress = consignee?.address as Record<string, unknown> | undefined;
+        const deliveryLocation = consigneeAddress
+          ? `${String(consigneeAddress.cityName || '')}, ${String(consigneeAddress.stateCd || '')} ${String(consigneeAddress.postalCd || '')}`.trim()
           : '';
 
         // Format commodities
-        const commoditiesText = quote.shipmentInfo?.commodity?.map((comm: any) => {
-          const pieces = comm.pieceCnt || 1;
-          const weight = comm.grossWeight?.weight || 0;
-          const nmfcClass = comm.nmfcClass || '';
-          const packageCode = comm.packageCode || 'PLT';
+        const commodity = shipmentInfo?.commodity as Array<Record<string, unknown>> | undefined;
+        const commoditiesText = commodity?.map((comm) => {
+          const pieces = (comm.pieceCnt as number) || 1;
+          const grossWeight = comm.grossWeight as Record<string, unknown> | undefined;
+          const weight = (grossWeight?.weight as number) || 0;
+          const nmfcClass = String(comm.nmfcClass || '');
+          const packageCode = String(comm.packageCode || 'PLT');
           const packageName = packageCode === 'PLT' ? 'Pallet' : packageCode;
           return `${pieces} ${packageName}${pieces > 1 ? 's' : ''}, ${weight} Lbs., Class ${nmfcClass}`;
         }).join(', ') || '';
 
         // Get total weight
-        const totalWeight = quote.shipmentInfo?.totCommodityWeight?.weight || 0;
+        const totCommodityWeight = shipmentInfo?.totCommodityWeight as Record<string, unknown> | undefined;
+        const totalWeight = (totCommodityWeight?.weight as number) || 0;
         const totalWeightText = `${totalWeight} Lbs.`;
 
         // Format payment terms
@@ -700,23 +755,28 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
           'C': 'Collect',
           '3': 'Third Party',
         };
-        const paymentTerms = paymentTermMap[quote.shipmentInfo?.paymentTermCd || 'P'] || 'Prepaid';
+        const paymentTermCd = String(shipmentInfo?.paymentTermCd || 'P');
+        const paymentTerms = paymentTermMap[paymentTermCd] || 'Prepaid';
 
         // Get base price (before discount)
-        const basePrice = quote.shipmentInfo?.totCommodityCharge?.amt || 0;
-        const discountPct = quote.actlDiscountPct || 0;
+        const basePrice = (totCommodityCharge?.amt as number) || 0;
+        const discountPct = (quote.actlDiscountPct as number) || 0;
 
         // Transform to expected format
         return {
-          ...quote,
           rateFound: true,
           serviceLevelText: 'Standard',
           quoteRate: {
             totalCharges: totalCharges,
-            ratedAccessorials: quote.shipmentInfo?.accessorials?.map((acc: any) => ({
-              description: acc.accessorialDesc || acc.accessorialCd || '',
-              charge: acc.chargeAmt?.amt?.toString() || '0',
-            })) || [],
+            ratedAccessorials: accessorials?.map((acc) => {
+              const desc = acc.accessorialDesc || acc.accessorialCd || '';
+              const amt = acc.chargeAmt as Record<string, unknown> | undefined;
+              const charge = amt?.amt?.toString() || '0';
+              return {
+                description: String(desc),
+                charge: String(charge),
+              };
+            }) || [],
           },
           chargeItems: chargeItems,
           dates: {
@@ -725,9 +785,9 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
             shipmentDate: shipmentDate,
           },
           transitDetails: {
-            transitDays: transit?.transitDays || 0,
+            transitDays: (transit?.transitDays as number) || 0,
           },
-          quoteId: quote.confirmationNbr || quote.spotQuoteNbr || '',
+          quoteId: String(quote.confirmationNbr || quote.spotQuoteNbr || ''),
           // Additional fields for enhanced display
           pickupLocation: pickupLocation,
           deliveryLocation: deliveryLocation,
@@ -736,13 +796,13 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
           paymentTerms: paymentTerms,
           basePrice: basePrice,
           discountPct: discountPct,
-          ratingTariffName: quote.ratingTariffName || '',
+          ratingTariffName: String(quote.ratingTariffName || ''),
         };
       };
 
       // Extract and transform quotes
-      let rawQuotes: any[] = [];
-      let transitTime: any = null;
+      let rawQuotes: Record<string, unknown>[] = [];
+      let transitTime: Record<string, unknown> | null = null;
 
       if (data.data?.data) {
         // Check if rateQuote exists (single quote)
@@ -767,7 +827,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
       }
 
       // Transform all quotes
-      const transformedQuotes = rawQuotes.map(quote => transformQuote(quote, transitTime));
+      const transformedQuotes = rawQuotes.map(quote => transformQuote(quote, transitTime || undefined));
       setQuotes(transformedQuotes);
 
       // Close form content and pickup details dropdown when quotes are generated
@@ -782,35 +842,16 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
 
   // Listen for quote selection events
   useEffect(() => {
-    const handleQuoteSelected = (e: CustomEvent) => {
-      const { quoteId, index, carrier } = e.detail;
+    const handleQuoteSelected = (e: Event) => {
+      const customEvent = e as CustomEvent<{ quoteId?: string; index: number; carrier: string }>;
+      const { index, carrier } = customEvent.detail;
       if (carrier === 'xpo' && quotes[index]) {
-        const selected = quotes[index];
-        setSelectedQuote(selected);
-
-        // Dispatch only the selected quote's request and response to cache
-        // Get the original request payload from response
-        const requestPayload = (response as any)?._requestPayload || null;
-        if (requestPayload) {
-          // Create a response object with only the selected quote
-          const selectedQuoteResponse = {
-            ...response,
-            data: {
-              ...response.data,
-              data: {
-                ...response.data?.data,
-                rateQuote: selected, // Only include the selected quote
-              },
-            },
-          };
-          dispatchRateQuoteData(order.id, 'xpo', requestPayload, selectedQuoteResponse);
-          console.log('✅ Selected XPO quote cached');
-        }
+        setSelectedQuote(quotes[index]);
       }
     };
     window.addEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
     return () => {
-      window.removeEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
+      window.removeEventListener('quoteSelected', handleQuoteSelected);
     };
   }, [quotes, response, order.id]);
 
@@ -1583,7 +1624,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
       {/* Empty State */}
       {!loading && quotes.length === 0 && !error && !response && (
         <div className="text-center py-6 text-xs text-slate-500">
-          Fill out the form and click "Get Rate Quote" to retrieve shipping rates
+          Fill out the form and click &quot;Get Rate Quote&quot; to retrieve shipping rates
         </div>
       )}
 
@@ -1592,7 +1633,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
         <div className="mt-6 border-t border-slate-200 pt-6" id="bol-form-section">
           <XPOBOLForm
             order={order}
-            quoteData={selectedQuote ? { data: { data: { rateQuote: selectedQuote } } } : response}
+            quoteData={selectedQuote ? { data: { data: { rateQuote: selectedQuote } } } : (response || undefined)}
             subSKUs={subSKUs}
             shippingType={shippingType}
             onBack={() => {

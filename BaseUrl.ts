@@ -74,7 +74,7 @@ export const buildFileUrl = (filePath: string) => {
     }
     return url;
   }
-  
+ 
   // If filePath starts with 'uploads/', replace with uploadPath
   if (cleanFilePath.startsWith('uploads/')) {
     cleanFilePath = cleanFilePath.replace(/^uploads\//, '');
@@ -84,7 +84,7 @@ export const buildFileUrl = (filePath: string) => {
     }
     return url;
   }
-  
+ 
   // Otherwise, prepend upload path
   const cleanUploadPath = uploadPath.replace(/\/$/, '');
   const url = `${backendUrl}/${cleanUploadPath}/${cleanFilePath}`;
@@ -95,3 +95,5 @@ export const buildFileUrl = (filePath: string) => {
 };
 
 export default API_BASE_URL;
+
+

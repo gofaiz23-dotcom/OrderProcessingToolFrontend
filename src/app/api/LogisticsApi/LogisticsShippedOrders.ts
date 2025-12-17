@@ -102,7 +102,6 @@ export const createLogisticsShippedOrder = async (
   formData.append('orderOnMarketPlace', payload.orderOnMarketPlace);
   formData.append('ordersJsonb', JSON.stringify(payload.ordersJsonb));
   
-  // Only append rateQuotesRequestJsonb if it exists and is not null/empty
   if (payload.rateQuotesRequestJsonb && 
       typeof payload.rateQuotesRequestJsonb === 'object' && 
       Object.keys(payload.rateQuotesRequestJsonb).length > 0) {

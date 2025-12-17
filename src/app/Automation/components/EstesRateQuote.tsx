@@ -22,7 +22,7 @@ type EstesRateQuoteProps = {
 export type EstesRateQuoteRef = {
   getQuote: () => Promise<void>;
   hasQuotes: () => boolean;
-  getSelectedQuote: () => any | null;
+  getSelectedQuote: () => EstesQuote | null;
   showBOLForm: () => void;
   isBOLFormVisible: () => boolean;
 };
@@ -41,12 +41,39 @@ type HandlingUnit = {
   sub: string;
   hazardous: boolean;
   description: string;
-  items: any[];
+  items: Array<{ id: string; [key: string]: unknown }>;
 };
 
-type CommodityItem = {
-  id: string;
-  description?: string;
+// Types for Estes API responses
+type EstesQuote = {
+  quoteId?: string;
+  rateFound?: boolean;
+  quoteRate?: {
+    totalCharges?: string;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+type EstesRateQuoteResponse = {
+  data?: {
+    data?: EstesQuote[];
+    [key: string]: unknown;
+  };
+  _requestPayload?: unknown;
+  [key: string]: unknown;
+};
+
+type EstesRequestPayload = {
+  shippingCompany: string;
+  [key: string]: unknown;
+};
+
+type EstesErrorResponse = {
+  status: number;
+  statusText: string;
+  errorMessage: string;
+  errorData?: unknown;
 };
 
 // Helper function to extract value from JSONB
@@ -104,16 +131,15 @@ const getTodayDate = () => {
 export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>(({ order, subSKUs = [], shippingType }, ref) => {
   const { getToken, isTokenExpired, refreshToken, isSessionActive, autoLogin } = useLogisticsStore();
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<any>(null);
+  const [response, setResponse] = useState<EstesRateQuoteResponse | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [storedToken, setStoredToken] = useState<string>('');
-  const [isMounted, setIsMounted] = useState(false);
   const [showAccountInfo, setShowAccountInfo] = useState(true);
-  const [requestPayload, setRequestPayload] = useState<any>(null);
+  const [requestPayload, setRequestPayload] = useState<EstesRequestPayload | null>(null);
   const [showPayload, setShowPayload] = useState(false);
-  const [errorResponse, setErrorResponse] = useState<any>(null);
+  const [errorResponse, setErrorResponse] = useState<EstesErrorResponse | null>(null);
   const [showErrorResponse, setShowErrorResponse] = useState(false);
-  const [selectedQuote, setSelectedQuote] = useState<any | null>(null);
+  const [selectedQuote, setSelectedQuote] = useState<EstesQuote | null>(null);
   const [showBOLForm, setShowBOLForm] = useState(false);
   const showBOLFormRef = useRef(false);
   const bolFormRef = useRef<HTMLDivElement>(null);
@@ -233,7 +259,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
           }
         }
       }
-    } catch (error) {
+    } catch {
       // Silently fail
     } finally {
       if (type === 'origin') {
@@ -370,6 +396,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
 
     // Ship Date - Always defaults to today's date, user can change it manually
     // We don't auto-populate from order data to ensure it always starts with today
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [order]);
 
   // Update handling unit descriptions with subSKUs when subSKUs change
@@ -398,8 +425,9 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
 
   // Listen for quote selection events
   useEffect(() => {
-    const handleQuoteSelected = (e: CustomEvent) => {
-      const { quoteId, index, carrier } = e.detail;
+    const handleQuoteSelected = (e: Event) => {
+      const customEvent = e as CustomEvent<{ quoteId?: string; index: number; carrier: string }>;
+      const { index, carrier } = customEvent.detail;
       if (carrier === 'estes' && response?.data?.data?.[index]) {
         const selected = response.data.data[index];
         setSelectedQuote(selected);
@@ -423,7 +451,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
     };
     window.addEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
     return () => {
-      window.removeEventListener('quoteSelected' as any, handleQuoteSelected as EventListener);
+      window.removeEventListener('quoteSelected', handleQuoteSelected);
     };
   }, [response, order.id]);
 
@@ -439,7 +467,6 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
 
   // Initialize token on mount
   useEffect(() => {
-    setIsMounted(true);
     const normalizedCarrier = 'estes';
     const tokenFromStore = getToken(normalizedCarrier) || '';
     setStoredToken(tokenFromStore);
@@ -499,7 +526,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
     setHandlingUnits([...handlingUnits, newUnit]);
   };
 
-  const updateHandlingUnit = (id: string, field: keyof HandlingUnit, value: any) => {
+  const updateHandlingUnit = (id: string, field: keyof HandlingUnit, value: string | number | boolean) => {
     setHandlingUnits(
       handlingUnits.map((unit) => (unit.id === id ? { ...unit, [field]: value } : unit))
     );
@@ -511,18 +538,6 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
     }
   };
 
-  const addItemToUnit = (unitId: string) => {
-    setHandlingUnits(
-      handlingUnits.map((unit) =>
-        unit.id === unitId
-          ? {
-            ...unit,
-            items: [...unit.items, { id: Date.now().toString() }],
-          }
-          : unit
-      )
-    );
-  };
 
   // Calculate totals
   const calculateTotals = () => {
@@ -715,17 +730,18 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
         }
 
         let errorMessage = `Rate quote creation failed: ${res.statusText}`;
-        let errorData: any = null;
+        let errorData: unknown = null;
         try {
           errorData = await res.json();
-          if (errorData.message) {
-            errorMessage = errorData.message;
-          } else if (errorData.error) {
-            errorMessage = typeof errorData.error === 'string'
-              ? errorData.error
-              : errorData.error.message || errorMessage;
+          const errorObj = errorData as { message?: string; error?: string | { message?: string } };
+          if (errorObj.message) {
+            errorMessage = errorObj.message;
+          } else if (errorObj.error) {
+            errorMessage = typeof errorObj.error === 'string' 
+              ? errorObj.error 
+              : errorObj.error.message || errorMessage;
           }
-        } catch (parseError) {
+        } catch {
           // Use default error message
         }
 
@@ -760,6 +776,10 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
 
       // Don't dispatch to cache yet - wait for user to select a quote
       // The selected quote will be dispatched when user clicks on a quote card
+
+      // Dispatch event for cache update (for LTL orders)
+      // Do NOT save to database here - only save when user submits from ResponseSummary
+      dispatchRateQuoteData(order.id, 'estes', payload, data);
     } catch (err) {
       setError(err);
     } finally {
@@ -770,7 +790,14 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
   // Expose getQuote function via ref
   useImperativeHandle(ref, () => ({
     getQuote: () => handleGetQuote(),
-    hasQuotes: () => response && response.data?.data && response.data.data.length > 0 && response.data.data.some((q: any) => q.rateFound && q.quoteRate?.totalCharges && parseFloat(q.quoteRate.totalCharges) > 0),
+    hasQuotes: () => {
+      if (!response?.data?.data) return false;
+      return response.data.data.some((q) => 
+        q.rateFound && 
+        q.quoteRate?.totalCharges && 
+        parseFloat(String(q.quoteRate.totalCharges)) > 0
+      );
+    },
     getSelectedQuote: () => selectedQuote,
     showBOLForm: () => setShowBOLForm(true),
     isBOLFormVisible: () => showBOLForm,
@@ -1392,9 +1419,16 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
 
       </form>
 
+      {/* Loading Indicator */}
+      {loading && (
+        <div className="mt-4 flex items-center justify-center p-4">
+          <Loader2 className="h-6 w-6 animate-spin text-green-600" />
+          <span className="ml-2 text-sm text-slate-700">Loading rate quote...</span>
+        </div>
+      )}
 
       {/* Error Display */}
-      {error && (
+      {error != null && (
         <div className="mt-4">
           <ErrorDisplay error={error} />
         </div>
@@ -1405,7 +1439,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
         <div className="space-y-4 mt-4">
           <h4 className="text-sm font-semibold text-slate-900">Rate Quote Results</h4>
           <div className="grid grid-cols-1 gap-3">
-            {response.data.data.map((quote: any, index: number) => (
+            {response.data.data.map((quote, index) => (
               <EstesQuoteCard key={quote.quoteId || index} quote={quote} index={index} />
             ))}
           </div>

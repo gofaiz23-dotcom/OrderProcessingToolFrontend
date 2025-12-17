@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Send, Loader2, CheckCircle2, XCircle, Plus, Trash2, ChevronDown, ChevronUp, Activity, TrendingUp } from 'lucide-react';
-import { createEstesPickupRequest, getAllEstesPickupStatus, type EstesPickupData, type EstesPickupStatusItem } from '@/app/api/3plGigaFedexApi/estesPickupApi';
+import { Send, Loader2, CheckCircle2, Plus, Trash2 } from 'lucide-react';
+import { createEstesPickupRequest, type EstesPickupData } from '@/app/api/3plGigaFedexApi/estesPickupApi';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
+import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 import type { Order } from '@/app/types/order';
 import { dispatchPickupData } from '../../utils/ltlOrderCache';
 
@@ -90,49 +91,6 @@ type ESTESPickupRequestProps = {
   };
   onSuccess?: (automationId: string) => void;
   onCancel?: () => void;
-};
-
-// Helper function to extract value from JSONB
-const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
-  if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '';
-  const obj = jsonb as Record<string, unknown>;
-
-  const normalizedKey = key.trim();
-  const keyWithoutHash = normalizedKey.replace(/#/g, '');
-  const keyLower = normalizedKey.toLowerCase();
-  const keyWithoutHashLower = keyWithoutHash.toLowerCase();
-
-  const keysToTry = [
-    normalizedKey,
-    keyWithoutHash,
-    `#${keyWithoutHash}`,
-    keyLower,
-    keyWithoutHashLower,
-    `#${keyWithoutHashLower}`,
-  ];
-
-  for (const k of keysToTry) {
-    if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') {
-      return String(obj[k]);
-    }
-  }
-
-  const allKeys = Object.keys(obj);
-  for (const objKey of allKeys) {
-    const objKeyLower = objKey.toLowerCase();
-    if (
-      objKeyLower === keyLower ||
-      objKeyLower === keyWithoutHashLower ||
-      objKeyLower.includes(keyWithoutHashLower)
-    ) {
-      const value = obj[objKey];
-      if (value !== undefined && value !== null && value !== '') {
-        return String(value);
-      }
-    }
-  }
-
-  return '';
 };
 
 export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTESPickupRequestProps) => {
@@ -395,6 +353,7 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
       setSuccess(true);
 
       // Dispatch event for cache update (for LTL orders)
+      // This will trigger final DB save in AutomateLogisticModal
       if (order?.id) {
         dispatchPickupData(order.id, {
           automationId: response.automation_id,
@@ -406,6 +365,46 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
 
       // Update order with pickup response - find by SKU and marketplace
       if (order) {
+        try {
+          const sku = getJsonbValue(order.jsonb, 'SKU') || '';
+          const marketplace = order.orderOnMarketPlace || '';
+          
+          if (sku && marketplace) {
+            // Find the order that matches this rate quote
+            const existingOrders = await getAllShippedOrders({ page: 1, limit: 100 });
+            const existingOrder = existingOrders.orders.find(
+              (o) => o.sku === sku && o.orderOnMarketPlace === marketplace
+            );
+
+            if (existingOrder) {
+              // Update existing order with pickup response
+              await updateShippedOrder(existingOrder.id, {
+                pickupResponseJsonb: {
+                  automationId: response.automation_id,
+                  pickupData,
+                  response,
+                },
+              });
+              console.log('✅ Updated existing order with pickup response');
+            } else {
+              // Create new order with pickup response
+              await createShippedOrder({
+                sku,
+                orderOnMarketPlace: marketplace,
+                ordersJsonb: order.jsonb as Record<string, unknown>,
+                pickupResponseJsonb: {
+                  automationId: response.automation_id,
+                  pickupData,
+                  response,
+                },
+              });
+              console.log('✅ Created new order with pickup response');
+            }
+          }
+        } catch (saveError) {
+          console.error('⚠️ Failed to save pickup response to database:', saveError);
+          // Don't throw error - pickup request was successful, just log the save error
+        }
         // Dispatch pickup data to cache - this will trigger final DB save in AutomateLogisticModal
         dispatchPickupData(order.id, {
           automationId: response.automation_id,
@@ -1002,40 +1001,41 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                     </div>
                   </div>
                 </div>
-              ) : pickupStatus?.status === 'error' || pickupStatus?.status === 'failed' ? (
-                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 animate-in fade-in slide-in-from-top-4">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="p-3 bg-red-100 rounded-full">
-                      <XCircle size={32} className="text-red-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-red-800">Automation Failed</h3>
-                      <p className="text-sm text-red-700">Automation ID: {automationId}</p>
-                    </div>
-                  </div>
-                  {pickupStatus.errors && pickupStatus.errors.length > 0 && (
-                    <div className="bg-white/50 rounded-lg p-4 border border-red-100">
-                      <p className="text-sm font-semibold text-red-800 mb-2">Errors Detected:</p>
-                      <ul className="list-disc list-inside space-y-1">
-                        {pickupStatus.errors.map((err, idx) => (
-                          <li key={idx} className="text-sm text-red-700">{err}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-6 shadow-lg animate-in fade-in slide-in-from-top-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-blue-100 rounded-lg animate-pulse">
-                        <Activity size={24} className="text-blue-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-slate-800">Processing Request...</h3>
-                        <p className="text-sm text-slate-600 flex items-center gap-2">
-                          {pickupStatus?.message || 'Initializing automation...'}
-                        </p>
+                <div className="border-t-2 border-slate-200 pt-4">
+                  <h3 className="font-semibold text-slate-700 mb-4">Additional Contacts</h3>
+                  <div className="space-y-4">
+                    {contacts.map((contact) => (
+                      <div key={contact.id} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 mb-2">Name</label>
+                          <input
+                            type="text"
+                            value={contact.name}
+                            onChange={(e) => updateContact(contact.id, 'name', e.target.value)}
+                            className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
+                          />
+                        </div>
+                        <div className="flex gap-4 items-end">
+                          <div className="flex-1">
+                            <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
+                            <input
+                              type="email"
+                              value={contact.email}
+                              onChange={(e) => updateContact(contact.id, 'email', e.target.value)}
+                              className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
+                            />
+                          </div>
+                          {contacts.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeContact(contact.id)}
+                              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                            >
+                              <Trash2 size={18} />
+                              Remove
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">
@@ -1071,6 +1071,23 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                   </div>
                 </div>
               )}
+              <button
+                type="submit"
+                disabled={loading}
+                className="flex items-center gap-2 px-6 py-3 bg-linear-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" />
+                    <span>Submitting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Send size={20} />
+                    <span>Submit Pickup Request</span>
+                  </>
+                )}
+              </button>
             </div>
           )}
 
