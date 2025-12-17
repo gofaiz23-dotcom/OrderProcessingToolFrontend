@@ -1068,7 +1068,9 @@ export const XPOBOLForm = ({
                 contact: {
                   companyName: pickupLocation.company || '',
                   email: {
-                    emailAddr: pickupLocation.email ? String(pickupLocation.email) : '',
+                    emailAddr: (pickupLocation.email && pickupLocation.email.trim()) 
+                      ? String(pickupLocation.email).trim() 
+                      : 'noreply@example.com', // Default email if not provided
                   },
                   fullName: pickupLocation.company || '',
                   phone: {
@@ -1080,7 +1082,9 @@ export const XPOBOLForm = ({
               contact: {
                 companyName: contactCompanyName || pickupLocation.company || '',
                 email: {
-                  emailAddr: pickupLocation.email ? String(pickupLocation.email) : '',
+                  emailAddr: (pickupLocation.email && pickupLocation.email.trim()) 
+                    ? String(pickupLocation.email).trim() 
+                    : 'noreply@example.com', // Default email if not provided
                 },
                 fullName: contactName || pickupLocation.company || '',
                 phone: {
@@ -1309,23 +1313,15 @@ export const XPOBOLForm = ({
           let rateQuotesRequestJsonb: Record<string, unknown> | undefined = undefined;
           let rateQuotesResponseJsonb: Record<string, unknown> | undefined = undefined;
 
-          // Include rate quotes from cache if available
-          if (cachedOrder) {
-            if (cachedOrder.xpoRateQuoteRequest && cachedOrder.xpoRateQuoteResponse) {
-              rateQuotesRequestJsonb = { xpo: cachedOrder.xpoRateQuoteRequest };
-              rateQuotesResponseJsonb = { xpo: cachedOrder.xpoRateQuoteResponse };
-            } else if (cachedOrder.estesRateQuoteRequest && cachedOrder.estesRateQuoteResponse) {
-              rateQuotesRequestJsonb = { estes: cachedOrder.estesRateQuoteRequest };
-              rateQuotesResponseJsonb = { estes: cachedOrder.estesRateQuoteResponse };
-            }
+          // Include only XPO rate quotes from cache (XPO BOL should only use XPO quotes)
+          if (cachedOrder && cachedOrder.xpoRateQuoteRequest && cachedOrder.xpoRateQuoteResponse) {
+            rateQuotesRequestJsonb = { xpo: cachedOrder.xpoRateQuoteRequest };
+            rateQuotesResponseJsonb = { xpo: cachedOrder.xpoRateQuoteResponse };
           }
 
-          // Prepare bolResponseJsonb - combine XPO and Estes if both exist
+          // Prepare bolResponseJsonb - only include XPO BOL (not Estes)
           const bolResponseJsonb: Record<string, unknown> = {};
           bolResponseJsonb.xpo = data; // Current XPO BOL
-          if (cachedOrder?.estesBolResponse) {
-            bolResponseJsonb.estes = cachedOrder.estesBolResponse;
-          }
 
           // Always create new order - don't check for duplicates by SKU
           // Updates should only be done using ID (not SKU)

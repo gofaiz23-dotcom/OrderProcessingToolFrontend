@@ -636,28 +636,33 @@ export const AutomateLogisticModal = ({
       const finalOrdersJsonb = {
         ...cachedOrder.ordersJsonb,
         shiptypes: cachedOrder.shippingType,
-        subSKUs: cachedOrder.subSKUs.join(', '),
+        subSKUs: Array.isArray(cachedOrder.subSKUs) && cachedOrder.subSKUs.length > 0 
+          ? cachedOrder.subSKUs.join(', ') 
+          : (cachedOrder.subSKUs || ''),
       };
 
       // Prepare rate quotes - separate request and response for frontend display
       let rateQuotesRequestJsonb: Record<string, unknown> | undefined = undefined;
       let rateQuotesResponseJsonb: Record<string, unknown> | undefined = undefined;
 
-      // Store only the selected carrier's quote (user selects one, not both)
-      if (cachedOrder.xpoRateQuoteRequest && cachedOrder.xpoRateQuoteResponse) {
+      // Store only the selected carrier's quote and BOL (user selects one, not both)
+      const selectedCarrier = cachedOrder.carrier || 
+        (cachedOrder.xpoRateQuoteRequest && cachedOrder.xpoRateQuoteResponse ? 'xpo' : 
+         cachedOrder.estesRateQuoteRequest && cachedOrder.estesRateQuoteResponse ? 'estes' : null);
+      
+      if (selectedCarrier === 'xpo' && cachedOrder.xpoRateQuoteRequest && cachedOrder.xpoRateQuoteResponse) {
         rateQuotesRequestJsonb = { xpo: cachedOrder.xpoRateQuoteRequest };
         rateQuotesResponseJsonb = { xpo: cachedOrder.xpoRateQuoteResponse };
-      } else if (cachedOrder.estesRateQuoteRequest && cachedOrder.estesRateQuoteResponse) {
+      } else if (selectedCarrier === 'estes' && cachedOrder.estesRateQuoteRequest && cachedOrder.estesRateQuoteResponse) {
         rateQuotesRequestJsonb = { estes: cachedOrder.estesRateQuoteRequest };
         rateQuotesResponseJsonb = { estes: cachedOrder.estesRateQuoteResponse };
       }
 
-      // Prepare bolResponseJsonb - combine XPO and Estes
+      // Prepare bolResponseJsonb - only include the selected carrier's BOL
       const bolResponseJsonb: Record<string, unknown> = {};
-      if (cachedOrder.xpoBolResponse) {
+      if (selectedCarrier === 'xpo' && cachedOrder.xpoBolResponse) {
         bolResponseJsonb.xpo = cachedOrder.xpoBolResponse;
-      }
-      if (cachedOrder.estesBolResponse) {
+      } else if (selectedCarrier === 'estes' && cachedOrder.estesBolResponse) {
         bolResponseJsonb.estes = cachedOrder.estesBolResponse;
       }
 
@@ -713,11 +718,13 @@ export const AutomateLogisticModal = ({
         updateOrderCache(orderId, {
           xpoRateQuoteRequest: request,
           xpoRateQuoteResponse: response,
+          carrier: 'xpo', // Store selected carrier
         });
       } else if (carrier === 'estes') {
         updateOrderCache(orderId, {
           estesRateQuoteRequest: request,
           estesRateQuoteResponse: response,
+          carrier: 'estes', // Store selected carrier
         });
       }
     };
