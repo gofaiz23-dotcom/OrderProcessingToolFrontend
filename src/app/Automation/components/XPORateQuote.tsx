@@ -148,7 +148,7 @@ const parseAddressString = (addressStr: string): { streetAddress: string; addres
   const cityParts = parts.slice(cityStartIndex);
   const city = cityParts.join(' ').toUpperCase();
   const streetAddressFull = streetParts.join(' ');
-  
+
   let streetAddress = streetAddressFull;
   let addressLine2 = '';
   const steMatch = streetAddressFull.match(/^(.+?)\s+(STE|SUITE|#|UNIT|APT|FLOOR|FL\.?)\s*(.+)$/i);
@@ -622,8 +622,8 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
             errorMessage = String(errorData.message);
           } else if (errorData && typeof errorData === 'object' && 'error' in errorData) {
             const error = errorData.error;
-            errorMessage = typeof error === 'string' 
-              ? error 
+            errorMessage = typeof error === 'string'
+              ? error
               : (error && typeof error === 'object' && 'message' in error ? String(error.message) : errorMessage);
           }
         } catch {
@@ -655,11 +655,11 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
 
       // Log response for debugging
       console.log('✅ XPO Rate Quote Response:', JSON.stringify(data, null, 2));
-      
+
       // Dispatch event for cache update (for LTL orders)
       // Do NOT save to database here - only save when user submits from ResponseSummary
       dispatchRateQuoteData(order.id, 'xpo', payload, data);
-      
+
       // Transform and extract quotes
       const transformQuote = (quote: Record<string, unknown>, transitTime?: Record<string, unknown>): XPORateQuoteResponse => {
         // Extract total charges from totCharge array
@@ -698,10 +698,10 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
         const estdDlvrDate = transit?.estdDlvrDate as string | undefined;
         if (estdDlvrDate) {
           const date = new Date(estdDlvrDate);
-          deliveryDate = date.toLocaleDateString('en-US', { 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric' 
+          deliveryDate = date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
           });
         }
 
@@ -710,7 +710,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
         const shipmentDateValue = shipmentInfo?.shipmentDate as string | undefined;
         if (shipmentDateValue) {
           const date = new Date(shipmentDateValue);
-          shipmentDate = date.toLocaleDateString('en-US', { 
+          shipmentDate = date.toLocaleDateString('en-US', {
             weekday: 'short',
             year: 'numeric',
             month: 'short',
