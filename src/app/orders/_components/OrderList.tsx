@@ -194,7 +194,7 @@ export const OrderList = ({
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
+    if (file && onImportFile) {
       onImportFile(file);
     }
     // Reset input so same file can be selected again
