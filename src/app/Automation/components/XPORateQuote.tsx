@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import { Calendar, Info, Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { Info, Search, ChevronDown, ChevronUp } from 'lucide-react';
 import type { Order } from '@/app/types/order';
 import { buildApiUrl } from '../../../../BaseUrl';
 import { useLogisticsStore } from '@/store/logisticsStore';
@@ -272,20 +272,11 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
     const year = today.getFullYear();
     return `${month}/${day}/${year}`;
   });
-  const dateInputRef = useRef<HTMLInputElement>(null);
 
   const handlePickupDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const dateValue = e.target.value;
     if (dateValue) {
       setPickupDate(convertFromDateInputFormat(dateValue));
-    }
-  };
-
-  const handleCalendarIconClick = () => {
-    if (dateInputRef.current?.showPicker) {
-      dateInputRef.current.showPicker();
-    } else {
-      dateInputRef.current?.click();
     }
   };
 
@@ -826,9 +817,12 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
         rawQuotes = [data];
       }
 
-      // Transform all quotes
+      // Transform all quotes and store raw quotes for later use
       const transformedQuotes = rawQuotes.map(quote => transformQuote(quote, transitTime || undefined));
       setQuotes(transformedQuotes);
+      
+      // Store raw quotes in a ref or state for later use when BOL form needs them
+      // We'll store them in the response object itself for easy access
 
       // Close form content and pickup details dropdown when quotes are generated
       setShowFormContent(false);
@@ -920,23 +914,13 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
                     <label className="block text-xs font-semibold text-slate-900">
                       Pickup Date <span className="text-red-500">*</span>
                     </label>
-                    <div className="relative">
-                      <input
-                        ref={dateInputRef}
-                        type="date"
-                        value={convertToDateInputFormat(pickupDate)}
-                        onChange={handlePickupDateChange}
-                        className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 pr-8"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={handleCalendarIconClick}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                      >
-                        <Calendar size={16} />
-                      </button>
-                    </div>
+                    <input
+                      type="date"
+                      value={convertToDateInputFormat(pickupDate)}
+                      onChange={handlePickupDateChange}
+                      className="w-full px-3 py-2 text-sm border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      required
+                    />
                   </div>
                 </div>
               </section>
@@ -1633,7 +1617,7 @@ export const XPORateQuote = forwardRef<XPORateQuoteRef, XPORateQuoteProps>(({ or
         <div className="mt-6 border-t border-slate-200 pt-6" id="bol-form-section">
           <XPOBOLForm
             order={order}
-            quoteData={selectedQuote ? { data: { data: { rateQuote: selectedQuote } } } : (response || undefined)}
+            quoteData={response || undefined}
             subSKUs={subSKUs}
             shippingType={shippingType}
             onBack={() => {

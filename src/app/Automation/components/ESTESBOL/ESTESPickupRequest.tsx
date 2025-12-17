@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Send, Loader2, CheckCircle2, Plus, Trash2, ChevronUp, ChevronDown, TrendingUp } from 'lucide-react';
+import { Send, Loader2, CheckCircle2, XCircle, Plus, Trash2, ChevronUp, ChevronDown, TrendingUp } from 'lucide-react';
 import { createEstesPickupRequest, getAllEstesPickupStatus, type EstesPickupData, type EstesPickupStatusItem } from '@/app/api/3plGigaFedexApi/estesPickupApi';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
@@ -165,10 +165,47 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
   const [zipCode, setZipCode] = useState('');
   const [country, setCountry] = useState('USA');
 
+  // Helper functions to convert between 12-hour and 24-hour formats
+  const convert12To24 = (time12: string): string => {
+    if (!time12) return '';
+    const match = time12.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!match) return time12;
+    
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const period = match[3].toUpperCase();
+    
+    if (period === 'PM' && hours !== 12) {
+      hours += 12;
+    } else if (period === 'AM' && hours === 12) {
+      hours = 0;
+    }
+    
+    return `${String(hours).padStart(2, '0')}:${minutes}`;
+  };
+
+  const convert24To12 = (time24: string): string => {
+    if (!time24) return '';
+    const match = time24.match(/(\d{2}):(\d{2})/);
+    if (!match) return time24;
+    
+    let hours = parseInt(match[1], 10);
+    const minutes = match[2];
+    const period = hours >= 12 ? 'PM' : 'AM';
+    
+    if (hours > 12) {
+      hours -= 12;
+    } else if (hours === 0) {
+      hours = 12;
+    }
+    
+    return `${hours}:${minutes} ${period}`;
+  };
+
   // Pickup Details
   const [pickupDate, setPickupDate] = useState('');
-  const [pickupStartTime, setPickupStartTime] = useState('08:00 AM');
-  const [pickupEndTime, setPickupEndTime] = useState('05:00 PM');
+  const [pickupStartTime, setPickupStartTime] = useState('08:00'); // 24-hour format for time picker
+  const [pickupEndTime, setPickupEndTime] = useState('16:00'); // 24-hour format for time picker (4:00 PM)
   const [pickupType, setPickupType] = useState('LL');
 
   // Shipments - Initialize from BOL data if available
@@ -357,8 +394,8 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
         },
         pickupDetails: {
           pickupDate: pickupDate || null,
-          pickupStartTime: pickupStartTime || null,
-          pickupEndTime: pickupEndTime || null,
+          pickupStartTime: convert24To12(pickupStartTime) || null,
+          pickupEndTime: convert24To12(pickupEndTime) || null,
           pickupType: pickupType || null,
         },
         shipments: shipments.map(s => ({
@@ -681,10 +718,9 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Pickup Start Time *</label>
                 <input
-                  type="text"
+                  type="time"
                   value={pickupStartTime}
                   onChange={(e) => setPickupStartTime(e.target.value)}
-                  placeholder="08:00 AM"
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
@@ -692,10 +728,9 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Pickup End Time *</label>
                 <input
-                  type="text"
+                  type="time"
                   value={pickupEndTime}
                   onChange={(e) => setPickupEndTime(e.target.value)}
-                  placeholder="05:00 PM"
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
@@ -1046,94 +1081,8 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                       </div>
                     </div>
                   </div>
-                  <div className="border-t-2 border-slate-200 pt-4">
-                  <h3 className="font-semibold text-slate-700 mb-4">Additional Contacts</h3>
-                  <div className="space-y-4">
-                    {contacts.map((contact) => (
-                      <div key={contact.id} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                        <div>
-                          <label className="block text-sm font-medium text-slate-700 mb-2">Name</label>
-                          <input
-                            type="text"
-                            value={contact.name}
-                            onChange={(e) => updateContact(contact.id, 'name', e.target.value)}
-                            className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
-                          />
-                        </div>
-                        <div className="flex gap-4 items-end">
-                          <div className="flex-1">
-                            <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
-                            <input
-                              type="email"
-                              value={contact.email}
-                              onChange={(e) => updateContact(contact.id, 'email', e.target.value)}
-                              className="w-full px-4 py-2 border-2 border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
-                            />
-                          </div>
-                          {contacts.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeContact(contact.id)}
-                              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
-                            >
-                              <Trash2 size={18} />
-                              Remove
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                    <div className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-bold">
-                      {pickupStatus?.status?.toUpperCase() || 'INITIALIZING'}
-                    </div>
-
-                  {/* Progress Bar */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium text-slate-700 flex items-center gap-1">
-                        <TrendingUp size={14} />
-                        Progress
-                      </span>
-                      <span className="font-bold text-blue-700">{pickupStatus?.progress || 0}%</span>
-                    </div>
-                    <div className="w-full bg-white rounded-full h-3 overflow-hidden shadow-inner border border-blue-100">
-                      <div
-                        className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-500 ease-out"
-                        style={{ width: `${pickupStatus?.progress || 0}%` }}
-                      >
-                        <div className="w-full h-full bg-white/20 animate-[shimmer_2s_infinite] bg-[length:200%_100%]" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-                    <span>ID: {automationId}</span>
-                    <span className="flex items-center gap-1">
-                      <Loader2 size={12} className="animate-spin" />
-                      Updating live...
-                    </span>
-                  </div>
-                  </div>
                 </>
               ) : null}
-              <button
-                type="submit"
-                disabled={loading}
-                className="flex items-center gap-2 px-6 py-3 bg-linear-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 size={20} className="animate-spin" />
-                    <span>Submitting...</span>
-                  </>
-                ) : (
-                  <>
-                    <Send size={20} />
-                    <span>Submit Pickup Request</span>
-                  </>
-                )}
-              </button>
             </div>
           )}
 
@@ -1141,34 +1090,77 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
       </div>
 
       {/* Sticky Footer */}
-      <div className="border-t border-slate-200 bg-white p-4 flex items-center justify-end gap-4 z-10">
-        {onCancel && (
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-6 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
-          >
-            Cancel
-          </button>
-        )}
-        <button
-          type="submit"
-          disabled={loading}
-          className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-        >
-          {loading ? (
-            <>
-              <Loader2 size={18} className="animate-spin" />
-              <span>Submitting...</span>
-            </>
-          ) : (
-            <>
-              <Send size={18} />
-              <span>Submit Request</span>
-            </>
+      {!success && (
+        <div className="border-t border-slate-200 bg-white p-4 flex items-center justify-end gap-4 z-10">
+          {onCancel && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="px-6 py-2.5 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors font-medium"
+            >
+              Cancel
+            </button>
           )}
-        </button>
-      </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+          >
+            {loading ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                <span>Submitting...</span>
+              </>
+            ) : (
+              <>
+                <Send size={18} />
+                <span>Submit Request</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Status Bar at Bottom */}
+      {automationId && (
+        <div className="border-t-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 p-4 shadow-lg z-20">
+          <div className="max-w-5xl mx-auto">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4 flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  {pickupStatus?.status === 'success' || pickupStatus?.status === 'completed' ? (
+                    <CheckCircle2 size={20} className="text-green-600 flex-shrink-0" />
+                  ) : pickupStatus?.status === 'error' || pickupStatus?.status === 'failed' ? (
+                    <XCircle size={20} className="text-red-600 flex-shrink-0" />
+                  ) : (
+                    <Loader2 size={20} className="text-blue-600 animate-spin flex-shrink-0" />
+                  )}
+                  <div className="px-3 py-1 bg-white border border-blue-200 rounded-full text-xs font-bold text-blue-700 shadow-sm">
+                    {pickupStatus?.status?.toUpperCase() || 'INITIALIZING'}
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="font-medium text-slate-700">Progress</span>
+                    <span className="font-bold text-blue-700">{pickupStatus?.progress || 0}%</span>
+                  </div>
+                  <div className="w-full bg-white rounded-full h-2 overflow-hidden shadow-inner border border-blue-100">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-500 ease-out"
+                      style={{ width: `${pickupStatus?.progress || 0}%` }}
+                    >
+                      <div className="w-full h-full bg-white/20 animate-[shimmer_2s_infinite] bg-[length:200%_100%]" />
+                    </div>
+                  </div>
+                </div>
+                <div className="text-xs text-slate-600 font-mono flex-shrink-0">
+                  ID: {automationId}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </form >
   );
 };

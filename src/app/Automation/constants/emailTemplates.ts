@@ -142,8 +142,19 @@ export const EMAIL_TEMPLATES = {
       carrier === 'estes'
         ? getEstesPickupScheduledEmailSubject(orderId, orderNumber)
         : getXPOPickupScheduledEmailSubject(orderId, orderNumber),
-    body: (carrier: Carrier, orderId: number, orderNumber?: string, sku?: string) =>
-      getPickupScheduledEmailBody(carrier, orderId, orderNumber, sku),
+    body: (carrier: Carrier, orderId: number, orderNumber?: string, sku?: string) => {
+      const orderRef = orderNumber || `Order ${orderId}`;
+      const carrierLower = typeof carrier === 'string' ? carrier.toLowerCase() : carrier;
+      const carrierName = carrierLower === 'estes' ? 'Estes Express' : 'XPO Logistics';
+      return `Team,
+
+Pickup has been scheduled for ${orderRef}${sku ? ` (SKU: ${sku})` : ''} via ${carrierName}.
+
+Please ensure the shipment is ready for pickup.
+
+Thank You.
+`;
+    },
     cc: (carrier: Carrier) => getDefaultCCEmails(carrier),
   },
 
@@ -183,29 +194,6 @@ export const EMAIL_TEMPLATES = {
     cc: () => ['fhshyderbad@gmail.com', 'gofaiz23@gmail.com'],
   },
 } as const;
-
-/**
- * Pickup Scheduled Email Body
- */
-export const getPickupScheduledEmailBody = (
-  carrier: Carrier | string,
-  orderId: number,
-  orderNumber?: string,
-  sku?: string
-): string => {
-  const orderRef = orderNumber || `Order ${orderId}`;
-  const carrierLower = typeof carrier === 'string' ? carrier.toLowerCase() : carrier;
-  const carrierName = carrierLower === 'estes' ? 'Estes Express' : 'XPO Logistics';
-
-  return `Team,
-
-Pickup has been scheduled for ${orderRef}${sku ? ` (SKU: ${sku})` : ''} via ${carrierName}.
-
-Please ensure the shipment is ready for pickup.
-
-Thank You.
-`;
-};
 
 /**
  * LTL Order Draft Subject
