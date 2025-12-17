@@ -16,13 +16,16 @@ export const DateRangeDeleteModal = ({
 }: DateRangeDeleteModalProps) => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [includeToday, setIncludeToday] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
+      const today = new Date().toISOString().split('T')[0];
       setStartDate('');
-      setEndDate('');
+      setEndDate(today);
+      setIncludeToday(true);
       setError(null);
     }
   }, [isOpen]);
@@ -53,7 +56,7 @@ export const DateRangeDeleteModal = ({
       }
 
       const start = new Date(startDate);
-      const end = new Date(endDate);
+      let end = new Date(endDate);
 
       if (isNaN(start.getTime()) || isNaN(end.getTime())) {
         throw new Error('Invalid date format');
@@ -63,7 +66,28 @@ export const DateRangeDeleteModal = ({
         throw new Error('Start date must be before or equal to end date');
       }
 
-      await onConfirm(startDate, endDate);
+      // If includeToday is checked, set end time to the end of the day
+      if (includeToday) {
+        const today = new Date();
+        const isEndDateToday = end.toDateString() === today.toDateString();
+        
+        if (isEndDateToday) {
+          // Set to end of today
+          end = new Date(today);
+          end.setHours(23, 59, 59, 999);
+        }
+      }
+
+      // Format dates for the API
+      const formatDate = (date: Date) => {
+        const pad = (num: number) => num.toString().padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+      };
+
+      await onConfirm(
+        formatDate(start),
+        formatDate(end)
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete orders');
     } finally {
@@ -111,7 +135,7 @@ export const DateRangeDeleteModal = ({
                   onChange={(e) => setStartDate(e.target.value)}
                   required
                   disabled={loading}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 text-black"
                 />
               </div>
 
@@ -125,8 +149,20 @@ export const DateRangeDeleteModal = ({
                   onChange={(e) => setEndDate(e.target.value)}
                   required
                   disabled={loading}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-slate-50 mb-2 text-black"
                 />
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    id="includeToday"
+                    checked={includeToday}
+                    onChange={(e) => setIncludeToday(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <label htmlFor="includeToday" className="ml-2 block text-sm text-slate-700">
+                    Include all of today's orders (until midnight)
+                  </label>
+                </div>
               </div>
             </div>
 
