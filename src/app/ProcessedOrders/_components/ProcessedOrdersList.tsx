@@ -610,6 +610,33 @@ export const ProcessedOrdersList = ({
     return '';
   };
 
+  // Helper function to extract subSKUs from order (checks both direct field and ordersJsonb)
+  const extractSubSKUs = (order: ShippedOrder): string[] => {
+    // Try direct field first
+    if (order.subSKUs && Array.isArray(order.subSKUs) && order.subSKUs.length > 0) {
+      return order.subSKUs.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+    }
+    
+    // Fallback to ordersJsonb
+    if (order.ordersJsonb && typeof order.ordersJsonb === 'object') {
+      const ordersData = order.ordersJsonb as any;
+      const subSKUsValue = ordersData?.subSKUs || 
+                          ordersData?.subSKU || 
+                          ordersData?.SubSKUs ||
+                          ordersData?.SubSKU;
+      
+      // Handle both array and string formats
+      if (Array.isArray(subSKUsValue)) {
+        return subSKUsValue.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+      } else if (typeof subSKUsValue === 'string' && subSKUsValue.trim()) {
+        // If it's a string, split by comma or use as single value
+        return subSKUsValue.split(',').map(s => s.trim()).filter(s => s.length > 0);
+      }
+    }
+    
+    return [];
+  };
+
   // Handle email button click
   const handleEmailClick = async () => {
     if (selectedOrderIds.size === 0) {
@@ -648,7 +675,7 @@ export const ProcessedOrdersList = ({
             getJsonbValue(orderJsonb, 'PO#') || 
             getJsonbValue(orderJsonb, 'PO Number') || 
             String(order.id);
-          const subSKUs = order.subSKUs || [];
+          const subSKUs = extractSubSKUs(order);
           
           return {
             orderId: order.id,
@@ -674,7 +701,7 @@ export const ProcessedOrdersList = ({
         
         const template = getEmailTemplate(selectedOrder);
         const orderJsonb = selectedOrder.ordersJsonb || {};
-        const subSKUs = selectedOrder.subSKUs || [];
+        const subSKUs = extractSubSKUs(selectedOrder);
         
         const customerName = getJsonbValue(orderJsonb, 'Customer Name') || 'Customer';
         const orderNumber = getJsonbValue(orderJsonb, 'Order Number') || 
@@ -1068,8 +1095,8 @@ export const ProcessedOrdersList = ({
                              
                             </div>
                             
-                            <div className="flex flex-wrap gap-2">
-                              {order.uploads.slice(0, 3).map((upload, idx) => {
+                            <div className="grid grid-cols-2 gap-2">
+                              {order.uploads.slice(0, 4).map((upload, idx) => {
                                 const isString = typeof upload === 'string';
                                 const filePath = isString ? upload : (upload.path || upload.filename || '');
                                 const filename = isString 
@@ -1107,7 +1134,7 @@ export const ProcessedOrdersList = ({
                                       // This prevents losing authentication state when user clicks back
                                       window.open(finalUrl, '_blank', 'noopener,noreferrer');
                                     }}
-                                    className="block w-[60px] h-[60px] rounded border border-slate-200 overflow-hidden bg-slate-100 hover:opacity-90 transition-opacity cursor-pointer"
+                                    className="block w-full aspect-square rounded border border-slate-200 overflow-hidden bg-slate-100 hover:opacity-90 transition-opacity cursor-pointer"
                                     title={`Click to view: ${filename}`}
                                   >
                                     {isImage ? (
@@ -1131,10 +1158,10 @@ export const ProcessedOrdersList = ({
                                   </button>
                                 );
                               })}
-                              {order.uploads.length > 3 && (
-                                <div className="w-full h-full rounded border border-slate-200 bg-slate-50 flex items-center justify-center">
+                              {order.uploads.length > 4 && (
+                                <div className="w-full h-full rounded border border-slate-200 bg-slate-50 flex items-center justify-center col-span-2">
                                   <span className="text-sm text-slate-500">
-                                    +{order.uploads.length - 3} more
+                                    +{order.uploads.length - 4} more
                                   </span>
                                 </div>
                               )}
