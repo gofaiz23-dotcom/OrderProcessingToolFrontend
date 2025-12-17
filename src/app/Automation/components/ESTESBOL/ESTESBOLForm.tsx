@@ -1537,39 +1537,54 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
             </div>
           )}
 
-          {/* Pickup Request Form - Show after BOL is created */}
+          {/* Pickup Request Modal - Show after BOL is created */}
           {showPickupRequest && (
-            <div ref={pickupRequestRef} className="mt-8 pt-8 border-t-2 border-slate-300">
-              <ESTESPickupRequest
-                order={order}
-                bolData={{
-                  originName,
-                  originAddress1,
-                  originAddress2,
-                  originZipCode,
-                  originCountry,
-                  originContactName,
-                  originPhone,
-                  originEmail,
-                  handlingUnits: handlingUnits.map(unit => ({
-                    quantity: unit.quantity,
-                    weight: unit.weight,
-                    handlingUnitType: unit.handlingUnitType,
-                  })),
-                  destinationZipCode,
-                  hazmat: handlingUnits.some(unit => unit.items.some(item => item.description.toLowerCase().includes('hazmat'))),
-                  protectFromFreezing: specialHandlingRequests.some(req => req.toLowerCase().includes('freez')),
-                  food: false,
-                  poison: false,
-                  overlength: false,
-                  liftgate: liftGateService,
-                  doNotStack: handlingUnits.some(unit => unit.doNotStack),
-                }}
-                onSuccess={(automationId) => {
-                  console.log('Pickup request created:', automationId);
-                }}
-                onCancel={() => setShowPickupRequest(false)}
-              />
+            <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+              <div ref={pickupRequestRef} className="bg-white rounded-xl shadow-2xl w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 border-2 border-slate-200">
+                <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
+                  <h2 className="text-xl font-bold text-slate-800">Schedule Estes Pickup</h2>
+                  <button
+                    onClick={() => setShowPickupRequest(false)}
+                    className="p-2 hover:bg-slate-200 rounded-full transition-colors text-slate-600"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto">
+                  <ESTESPickupRequest
+                    order={order}
+                    bolData={{
+                      originName,
+                      originAddress1,
+                      originAddress2,
+                      originZipCode,
+                      originCountry,
+                      originContactName,
+                      originPhone,
+                      originEmail,
+                      handlingUnits: handlingUnits.map(unit => ({
+                        quantity: unit.quantity,
+                        weight: unit.weight,
+                        handlingUnitType: unit.handlingUnitType,
+                      })),
+                      destinationZipCode,
+                      hazmat: handlingUnits.some(unit => unit.items.some(item => item.description.toLowerCase().includes('hazmat'))),
+                      protectFromFreezing: specialHandlingRequests.some(req => req.toLowerCase().includes('freez')),
+                      food: false,
+                      poison: false,
+                      overlength: false,
+                      liftgate: liftGateService,
+                      doNotStack: handlingUnits.some(unit => unit.doNotStack),
+                    }}
+                    onSuccess={(automationId) => {
+                      console.log('Pickup request created:', automationId);
+                      // Don't close immediately, let the user see the success message in the component
+                    }}
+                    onCancel={() => setShowPickupRequest(false)}
+                  />
+                </div>
+              </div>
             </div>
           )}
         </div>

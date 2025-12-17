@@ -136,7 +136,43 @@ export const EMAIL_TEMPLATES = {
       getParcelOrderDraftEmailBody(orderJsonb, subSKUs),
     cc: () => [],
   },
+
+  PICKUP_SCHEDULED: {
+    subject: (carrier: string, orderId: number, orderNumber?: string) =>
+      carrier.toLowerCase() === 'estes'
+        ? getEstesPickupScheduledEmailSubject(orderId, orderNumber)
+        : getXPOPickupScheduledEmailSubject(orderId, orderNumber),
+    body: (
+      carrier: string,
+      orderId: number,
+      orderNumber?: string,
+      sku?: string
+    ) => getPickupScheduledEmailBody(carrier, orderId, orderNumber, sku),
+    cc: (carrier: Carrier) => getDefaultCCEmails(carrier),
+  },
 } as const;
+
+/**
+ * Pickup Scheduled Email Body
+ */
+export const getPickupScheduledEmailBody = (
+  carrier: string,
+  orderId: number,
+  orderNumber?: string,
+  sku?: string
+): string => {
+  const orderRef = orderNumber || `Order ${orderId}`;
+  const carrierName = carrier.toLowerCase() === 'estes' ? 'Estes Express' : 'XPO Logistics';
+
+  return `Team,
+
+Pickup has been scheduled for ${orderRef}${sku ? ` (SKU: ${sku})` : ''} via ${carrierName}.
+
+Please ensure the shipment is ready for pickup.
+
+Thank You.
+`;
+};
 
 /**
  * LTL Order Draft Subject

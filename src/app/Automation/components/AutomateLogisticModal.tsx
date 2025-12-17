@@ -28,13 +28,13 @@ type AutomateLogisticModalProps = {
 const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
   if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '-';
   const obj = jsonb as Record<string, unknown>;
-  
+
   // Normalize the key for matching
   const normalizedKey = key.trim();
   const keyWithoutHash = normalizedKey.replace(/#/g, '');
   const keyLower = normalizedKey.toLowerCase();
   const keyWithoutHashLower = keyWithoutHash.toLowerCase();
-  
+
   // Generate all possible key variations
   const keysToTry = [
     normalizedKey,                    // Exact match: "PO#"
@@ -45,14 +45,14 @@ const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
     `#${keyWithoutHashLower}`,        // Lowercase with #: "#po"
     normalizedKey.replace(/#/g, '').trim(), // Remove all #
   ];
-  
+
   // Try exact matches first
   for (const k of keysToTry) {
     if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') {
       return String(obj[k]);
     }
   }
-  
+
   // Try case-insensitive partial matching
   const allKeys = Object.keys(obj);
   for (const objKey of allKeys) {
@@ -69,7 +69,7 @@ const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
       }
     }
   }
-  
+
   return '-';
 };
 
@@ -117,7 +117,7 @@ export const AutomateLogisticModal = ({
   // Returns the most recent order with matching SKU and marketplace (for pre-filling convenience)
   const findExistingShippedOrder = useCallback(async (sku: string, orderOnMarketPlace?: string): Promise<ShippedOrder | null> => {
     if (!sku || sku === '-') return null;
-    
+
     try {
       // Use sku parameter directly (backend supports it)
       const endpoint = new URL(buildApiUrl('/Logistics/shipped-orders'));
@@ -129,36 +129,36 @@ export const AutomateLogisticModal = ({
       endpoint.searchParams.set('limit', '10');
       endpoint.searchParams.set('sortBy', 'createdAt');
       endpoint.searchParams.set('sortOrder', 'desc'); // Get most recent first
-      
+
       const response = await fetch(endpoint.toString(), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
         },
       });
-      
+
       if (!response.ok) {
         console.error('Failed to fetch orders:', response.statusText);
         return null;
       }
-      
+
       const data = await response.json();
       const orders = data.orders || data.data || [];
-      
+
       // Find exact SKU match (and orderOnMarketPlace if provided)
       const matchedOrder = orders.find((order: ShippedOrder) => {
         const skuMatch = order.sku && order.sku.toLowerCase().trim() === sku.toLowerCase().trim();
         if (!skuMatch) return false;
-        
+
         // If orderOnMarketPlace is provided, also match it
         if (orderOnMarketPlace && orderOnMarketPlace !== '-') {
-          return order.orderOnMarketPlace && 
-                 order.orderOnMarketPlace.toLowerCase().trim() === orderOnMarketPlace.toLowerCase().trim();
+          return order.orderOnMarketPlace &&
+            order.orderOnMarketPlace.toLowerCase().trim() === orderOnMarketPlace.toLowerCase().trim();
         }
-        
+
         return true;
       });
-      
+
       if (matchedOrder) {
         console.log('✅ Found existing order for SKU:', sku, 'Marketplace:', orderOnMarketPlace, 'Order ID:', matchedOrder.id);
         console.log('Order data:', {
@@ -169,7 +169,7 @@ export const AutomateLogisticModal = ({
       } else {
         console.log('⚠️ No existing order found for SKU:', sku, 'Marketplace:', orderOnMarketPlace);
       }
-      
+
       return matchedOrder || null;
     } catch (error) {
       console.error('Error finding existing shipped order:', error);
@@ -182,7 +182,7 @@ export const AutomateLogisticModal = ({
     const checkExistingOrders = async () => {
       const existingMap: Record<string, ShippedOrder> = {};
       const newOriginalSubSKUs: Record<number, string[]> = {};
-      
+
       for (const order of orders) {
         const sku = getJsonbValue(order.jsonb, 'SKU');
         const orderOnMarketPlace = order.orderOnMarketPlace || '';
@@ -190,11 +190,11 @@ export const AutomateLogisticModal = ({
           const existingOrder = await findExistingShippedOrder(sku, orderOnMarketPlace);
           if (existingOrder) {
             existingMap[sku] = existingOrder;
-            
+
             // Extract shiptypes and subSKUs from existing order
             let shippingType: 'LTL' | 'Parcel' | '' = '';
             let subSKUsList: string[] = [];
-            
+
             console.log('🔍 Extracting data from existing order:', {
               orderId: existingOrder.id,
               hasShippingType: !!existingOrder.shippingType,
@@ -202,7 +202,7 @@ export const AutomateLogisticModal = ({
               hasOrdersJsonb: !!existingOrder.ordersJsonb,
               ordersJsonb: existingOrder.ordersJsonb,
             });
-            
+
             // Get shipping type - check ordersJsonb first (since that's where we store it)
             if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
               const ordersData = existingOrder.ordersJsonb as any;
@@ -212,18 +212,18 @@ export const AutomateLogisticModal = ({
                 console.log('✅ Found shipping type in ordersJsonb:', shippingType);
               }
             }
-            
+
             // Fallback to direct field if not found in ordersJsonb
             if (!shippingType && existingOrder.shippingType) {
               shippingType = existingOrder.shippingType as 'LTL' | 'Parcel';
               console.log('✅ Found shipping type in direct field:', shippingType);
             }
-            
+
             // Get subSKUs - check ordersJsonb first (since that's where we store it)
             if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
               const ordersData = existingOrder.ordersJsonb as any;
               const subSKUsValue = ordersData?.subSKUs || ordersData?.subSKU || ordersData?.SubSKUs || ordersData?.SubSKU;
-              
+
               if (Array.isArray(subSKUsValue)) {
                 subSKUsList = subSKUsValue;
                 console.log('✅ Found subSKUs in ordersJsonb (array):', subSKUsList);
@@ -232,13 +232,13 @@ export const AutomateLogisticModal = ({
                 console.log('✅ Found subSKUs in ordersJsonb (string):', subSKUsValue, '→ parsed:', subSKUsList);
               }
             }
-            
+
             // Fallback to direct field if not found in ordersJsonb
             if (subSKUsList.length === 0 && existingOrder.subSKUs && Array.isArray(existingOrder.subSKUs) && existingOrder.subSKUs.length > 0) {
               subSKUsList = existingOrder.subSKUs;
               console.log('✅ Found subSKUs in direct field:', subSKUsList);
             }
-            
+
             // Pre-populate if we have data
             if (shippingType || subSKUsList.length > 0) {
               console.log('📝 Pre-populating form with:', {
@@ -246,7 +246,7 @@ export const AutomateLogisticModal = ({
                 shippingType,
                 subSKUsList,
               });
-              
+
               setShippingTypes((prev) => {
                 const updated: Record<number, '' | 'LTL' | 'Parcel'> = {
                   ...prev,
@@ -255,7 +255,7 @@ export const AutomateLogisticModal = ({
                 console.log('✅ Updated shippingTypes:', updated);
                 return updated;
               });
-              
+
               setSubSKUs((prev) => {
                 const updated = { ...prev };
                 if (subSKUsList.length > 0) {
@@ -265,7 +265,7 @@ export const AutomateLogisticModal = ({
                 console.log('✅ Updated subSKUs:', updated);
                 return updated;
               });
-              
+
               // Mark as already saved if it has both shiptypes and subSKUs
               if (shippingType && subSKUsList.length > 0) {
                 setSavedOrders((prev) => ({
@@ -279,11 +279,11 @@ export const AutomateLogisticModal = ({
           }
         }
       }
-      
+
       setExistingShippedOrders(existingMap);
       setOriginalSubSKUs((prev) => ({ ...prev, ...newOriginalSubSKUs }));
     };
-    
+
     if (isOpen && orders.length > 0) {
       checkExistingOrders();
     }
@@ -294,7 +294,7 @@ export const AutomateLogisticModal = ({
     setShippingTypes((prev) => {
       const updated: Record<number, 'LTL' | 'Parcel' | ''> = { ...prev };
       let hasChanges = false;
-      
+
       orders.forEach((order) => {
         // Set Parcel as default for all orders when multiple orders are selected
         if (orders.length > 1 && (!(order.id in updated) || updated[order.id] === '')) {
@@ -306,15 +306,15 @@ export const AutomateLogisticModal = ({
           hasChanges = true;
         }
       });
-      
+
       return hasChanges ? updated : prev;
     });
-    
+
     // Initialize subSKUs when orders change
     setSubSKUs((prev) => {
       const updated: Record<number, string[]> = { ...prev };
       let hasChanges = false;
-      
+
       orders.forEach((order) => {
         // Only initialize if not already set
         if (!(order.id in updated)) {
@@ -322,7 +322,7 @@ export const AutomateLogisticModal = ({
           hasChanges = true;
         }
       });
-      
+
       return hasChanges ? updated : prev;
     });
   }, [orders]);
@@ -331,7 +331,7 @@ export const AutomateLogisticModal = ({
   const hasSubSKUsChanged = useCallback((orderId: number, currentSubSKUs: string[]): boolean => {
     const original = originalSubSKUs[orderId] || [];
     if (original.length !== currentSubSKUs.length) return true;
-    
+
     const originalSorted = [...original].sort().join(',');
     const currentSorted = [...currentSubSKUs].sort().join(',');
     return originalSorted !== currentSorted;
@@ -363,36 +363,36 @@ export const AutomateLogisticModal = ({
 
     // Check if order already exists with shiptypes and subSKUs
     const existingOrder = existingShippedOrders[sku];
-    
+
     if (existingOrder) {
       // Get existing shiptypes and subSKUs
       let existingShippingType: string | null = null;
       let existingSubSKUs: string[] = [];
-      
+
       if (existingOrder.shippingType) {
         existingShippingType = existingOrder.shippingType;
       } else if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
         const ordersData = existingOrder.ordersJsonb as any;
         existingShippingType = ordersData?.shiptypes || ordersData?.shippingType || null;
       }
-      
+
       if (existingOrder.subSKUs && Array.isArray(existingOrder.subSKUs) && existingOrder.subSKUs.length > 0) {
         existingSubSKUs = existingOrder.subSKUs;
       } else if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
         const ordersData = existingOrder.ordersJsonb as any;
         const subSKUsValue = ordersData?.subSKUs || ordersData?.subSKU;
-        
+
         if (Array.isArray(subSKUsValue)) {
           existingSubSKUs = subSKUsValue;
         } else if (typeof subSKUsValue === 'string' && subSKUsValue.trim()) {
           existingSubSKUs = subSKUsValue.split(',').map(s => s.trim()).filter(s => s.length > 0);
         }
       }
-      
+
       // Check if shiptypes or subSKUs have changed
       const shiptypesChanged = existingShippingType !== shippingType;
       const subSKUsChanged = hasSubSKUsChanged(order.id, subSKUList);
-      
+
       // If nothing changed, skip update
       if (!shiptypesChanged && !subSKUsChanged && existingShippingType && existingSubSKUs.length > 0) {
         setSavedOrders((prev) => ({ ...prev, [order.id]: true }));
@@ -400,7 +400,7 @@ export const AutomateLogisticModal = ({
         setShowToast(true);
         return;
       }
-      
+
       // If changed, we'll update below (continue to update logic)
     }
 
@@ -418,7 +418,7 @@ export const AutomateLogisticModal = ({
       if (shippingType === 'LTL') {
         // Get existing cached order or create new
         const existingCached = getCachedOrder(order.id);
-        
+
         // Update or create cache entry
         if (existingCached) {
           updateCachedOrder(order.id, {
@@ -449,7 +449,7 @@ export const AutomateLogisticModal = ({
       } else {
         // For Parcel: Check if order exists, if yes update, otherwise create
         let logisticsOrderId = existingOrder?.id;
-        
+
         if (logisticsOrderId) {
           // Update existing order
           const response = await fetch(buildApiUrl(`/Logistics/shipped-orders/${logisticsOrderId}`), {
@@ -470,7 +470,7 @@ export const AutomateLogisticModal = ({
           }
 
           const result = await response.json();
-          
+
           // Update cache
           const existingCached = getCachedOrder(order.id);
           if (existingCached) {
@@ -577,7 +577,7 @@ export const AutomateLogisticModal = ({
   }, []);
 
   // Function to update order from cache (called when BOL/pickup is ready)
-  const updateOrderFromCache = useCallback(async (orderId: number) => {
+  const updateOrderFromCache = useCallback(async (orderId: number, options?: { skipFiles?: boolean }) => {
     try {
       const cachedOrder = getCachedOrder(orderId);
       if (!cachedOrder) return;
@@ -607,7 +607,7 @@ export const AutomateLogisticModal = ({
 
         const createResult = await createResponse.json();
         logisticsOrderId = createResult.data?.id || createResult.id;
-        
+
         // Update cache with logistics order ID
         updateOrderCache(orderId, { logisticsShippedOrderId: logisticsOrderId });
         console.log('✅ Created new order and stored ID in cache:', logisticsOrderId);
@@ -615,17 +615,19 @@ export const AutomateLogisticModal = ({
 
       // Prepare FormData for update with files
       const formData = new FormData();
-      
-      // Add files if available
-      if (cachedOrder.xpoBolFiles) {
-        cachedOrder.xpoBolFiles.forEach((file: File) => {
-          formData.append('files', file);
-        });
-      }
-      if (cachedOrder.estesBolFiles) {
-        cachedOrder.estesBolFiles.forEach((file: File) => {
-          formData.append('files', file);
-        });
+
+      // Add files if available AND NOT skipped
+      if (!options?.skipFiles) {
+        if (cachedOrder.xpoBolFiles) {
+          cachedOrder.xpoBolFiles.forEach((file: File) => {
+            formData.append('files', file);
+          });
+        }
+        if (cachedOrder.estesBolFiles) {
+          cachedOrder.estesBolFiles.forEach((file: File) => {
+            formData.append('files', file);
+          });
+        }
       }
 
       // Prepare JSONB data - merge all data and clear rate quotes responses
@@ -638,7 +640,7 @@ export const AutomateLogisticModal = ({
       // Prepare rate quotes - separate request and response for frontend display
       let rateQuotesRequestJsonb: Record<string, unknown> | undefined = undefined;
       let rateQuotesResponseJsonb: Record<string, unknown> | undefined = undefined;
-      
+
       // Store only the selected carrier's quote (user selects one, not both)
       if (cachedOrder.xpoRateQuoteRequest && cachedOrder.xpoRateQuoteResponse) {
         rateQuotesRequestJsonb = { xpo: cachedOrder.xpoRateQuoteRequest };
@@ -734,28 +736,29 @@ export const AutomateLogisticModal = ({
     const handlePickupData = (e: CustomEvent) => {
       const { orderId, pickupResponse } = e.detail;
       // Store carrier info if available in pickup response
-      const carrier = (pickupResponse as any)?.carrier || 
-                      (pickupResponse as any)?.Carrier ||
-                      undefined;
-      
+      const carrier = (pickupResponse as any)?.carrier ||
+        (pickupResponse as any)?.Carrier ||
+        undefined;
+
       updateOrderCache(orderId, {
         pickupResponseJsonb: pickupResponse,
         ...(carrier && { carrier: carrier.toLowerCase() }),
       });
       // Update order when pickup is ready, then clear cache
-      updateOrderFromCache(orderId)
+      // Pass skipFiles: true to prevent duplicative file uploads (BOLs are already uploaded by the BOL component)
+      updateOrderFromCache(orderId, { skipFiles: true })
         .then(() => {
-          setToastMessage('Pickup scheduled successfully! Opening email compose...');
+          setToastMessage('Pickup scheduled successfully!');
           setShowToast(true);
-          
+
           // Get order data for email template
           const order = orders.find(o => o.id === orderId);
           const orderNumber = order ? getJsonbValue(order.jsonb, 'Order#') : undefined;
           const sku = order ? getJsonbValue(order.jsonb, 'SKU') : undefined;
-          
-          // Show email compose modal with BOL files attached
-          setEmailComposeOrderId(orderId);
-          setShowEmailCompose(true);
+
+          // Email auto-open removed per user request
+          // setEmailComposeOrderId(orderId);
+          // setShowEmailCompose(true);
         })
         .catch(err => {
           console.error('Error updating order with pickup data:', err);
@@ -793,31 +796,31 @@ export const AutomateLogisticModal = ({
             // Get existing shiptypes and subSKUs
             let existingShippingType: string | null = null;
             let existingSubSKUs: string[] = [];
-            
+
             if (existingOrder.shippingType) {
               existingShippingType = existingOrder.shippingType;
             } else if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
               const ordersData = existingOrder.ordersJsonb as any;
               existingShippingType = ordersData?.shiptypes || ordersData?.shippingType || null;
             }
-            
+
             if (existingOrder.subSKUs && Array.isArray(existingOrder.subSKUs) && existingOrder.subSKUs.length > 0) {
               existingSubSKUs = existingOrder.subSKUs;
             } else if (existingOrder.ordersJsonb && typeof existingOrder.ordersJsonb === 'object') {
               const ordersData = existingOrder.ordersJsonb as any;
               const subSKUsValue = ordersData?.subSKUs || ordersData?.subSKU;
-              
+
               if (Array.isArray(subSKUsValue)) {
                 existingSubSKUs = subSKUsValue;
               } else if (typeof subSKUsValue === 'string' && subSKUsValue.trim()) {
                 existingSubSKUs = subSKUsValue.split(',').map(s => s.trim()).filter(s => s.length > 0);
               }
             }
-            
+
             // Check if shiptypes or subSKUs have changed
             const shiptypesChanged = existingShippingType !== shippingType;
             const subSKUsChanged = hasSubSKUsChanged(order.id, subSKUList);
-            
+
             if (shiptypesChanged || subSKUsChanged) {
               // Data has changed, automatically update
               setTimeout(() => {
@@ -995,7 +998,7 @@ export const AutomateLogisticModal = ({
                 const subSKUList = subSKUs[order.id] || [];
                 return shippingType && subSKUList.length > 0;
               });
-              
+
               return allOrdersComplete ? (
                 <button
                   type="button"
@@ -1096,21 +1099,21 @@ export const AutomateLogisticModal = ({
                 accent: 'indigo',
               },
             ];
-            
+
             const colorScheme = colorSchemes[orderIndex % colorSchemes.length];
             // Extract values from JSONB
-            const productName = getJsonbValue(order.jsonb, 'Product Name') || 
-                               getJsonbValue(order.jsonb, 'Product') ||
-                               getJsonbValue(order.jsonb, 'Item Name') ||
-                               getJsonbValue(order.jsonb, 'Item Description') ||
-                               '-';
+            const productName = getJsonbValue(order.jsonb, 'Product Name') ||
+              getJsonbValue(order.jsonb, 'Product') ||
+              getJsonbValue(order.jsonb, 'Item Name') ||
+              getJsonbValue(order.jsonb, 'Item Description') ||
+              '-';
             const sku = getJsonbValue(order.jsonb, 'SKU');
             const price = getJsonbValue(order.jsonb, 'Price') ||
-                         getJsonbValue(order.jsonb, 'Item Cost') ||
-                         getJsonbValue(order.jsonb, 'Cost') ||
-                         getJsonbValue(order.jsonb, 'ItemCost') ||
-                         '-';
-            
+              getJsonbValue(order.jsonb, 'Item Cost') ||
+              getJsonbValue(order.jsonb, 'Cost') ||
+              getJsonbValue(order.jsonb, 'ItemCost') ||
+              '-';
+
             // Order details
             const orderIdFromJsonb = getJsonbValue(order.jsonb, 'Order ID');
             const poNumber = getJsonbValue(order.jsonb, 'PO#');
@@ -1126,43 +1129,43 @@ export const AutomateLogisticModal = ({
             const shippingMethod = getJsonbValue(order.jsonb, 'Shipping Method');
             const shippingTier = getJsonbValue(order.jsonb, 'Shipping Tier');
             const shipNode = getJsonbValue(order.jsonb, 'Ship Node');
-            
+
             // Customer details
             const customerName = getJsonbValue(order.jsonb, 'Customer Name');
             const customerEmail = getJsonbValue(order.jsonb, 'Customer Email') ||
-                                getJsonbValue(order.jsonb, 'Email');
+              getJsonbValue(order.jsonb, 'Email');
             const customerPhone = getJsonbValue(order.jsonb, 'Customer Phone Number') ||
-                                getJsonbValue(order.jsonb, 'Customer Phone') ||
-                                getJsonbValue(order.jsonb, 'Phone');
+              getJsonbValue(order.jsonb, 'Customer Phone') ||
+              getJsonbValue(order.jsonb, 'Phone');
             const shippingAddress = getJsonbValue(order.jsonb, 'Customer Shipping Address') ||
-                                  getJsonbValue(order.jsonb, 'Shipping Address') ||
-                                  getJsonbValue(order.jsonb, 'Ship to Address 1') ||
-                                  getJsonbValue(order.jsonb, 'Address');
+              getJsonbValue(order.jsonb, 'Shipping Address') ||
+              getJsonbValue(order.jsonb, 'Ship to Address 1') ||
+              getJsonbValue(order.jsonb, 'Address');
             const city = getJsonbValue(order.jsonb, 'City');
             const state = getJsonbValue(order.jsonb, 'State');
             const zip = getJsonbValue(order.jsonb, 'Zip');
             const country = getJsonbValue(order.jsonb, 'Ship to Country');
-            
+
             // Subtotal and pricing
             const quantity = getJsonbValue(order.jsonb, 'Quantity') ||
-                            getJsonbValue(order.jsonb, 'Qty') ||
-                            '1';
+              getJsonbValue(order.jsonb, 'Qty') ||
+              '1';
             const tax = getJsonbValue(order.jsonb, 'Tax');
             const shippingCost = getJsonbValue(order.jsonb, 'Shipping Cost');
             const discount = getJsonbValue(order.jsonb, 'Discount');
-            
+
             // Calculate subtotal
             const priceNum = price !== '-' ? parseFloat(price.replace(/[^0-9.-]/g, '')) : 0;
             const qtyNum = quantity !== '-' ? parseFloat(quantity) : 1;
             const taxNum = tax !== '-' ? parseFloat(tax.replace(/[^0-9.-]/g, '')) : 0;
             const shippingNum = shippingCost !== '-' ? parseFloat(shippingCost.replace(/[^0-9.-]/g, '')) : 0;
             const discountNum = discount !== '-' ? parseFloat(discount.replace(/[^0-9.-]/g, '')) : 0;
-            
-            const subtotal = priceNum > 0 && qtyNum > 0 
+
+            const subtotal = priceNum > 0 && qtyNum > 0
               ? (priceNum * qtyNum).toFixed(2)
               : '-';
-            
-            const total = subtotal !== '-' 
+
+            const total = subtotal !== '-'
               ? (priceNum * qtyNum + taxNum + shippingNum - discountNum).toFixed(2)
               : '-';
 
@@ -1201,7 +1204,7 @@ export const AutomateLogisticModal = ({
                   </div>
                   {/* Shipping Type Dropdown and SubSKU Section - Bottom Row */}
                   <div className="mt-4 sm:mt-5 flex items-end gap-4 flex-wrap">
-                    <div 
+                    <div
                       className="flex flex-col gap-1 relative w-auto min-w-[140px]"
                       ref={(el) => {
                         dropdownRefs.current[order.id] = el;
@@ -1225,7 +1228,7 @@ export const AutomateLogisticModal = ({
                       >
                         {shippingTypes[order.id] || 'Shipping Type'}
                         <span className="float-right mt-0.5">
-                          <ChevronDown 
+                          <ChevronDown
                             className={`h-3 w-3 transition-transform ${openDropdowns[order.id] ? 'rotate-180' : ''}`}
                           />
                         </span>
@@ -1245,9 +1248,8 @@ export const AutomateLogisticModal = ({
                                 [order.id]: false,
                               }));
                             }}
-                            className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${
-                              !shippingTypes[order.id] ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
-                            }`}
+                            className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${!shippingTypes[order.id] ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
+                              }`}
                           >
                             Shipping Type
                           </button>
@@ -1286,7 +1288,7 @@ export const AutomateLogisticModal = ({
                                 ...prev,
                                 [order.id]: false,
                               }));
-                              
+
                               // For single order, save and open modal
                               if (orders.length === 1) {
                                 saveOrderData(order).then(() => {
@@ -1295,9 +1297,8 @@ export const AutomateLogisticModal = ({
                                 });
                               }
                             }}
-                            className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${
-                              shippingTypes[order.id] === 'Parcel' ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
-                            }`}
+                            className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${shippingTypes[order.id] === 'Parcel' ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
+                              }`}
                           >
                             Parcel
                           </button>
@@ -1307,7 +1308,7 @@ export const AutomateLogisticModal = ({
                               const newValue = 'LTL';
                               const sku = getJsonbValue(order.jsonb, 'SKU');
                               const existingOrder = sku && sku !== '-' ? existingShippedOrders[sku] : null;
-                              
+
                               setShippingTypes((prev) => ({
                                 ...prev,
                                 [order.id]: newValue,
@@ -1316,7 +1317,7 @@ export const AutomateLogisticModal = ({
                                 ...prev,
                                 [order.id]: false,
                               }));
-                              
+
                               // If order exists and shiptypes changed, auto-update
                               if (existingOrder && subSKUs[order.id] && subSKUs[order.id].length > 0) {
                                 // Auto-update when shiptypes change
@@ -1325,14 +1326,13 @@ export const AutomateLogisticModal = ({
                                 // Save order data when LTL is selected
                                 await saveOrderData(order);
                               }
-                              
+
                               // Open LTL rate quote modal when LTL is selected
                               setSelectedOrderForLTL(order);
                               setLtlModalOpen(true);
                             }}
-                            className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${
-                              shippingTypes[order.id] === 'LTL' ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
-                            }`}
+                            className={`w-full px-3 py-2 text-left text-xs hover:bg-slate-100 ${shippingTypes[order.id] === 'LTL' ? 'bg-blue-50 text-blue-700' : 'text-slate-700'
+                              }`}
                           >
                             LTL
                           </button>
@@ -1352,23 +1352,23 @@ export const AutomateLogisticModal = ({
                                   {subSku}
                                   <button
                                     type="button"
-                              onClick={() => {
-                                setSubSKUs((prev) => {
-                                  const updated = {
-                                    ...prev,
-                                    [order.id]: prev[order.id]?.filter((_, i) => i !== index) || [],
-                                  };
-                                  // If subSKUs changed, mark as not saved
-                                  if (hasSubSKUsChanged(order.id, updated[order.id] || [])) {
-                                    setSavedOrders((prev) => {
-                                      const updated = { ...prev };
-                                      delete updated[order.id];
-                                      return updated;
-                                    });
-                                  }
-                                  return updated;
-                                });
-                              }}
+                                    onClick={() => {
+                                      setSubSKUs((prev) => {
+                                        const updated = {
+                                          ...prev,
+                                          [order.id]: prev[order.id]?.filter((_, i) => i !== index) || [],
+                                        };
+                                        // If subSKUs changed, mark as not saved
+                                        if (hasSubSKUsChanged(order.id, updated[order.id] || [])) {
+                                          setSavedOrders((prev) => {
+                                            const updated = { ...prev };
+                                            delete updated[order.id];
+                                            return updated;
+                                          });
+                                        }
+                                        return updated;
+                                      });
+                                    }}
                                     className="ml-1 text-slate-600 hover:text-slate-900"
                                   >
                                     <X className="h-3 w-3" />
@@ -1785,7 +1785,7 @@ export const AutomateLogisticModal = ({
 
         {/* Footer */}
         <div className="p-4 sm:p-6 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-3 flex-shrink-0">
-         
+
         </div>
       </div>
 
@@ -1838,11 +1838,11 @@ export const AutomateLogisticModal = ({
         const order = orders.find(o => o.id === emailComposeOrderId);
         const orderNumber = order ? getJsonbValue(order.jsonb, 'Order#') : undefined;
         const sku = order ? getJsonbValue(order.jsonb, 'SKU') : undefined;
-        
+
         // Determine carrier from cached order data
         const cachedOrder = getCachedOrder(emailComposeOrderId);
         let carrier: 'estes' | 'xpo' = 'estes'; // Default to estes
-        
+
         if (cachedOrder) {
           // First, check if carrier is explicitly stored in cache
           if (cachedOrder.carrier && (cachedOrder.carrier === 'estes' || cachedOrder.carrier === 'xpo')) {
@@ -1859,7 +1859,7 @@ export const AutomateLogisticModal = ({
             }
           }
         }
-        
+
         const emailSubject = EMAIL_TEMPLATES.PICKUP_SCHEDULED.subject(
           carrier,
           emailComposeOrderId,
@@ -1872,7 +1872,7 @@ export const AutomateLogisticModal = ({
           sku !== '-' ? sku : undefined
         );
         const emailCc = EMAIL_TEMPLATES.PICKUP_SCHEDULED.cc(carrier);
-        
+
         return (
           <EmailComposeModal
             isOpen={showEmailCompose}

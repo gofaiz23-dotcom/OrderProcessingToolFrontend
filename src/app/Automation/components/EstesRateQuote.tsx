@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, forwardRef, useImperativeHandle, useRef } from 'react';
-import { Loader2, ChevronDown, ChevronUp, Info, Plus } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronUp, Info, Plus, AlertTriangle } from 'lucide-react';
 import type { Order } from '@/app/types/order';
 import { buildEstesRequestBody } from '@/app/logistics/estes/utils/requestBuilder';
 import { EstesQuoteCard } from '@/app/logistics/estes/components/EstesQuoteCard';
@@ -53,12 +53,12 @@ type CommodityItem = {
 const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
   if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '';
   const obj = jsonb as Record<string, unknown>;
-  
+
   const normalizedKey = key.trim();
   const keyWithoutHash = normalizedKey.replace(/#/g, '');
   const keyLower = normalizedKey.toLowerCase();
   const keyWithoutHashLower = keyWithoutHash.toLowerCase();
-  
+
   const keysToTry = [
     normalizedKey,
     keyWithoutHash,
@@ -67,13 +67,13 @@ const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
     keyWithoutHashLower,
     `#${keyWithoutHashLower}`,
   ];
-  
+
   for (const k of keysToTry) {
     if (obj[k] !== undefined && obj[k] !== null && obj[k] !== '') {
       return String(obj[k]);
     }
   }
-  
+
   const allKeys = Object.keys(obj);
   for (const objKey of allKeys) {
     const objKeyLower = objKey.toLowerCase();
@@ -88,7 +88,7 @@ const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
       }
     }
   }
-  
+
   return '';
 };
 
@@ -115,7 +115,12 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
   const [showErrorResponse, setShowErrorResponse] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<any | null>(null);
   const [showBOLForm, setShowBOLForm] = useState(false);
+  const showBOLFormRef = useRef(false);
   const bolFormRef = useRef<HTMLDivElement>(null);
+
+  // Density Validation Modal State
+  const [showDensityWarning, setShowDensityWarning] = useState(false);
+  const [warningDensityValue, setWarningDensityValue] = useState(0);
 
   // Account Information
   const [myAccount, setMyAccount] = useState(ESTES_ACCOUNTS[0]?.accountNumber || '');
@@ -208,7 +213,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
 
     try {
       const response = await fetch(`https://api.zippopotam.us/us/${cleanedZip}`);
-      
+
       if (response.ok) {
         const data = await response.json();
         if (data.places && data.places.length > 0) {
@@ -298,46 +303,46 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
       setRequestorName(customerName);
     }
 
-    const customerPhone = getJsonbValue(orderJsonb, 'Customer Phone Number') || 
-                         getJsonbValue(orderJsonb, 'Phone') ||
-                         getJsonbValue(orderJsonb, 'Phone Number');
+    const customerPhone = getJsonbValue(orderJsonb, 'Customer Phone Number') ||
+      getJsonbValue(orderJsonb, 'Phone') ||
+      getJsonbValue(orderJsonb, 'Phone Number');
     if (customerPhone) {
       setRequestorPhone(customerPhone);
     }
 
-    const customerEmail = getJsonbValue(orderJsonb, 'Customer Email') || 
-                          getJsonbValue(orderJsonb, 'Email') ||
-                          getJsonbValue(orderJsonb, 'Customer Email Address');
+    const customerEmail = getJsonbValue(orderJsonb, 'Customer Email') ||
+      getJsonbValue(orderJsonb, 'Email') ||
+      getJsonbValue(orderJsonb, 'Customer Email Address');
     if (customerEmail) {
       setRequestorEmail(customerEmail);
     }
 
     // Destination Information
     const shipToCity = getJsonbValue(orderJsonb, 'Ship to City') ||
-                      getJsonbValue(orderJsonb, 'City') ||
-                      getJsonbValue(orderJsonb, 'Shipping City');
+      getJsonbValue(orderJsonb, 'City') ||
+      getJsonbValue(orderJsonb, 'Shipping City');
     if (shipToCity) {
       setDestinationCity(shipToCity);
     }
 
     const shipToState = getJsonbValue(orderJsonb, 'Ship to State') ||
-                       getJsonbValue(orderJsonb, 'State') ||
-                       getJsonbValue(orderJsonb, 'Ship to State/Province') ||
-                       getJsonbValue(orderJsonb, 'Shipping State');
+      getJsonbValue(orderJsonb, 'State') ||
+      getJsonbValue(orderJsonb, 'Ship to State/Province') ||
+      getJsonbValue(orderJsonb, 'Shipping State');
     if (shipToState) {
       setDestinationState(shipToState);
     }
 
     const shipToZip = getJsonbValue(orderJsonb, 'Ship to Zip Code') ||
-                     getJsonbValue(orderJsonb, 'Zip') ||
-                     getJsonbValue(orderJsonb, 'Ship to Postal Code') ||
-                     getJsonbValue(orderJsonb, 'Shipping Zip Code');
+      getJsonbValue(orderJsonb, 'Zip') ||
+      getJsonbValue(orderJsonb, 'Ship to Postal Code') ||
+      getJsonbValue(orderJsonb, 'Shipping Zip Code');
     if (shipToZip) {
       setDestinationZipCode(shipToZip);
     }
 
     const shipToCountry = getJsonbValue(orderJsonb, 'Ship to Country') ||
-                         getJsonbValue(orderJsonb, 'Shipping Country');
+      getJsonbValue(orderJsonb, 'Shipping Country');
     if (shipToCountry) {
       const country = shipToCountry.toUpperCase();
       if (country === 'US' || country === 'USA' || country === 'UNITED STATES') {
@@ -372,16 +377,16 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
     if (subSKUs.length > 0) {
       const baseDescription = ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription;
       const formattedDescription = formatDescriptionWithSubSKUs(baseDescription, subSKUs);
-      
+
       setHandlingUnits((prevUnits) => {
         return prevUnits.map((unit) => {
           // Update if description is empty, just the base, or starts with base (but not already formatted)
-          const shouldUpdate = 
-            !unit.description || 
+          const shouldUpdate =
+            !unit.description ||
             unit.description === '' ||
             unit.description === baseDescription ||
             (unit.description.startsWith(baseDescription) && !unit.description.includes(subSKUs.join(', ')));
-          
+
           return {
             ...unit,
             description: shouldUpdate ? formattedDescription : unit.description,
@@ -398,7 +403,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
       if (carrier === 'estes' && response?.data?.data?.[index]) {
         const selected = response.data.data[index];
         setSelectedQuote(selected);
-        
+
         // Dispatch only the selected quote's request and response to cache
         // Get the original request payload from state
         const requestPayload = (response as any)?._requestPayload || null;
@@ -511,19 +516,55 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
       handlingUnits.map((unit) =>
         unit.id === unitId
           ? {
-              ...unit,
-              items: [...unit.items, { id: Date.now().toString() }],
-            }
+            ...unit,
+            items: [...unit.items, { id: Date.now().toString() }],
+          }
           : unit
       )
     );
+  };
+
+  // Calculate totals
+  const calculateTotals = () => {
+    let totalCube = 0;
+    let totalWeight = 0;
+    let totalPieces = 0;
+
+    handlingUnits.forEach((unit) => {
+      const cube = (unit.length * unit.width * unit.height) / 1728;
+      totalCube += cube * unit.quantity;
+      totalWeight += unit.weight * unit.quantity;
+      totalPieces += unit.quantity;
+    });
+
+    const totalDensity = totalCube > 0 ? totalWeight / totalCube : 0;
+
+    return {
+      totalCube: totalCube.toFixed(3),
+      totalDensity: totalDensity.toFixed(3),
+      totalWeight,
+      totalPieces,
+      totalHandlingUnits: handlingUnits.length,
+    };
   };
 
   const handleGetQuote = async (e?: React.FormEvent) => {
     if (e) {
       e.preventDefault();
     }
-    
+
+    // Validate Density
+    const currentTotals = calculateTotals();
+    const currentDensity = parseFloat(currentTotals.totalDensity);
+
+    // Check validation: greater than 4 or less than 2
+    if (!isNaN(currentDensity) && currentDensity > 0 && (currentDensity < 2 || currentDensity > 4)) {
+      setWarningDensityValue(currentDensity);
+      setShowDensityWarning(true);
+      // We block the request here
+      return;
+    }
+
     setLoading(true);
     setError(null);
     setResponse(null);
@@ -653,7 +694,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
 
       // Store request payload for UI display
       setRequestPayload(payload);
-      
+
       // Log request payload for debugging
       console.log('🚀 Estes Rate Quote Request Payload:', JSON.stringify(payload, null, 2));
 
@@ -680,8 +721,8 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
           if (errorData.message) {
             errorMessage = errorData.message;
           } else if (errorData.error) {
-            errorMessage = typeof errorData.error === 'string' 
-              ? errorData.error 
+            errorMessage = typeof errorData.error === 'string'
+              ? errorData.error
               : errorData.error.message || errorMessage;
           }
         } catch (parseError) {
@@ -696,7 +737,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
           errorData,
         });
         setShowErrorResponse(true);
-        
+
         // Log error response for debugging
         console.error('❌ Estes Rate Quote Error Response:', {
           status: res.status,
@@ -713,7 +754,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
       (data as any)._requestPayload = payload;
       setResponse(data);
       setShowAccountInfo(false);
-      
+
       // Log response for debugging
       console.log('✅ Estes Rate Quote Response:', JSON.stringify(data, null, 2));
 
@@ -735,29 +776,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
     isBOLFormVisible: () => showBOLForm,
   }));
 
-  // Calculate totals
-  const calculateTotals = () => {
-    let totalCube = 0;
-    let totalWeight = 0;
-    let totalPieces = 0;
 
-    handlingUnits.forEach((unit) => {
-      const cube = (unit.length * unit.width * unit.height) / 1728;
-      totalCube += cube * unit.quantity;
-      totalWeight += unit.weight * unit.quantity;
-      totalPieces += unit.quantity;
-    });
-
-    const totalDensity = totalCube > 0 ? totalWeight / totalCube : 0;
-
-    return {
-      totalCube: totalCube.toFixed(3),
-      totalDensity: totalDensity.toFixed(3),
-      totalWeight,
-      totalPieces,
-      totalHandlingUnits: handlingUnits.length,
-    };
-  };
 
   const totals = calculateTotals();
   const totalDensityValue = parseFloat(totals.totalDensity);
@@ -975,7 +994,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                             maxLength={2}
                             className="px-2 py-1.5 text-xs border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                           />
-          </div>
+                        </div>
 
                         <div className="space-y-1">
                           <label className="block text-xs font-semibold text-slate-900">
@@ -985,11 +1004,11 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                             value={originCountry}
                             onChange={(e) => {
                               setOriginCountry(e.target.value);
-                              if (e.target.value && 
-                                  e.target.value !== 'USA' && 
-                                  e.target.value !== 'Canada' && 
-                                  e.target.value !== 'Mexico' &&
-                                  !customOriginCountries.includes(e.target.value)) {
+                              if (e.target.value &&
+                                e.target.value !== 'USA' &&
+                                e.target.value !== 'Canada' &&
+                                e.target.value !== 'Mexico' &&
+                                !customOriginCountries.includes(e.target.value)) {
                                 setCustomOriginCountries(prev => [...prev, e.target.value]);
                               }
                             }}
@@ -1005,10 +1024,10 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                               </option>
                             ))}
                           </select>
-          </div>
-          </div>
-        </div>
-      </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Destination */}
                   <div className="space-y-3">
@@ -1080,11 +1099,11 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                             value={destinationCountry}
                             onChange={(e) => {
                               setDestinationCountry(e.target.value);
-                              if (e.target.value && 
-                                  e.target.value !== 'USA' && 
-                                  e.target.value !== 'Canada' && 
-                                  e.target.value !== 'Mexico' &&
-                                  !customDestinationCountries.includes(e.target.value)) {
+                              if (e.target.value &&
+                                e.target.value !== 'USA' &&
+                                e.target.value !== 'Canada' &&
+                                e.target.value !== 'Mexico' &&
+                                !customDestinationCountries.includes(e.target.value)) {
                                 setCustomDestinationCountries(prev => [...prev, e.target.value]);
                               }
                             }}
@@ -1163,7 +1182,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                         Handling Unit {index + 1}
                       </h4>
                       {handlingUnits.length > 1 && (
-      <button
+                        <button
                           type="button"
                           onClick={() => removeHandlingUnit(unit.id)}
                           className="text-red-600 hover:text-red-700 text-xs"
@@ -1328,7 +1347,7 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                 >
                   <Plus size={14} />
                   ADD HANDLING UNIT
-      </button>
+                </button>
 
                 {/* Summary */}
                 <div className="mt-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
@@ -1343,15 +1362,15 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                         {totals.totalDensity} lb/ft³
                       </p>
                     </div>
-          <div>
+                    <div>
                       <p className="text-slate-600">Total Units:</p>
                       <p className="font-semibold text-slate-900">{totals.totalHandlingUnits}</p>
-          </div>
-          <div>
+                    </div>
+                    <div>
                       <p className="text-slate-600">Total Pieces:</p>
                       <p className="font-semibold text-slate-900">{totals.totalPieces}</p>
-          </div>
-          <div>
+                    </div>
+                    <div>
                       <p className="text-slate-600">Total Weight:</p>
                       <p className="font-semibold text-slate-900">{totals.totalWeight} lbs</p>
                     </div>
@@ -1362,14 +1381,14 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                         <p className="text-red-700 text-xs font-bold">
                           ⚠️ Total Density must be greater than 2 and less than 4 (Current: {totals.totalDensity} lb/ft³)
                         </p>
-          </div>
-        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               </section>
             </div>
           )}
-      </div>
+        </div>
 
       </form>
 
@@ -1389,8 +1408,8 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
             {response.data.data.map((quote: any, index: number) => (
               <EstesQuoteCard key={quote.quoteId || index} quote={quote} index={index} />
             ))}
-                  </div>
-                </div>
+          </div>
+        </div>
       )}
 
       {/* Combined Payload Display (Request & Response) */}
@@ -1417,9 +1436,9 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                   <pre className="text-xs text-slate-800 bg-white p-3 rounded border border-slate-200 overflow-x-auto max-h-96 overflow-y-auto">
                     {JSON.stringify(requestPayload, null, 2)}
                   </pre>
-                  </div>
+                </div>
               )}
-              
+
               {/* Response Payload */}
               {response && (
                 <div>
@@ -1429,9 +1448,9 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
                   </pre>
                 </div>
               )}
-                </div>
+            </div>
           )}
-              </div>
+        </div>
       )}
 
       {/* Error Response Display */}
@@ -1448,14 +1467,14 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
             ) : (
               <ChevronDown className="text-red-600" size={18} />
             )}
-              </button>
+          </button>
           {showErrorResponse && (
             <div className="p-4 bg-slate-50">
               <pre className="text-xs text-slate-800 bg-white p-3 rounded border border-slate-200 overflow-x-auto max-h-96 overflow-y-auto">
                 {JSON.stringify(errorResponse, null, 2)}
               </pre>
             </div>
-      )}
+          )}
         </div>
       )}
 
@@ -1494,6 +1513,63 @@ export const EstesRateQuote = forwardRef<EstesRateQuoteRef, EstesRateQuoteProps>
             }}
             onBack={() => setShowBOLForm(false)}
           />
+        </div>
+      )}
+      {/* Density Warning Modal */}
+      {showDensityWarning && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+            {/* Header */}
+            <div className="bg-amber-50 p-6 border-b border-amber-100 flex items-center gap-4">
+              <div className="p-3 bg-amber-100 rounded-full shrink-0">
+                <AlertTriangle className="w-8 h-8 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-amber-900">Density Warning</h3>
+                <p className="text-amber-700 text-sm font-medium">Validation Required</p>
+              </div>
+            </div>
+
+            {/* content */}
+            <div className="p-6 space-y-5">
+              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border border-slate-200 shadow-sm">
+                <span className="text-slate-600 font-medium">Current Density</span>
+                <span className="text-2xl font-bold text-slate-900 font-mono">
+                  {warningDensityValue.toFixed(3)} <span className="text-sm font-normal text-slate-500 font-sans">lb/ft³</span>
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-slate-700 font-medium">
+                  The calculated density is outside the recommended range.
+                </p>
+                <p className="text-slate-600 text-sm leading-relaxed">
+                  To ensure accurate quoting and avoid re-weigh charges, the shipping density should typically fall between:
+                </p>
+              </div>
+
+              <div className="flex items-center justify-center gap-4 p-3 bg-blue-50 text-blue-900 rounded-lg font-bold border border-blue-100">
+                <span>2.00 lb/ft³</span>
+                <div className="h-px bg-blue-300 w-8"></div>
+                <span>4.00 lb/ft³</span>
+              </div>
+
+              <p className="text-xs text-slate-500 italic text-center">
+                Please verify your dimensions (L × W × H) and Weight.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowDensityWarning(false)}
+                className="px-6 py-2.5 bg-slate-900 text-white font-semibold rounded-lg hover:bg-slate-800 transition-all shadow-lg shadow-slate-900/10 active:scale-95 duration-200 flex items-center gap-2"
+              >
+                <span>I Understand, I'll Fix It</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
