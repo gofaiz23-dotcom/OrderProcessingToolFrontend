@@ -30,7 +30,7 @@ import type { Order } from '@/app/types/order';
 import { dispatchBOLData, dispatchPickupData, updateCachedOrder, getCachedOrder } from '../utils/ltlOrderCache';
 import { createShippedOrder } from '@/app/ProcessedOrders/utils/shippedOrdersApi';
 import { EmailComposeModal } from './EmailComposeModal';
-import { EMAIL_TEMPLATES } from '../constants/emailTemplates';
+import { EMAIL_TEMPLATES, getFormattedBOLFilename } from '../constants/emailTemplates';
 
 type LocationData = {
   searchValue: string;
@@ -61,7 +61,7 @@ const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
   if (!jsonb || typeof jsonb !== 'object' || Array.isArray(jsonb)) return '';
   const obj = jsonb as Record<string, unknown>;
   const normalizedKey = key.trim().toLowerCase();
-  
+
   for (const [k, v] of Object.entries(obj)) {
     if (k.toLowerCase() === normalizedKey && v !== undefined && v !== null && v !== '') {
       return String(v);
@@ -90,7 +90,8 @@ export const XPOBOLForm = ({
   const [payloadPreview, setPayloadPreview] = useState<Record<string, unknown> | null>(null);
   const [showEmailCompose, setShowEmailCompose] = useState(false);
   const [bolFilesForEmail, setBolFilesForEmail] = useState<File[]>([]); // Store BOL files to pass to email modal
-  
+  const hasShownEmailCompose = useRef(false); // Track if we've shown the email compose modal
+
   // Helper function to format description with subSKUs
   const formatDescriptionWithSubSKUs = (baseDescription: string, subSKUsArray: string[]): string => {
     if (subSKUsArray.length === 0) {
@@ -99,13 +100,13 @@ export const XPOBOLForm = ({
     const subSKUsString = subSKUsArray.join(', ');
     return `${baseDescription} ${subSKUsString}`;
   };
-  
+
   // Get initial commodity description with subSKUs
   const getInitialCommodityDesc = (): string => {
     const baseDescription = ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription;
     return formatDescriptionWithSubSKUs(baseDescription, subSKUs);
   };
-  
+
   // Basic Information
   const [requesterRole, setRequesterRole] = useState(XPO_BOL_DEFAULTS.requesterRole);
   const [paymentTerms, setPaymentTerms] = useState(XPO_BOL_DEFAULTS.paymentTerms);
@@ -222,59 +223,59 @@ export const XPOBOLForm = ({
     if (order?.jsonb) {
       // Populate delivery location (consignee) from order - check all possible field name variations
       const deliveryAddress = getJsonbValue(order.jsonb, 'Ship to Address 1') ||
-                             getJsonbValue(order.jsonb, 'Shipping Address') ||
-                             getJsonbValue(order.jsonb, 'Customer Address') ||
-                             getJsonbValue(order.jsonb, 'Customer Address 1') ||
-                             getJsonbValue(order.jsonb, 'Address') ||
-                             getJsonbValue(order.jsonb, 'Address 1') ||
-                             getJsonbValue(order.jsonb, 'Ship to Address');
-      
+        getJsonbValue(order.jsonb, 'Shipping Address') ||
+        getJsonbValue(order.jsonb, 'Customer Address') ||
+        getJsonbValue(order.jsonb, 'Customer Address 1') ||
+        getJsonbValue(order.jsonb, 'Address') ||
+        getJsonbValue(order.jsonb, 'Address 1') ||
+        getJsonbValue(order.jsonb, 'Ship to Address');
+
       const deliveryAddress2 = getJsonbValue(order.jsonb, 'Ship to Address 2') ||
-                              getJsonbValue(order.jsonb, 'Customer Address 2') ||
-                              getJsonbValue(order.jsonb, 'Address 2');
-      
+        getJsonbValue(order.jsonb, 'Customer Address 2') ||
+        getJsonbValue(order.jsonb, 'Address 2');
+
       const deliveryCity = getJsonbValue(order.jsonb, 'Ship to City') ||
-                          getJsonbValue(order.jsonb, 'Shipping City') ||
-                          getJsonbValue(order.jsonb, 'Customer City') ||
-                          getJsonbValue(order.jsonb, 'City');
-      
+        getJsonbValue(order.jsonb, 'Shipping City') ||
+        getJsonbValue(order.jsonb, 'Customer City') ||
+        getJsonbValue(order.jsonb, 'City');
+
       const deliveryState = getJsonbValue(order.jsonb, 'Ship to State') ||
-                           getJsonbValue(order.jsonb, 'Shipping State') ||
-                           getJsonbValue(order.jsonb, 'Customer State') ||
-                           getJsonbValue(order.jsonb, 'Ship to State/Province') ||
-                           getJsonbValue(order.jsonb, 'State');
-      
+        getJsonbValue(order.jsonb, 'Shipping State') ||
+        getJsonbValue(order.jsonb, 'Customer State') ||
+        getJsonbValue(order.jsonb, 'Ship to State/Province') ||
+        getJsonbValue(order.jsonb, 'State');
+
       const deliveryZip = getJsonbValue(order.jsonb, 'Ship to Zip Code') ||
-                         getJsonbValue(order.jsonb, 'Shipping Zip Code') ||
-                         getJsonbValue(order.jsonb, 'Customer Zip Code') ||
-                         getJsonbValue(order.jsonb, 'Zip') ||
-                         getJsonbValue(order.jsonb, 'Postal Code') ||
-                         getJsonbValue(order.jsonb, 'Ship to Postal Code') ||
-                         getJsonbValue(order.jsonb, 'ZIP Code');
-      
+        getJsonbValue(order.jsonb, 'Shipping Zip Code') ||
+        getJsonbValue(order.jsonb, 'Customer Zip Code') ||
+        getJsonbValue(order.jsonb, 'Zip') ||
+        getJsonbValue(order.jsonb, 'Postal Code') ||
+        getJsonbValue(order.jsonb, 'Ship to Postal Code') ||
+        getJsonbValue(order.jsonb, 'ZIP Code');
+
       const deliveryCountry = getJsonbValue(order.jsonb, 'Ship to Country') ||
-                              getJsonbValue(order.jsonb, 'Shipping Country') ||
-                              getJsonbValue(order.jsonb, 'Customer Country') ||
-                              getJsonbValue(order.jsonb, 'Country') ||
-                              'US'; // Default to US if not found
-      
+        getJsonbValue(order.jsonb, 'Shipping Country') ||
+        getJsonbValue(order.jsonb, 'Customer Country') ||
+        getJsonbValue(order.jsonb, 'Country') ||
+        'US'; // Default to US if not found
+
       const deliveryCompany = getJsonbValue(order.jsonb, 'Ship to Name') ||
-                             getJsonbValue(order.jsonb, 'Customer Name') ||
-                             getJsonbValue(order.jsonb, 'Company Name') ||
-                             getJsonbValue(order.jsonb, 'Shipping Name');
-      
+        getJsonbValue(order.jsonb, 'Customer Name') ||
+        getJsonbValue(order.jsonb, 'Company Name') ||
+        getJsonbValue(order.jsonb, 'Shipping Name');
+
       const deliveryPhone = getJsonbValue(order.jsonb, 'Ship to Phone') ||
-                           getJsonbValue(order.jsonb, 'Customer Phone') ||
-                           getJsonbValue(order.jsonb, 'Customer Phone Number') ||
-                           getJsonbValue(order.jsonb, 'Phone') ||
-                           getJsonbValue(order.jsonb, 'Phone Number') ||
-                           getJsonbValue(order.jsonb, 'Shipping Phone');
-      
+        getJsonbValue(order.jsonb, 'Customer Phone') ||
+        getJsonbValue(order.jsonb, 'Customer Phone Number') ||
+        getJsonbValue(order.jsonb, 'Phone') ||
+        getJsonbValue(order.jsonb, 'Phone Number') ||
+        getJsonbValue(order.jsonb, 'Shipping Phone');
+
       const deliveryEmail = getJsonbValue(order.jsonb, 'Ship to Email') ||
-                           getJsonbValue(order.jsonb, 'Customer Email') ||
-                           getJsonbValue(order.jsonb, 'Customer Email Address') ||
-                           getJsonbValue(order.jsonb, 'Email') ||
-                           getJsonbValue(order.jsonb, 'Shipping Email');
+        getJsonbValue(order.jsonb, 'Customer Email') ||
+        getJsonbValue(order.jsonb, 'Customer Email Address') ||
+        getJsonbValue(order.jsonb, 'Email') ||
+        getJsonbValue(order.jsonb, 'Shipping Email');
 
       // Only update if we have at least some address data
       if (deliveryAddress || deliveryCity || deliveryState || deliveryZip) {
@@ -293,8 +294,8 @@ export const XPOBOLForm = ({
       }
 
       // Populate commodity weight
-      const weight = getJsonbValue(order.jsonb, 'Weight') || 
-                    getJsonbValue(order.jsonb, 'Total Weight');
+      const weight = getJsonbValue(order.jsonb, 'Weight') ||
+        getJsonbValue(order.jsonb, 'Total Weight');
       if (weight) {
         const weightNum = parseFloat(weight);
         if (!isNaN(weightNum) && weightNum > 0) {
@@ -320,7 +321,7 @@ export const XPOBOLForm = ({
     if (quoteData) {
       // Extract confirmationNbr from quoteData
       let confirmationNbr: string | undefined;
-      
+
       if ((quoteData as any)?.quote?.confirmationNbr) {
         confirmationNbr = (quoteData as any).quote.confirmationNbr;
       } else if ((quoteData as any)?.data?.data?.rateQuote?.confirmationNbr) {
@@ -328,7 +329,7 @@ export const XPOBOLForm = ({
       } else if ((quoteData as any)?.confirmationNbr) {
         confirmationNbr = (quoteData as any).confirmationNbr;
       }
-      
+
       if (confirmationNbr && confirmationNbr.trim() !== '') {
         setReferences([
           {
@@ -342,7 +343,7 @@ export const XPOBOLForm = ({
 
       // Populate pickup location and commodities from quoteData
       let rateQuote: any = null;
-      
+
       if ((quoteData as any)?.data?.data?.rateQuote) {
         rateQuote = (quoteData as any).data.data.rateQuote;
       } else if ((quoteData as any)?.quote?.shipmentInfo) {
@@ -357,7 +358,7 @@ export const XPOBOLForm = ({
         // Populate shipper/pickup location
         if (shipmentInfo.shipper) {
           const shipper = shipmentInfo.shipper;
-          
+
           if (shipper.address) {
             // Preserve existing phone number when populating from quoteData
             setPickupLocation((prev) => ({
@@ -382,7 +383,7 @@ export const XPOBOLForm = ({
           const firstCommodity = shipmentInfo.commodity[0];
           const baseDescription = ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription;
           const formattedDescription = formatDescriptionWithSubSKUs(baseDescription, subSKUs);
-          
+
           setCommodities(prev => {
             const updated = [...prev];
             if (updated.length > 0) {
@@ -414,18 +415,18 @@ export const XPOBOLForm = ({
     if (subSKUs.length > 0) {
       const baseDescription = ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription;
       const formattedDescription = formatDescriptionWithSubSKUs(baseDescription, subSKUs);
-      
+
       setCommodities(prev => {
         const hasChanges = prev.some(commodity => {
           const currentDesc = commodity.desc || '';
           const baseDesc = ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription;
           // Only update if description is empty, just the base, or starts with base but doesn't include subSKUs
-          const shouldUpdate = 
-            !currentDesc || 
+          const shouldUpdate =
+            !currentDesc ||
             currentDesc === '' ||
             currentDesc === baseDesc ||
             (currentDesc.startsWith(baseDesc) && !currentDesc.includes(subSKUs.join(', ')));
-          
+
           return shouldUpdate;
         });
 
@@ -437,12 +438,12 @@ export const XPOBOLForm = ({
         return prev.map(commodity => {
           const currentDesc = commodity.desc || '';
           const baseDesc = ESTES_RATE_QUOTE_FORM_DEFAULTS.defaultDescription;
-          const shouldUpdate = 
-            !currentDesc || 
+          const shouldUpdate =
+            !currentDesc ||
             currentDesc === '' ||
             currentDesc === baseDesc ||
             (currentDesc.startsWith(baseDesc) && !currentDesc.includes(subSKUs.join(', ')));
-          
+
           return {
             ...commodity,
             desc: shouldUpdate ? formattedDescription : commodity.desc,
@@ -467,7 +468,7 @@ export const XPOBOLForm = ({
 
     try {
       const response = await fetch(`https://api.zippopotam.us/us/${cleanedZip}`);
-      
+
       if (response.ok) {
         const data = await response.json();
         if (data.places && data.places.length > 0) {
@@ -516,12 +517,12 @@ export const XPOBOLForm = ({
   // Only populate when useMyContactInfo is toggled ON, not on every render
   const prevUseMyContactInfoRef = useRef(useMyContactInfo);
   const pickupLocationRef = useRef(pickupLocation);
-  
+
   // Keep ref updated with current pickupLocation
   useEffect(() => {
     pickupLocationRef.current = pickupLocation;
   }, [pickupLocation]);
-  
+
   useEffect(() => {
     // Only auto-populate when useMyContactInfo changes from false to true
     if (useMyContactInfo && !prevUseMyContactInfoRef.current && pickupLocationRef.current.company) {
@@ -548,21 +549,21 @@ export const XPOBOLForm = ({
   // Helper function to format date and time to ISO 8601 with timezone
   const formatDateTimeWithTimezone = (dateStr: string, timeStr: string): string => {
     if (!dateStr || !timeStr) return '';
-    
+
     const date = new Date(dateStr + 'T' + timeStr + ':00');
     const offsetMinutes = date.getTimezoneOffset();
     const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
     const offsetMins = Math.abs(offsetMinutes) % 60;
     const offsetSign = offsetMinutes > 0 ? '-' : '+';
     const offsetStr = `${offsetSign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
-    
+
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     const hour = String(date.getHours()).padStart(2, '0');
     const minute = String(date.getMinutes()).padStart(2, '0');
     const second = String(date.getSeconds()).padStart(2, '0');
-    
+
     return `${year}-${month}-${day}T${hour}:${minute}:${second}${offsetStr}`;
   };
 
@@ -581,7 +582,7 @@ export const XPOBOLForm = ({
         };
       };
     } | undefined = undefined;
-    
+
     if (schedulePickup && pickupDate && pickupReadyTime && dockCloseTime && contactCompanyName && contactName && contactPhone) {
       pickupInfo = {
         pkupDate: formatDateTimeWithTimezone(pickupDate, pickupReadyTime),
@@ -659,12 +660,12 @@ export const XPOBOLForm = ({
         commodityLine: commodities,
         chargeToCd: paymentTerms,
         ...(additionalComments && additionalComments.trim() !== '' && { remarks: additionalComments.trim() }),
-        emergencyContactName: emergencyContactName !== undefined && emergencyContactName !== null 
-          ? emergencyContactName 
+        emergencyContactName: emergencyContactName !== undefined && emergencyContactName !== null
+          ? emergencyContactName
           : '',
         emergencyContactPhone: {
-          phoneNbr: emergencyContactPhone !== undefined && emergencyContactPhone !== null 
-            ? emergencyContactPhone 
+          phoneNbr: emergencyContactPhone !== undefined && emergencyContactPhone !== null
+            ? emergencyContactPhone
             : '',
         },
         // Combine all selected services into a single array of service codes (strings)
@@ -674,7 +675,7 @@ export const XPOBOLForm = ({
             ...selectedDeliveryServices,
             ...selectedPremiumServices,
           ].filter((value, index, self) => self.indexOf(value) === index); // Remove duplicates
-          
+
           // Return as array of strings (service codes)
           // The requestBuilder will transform these into the proper object format
           return allSelectedServices;
@@ -686,8 +687,8 @@ export const XPOBOLForm = ({
         } : {}),
         // Always include declaredValueAmt (default to 0.01 if not provided)
         declaredValueAmt: {
-          amt: totalDeclaredValue && parseFloat(totalDeclaredValue) > 0 
-            ? parseFloat(totalDeclaredValue) 
+          amt: totalDeclaredValue && parseFloat(totalDeclaredValue) > 0
+            ? parseFloat(totalDeclaredValue)
             : 0.01,
         },
         // Always include declaredValueAmtPerLb (default to 0.01 if not provided)
@@ -792,7 +793,7 @@ export const XPOBOLForm = ({
         setLoading(false);
         return;
       }
-      
+
       // Helper function to get today's date in YYYY-MM-DD format
       const getTodayDate = () => {
         const today = new Date();
@@ -801,7 +802,7 @@ export const XPOBOLForm = ({
         const day = String(today.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
       };
-      
+
       // Validate that pickup date is not in the past
       const today = getTodayDate();
       if (pickupDate < today) {
@@ -809,28 +810,50 @@ export const XPOBOLForm = ({
         setLoading(false);
         return;
       }
-      
+
       // Validate that ready time is before dock close time
       const [readyHours, readyMinutes] = pickupReadyTime.split(':').map(Number);
       const [closeHours, closeMinutes] = dockCloseTime.split(':').map(Number);
       const readyTimeMinutes = readyHours * 60 + readyMinutes;
       const closeTimeMinutes = closeHours * 60 + closeMinutes;
-      
+
       if (readyTimeMinutes >= closeTimeMinutes) {
         setError(new Error('Pickup Ready Time must be before Dock Close Time'));
         setLoading(false);
         return;
       }
-      
+
       if (!contactCompanyName || !contactName || !contactPhone) {
         setError(new Error('Please fill in all required Pickup Contact fields (Company Name, Contact Name, Phone Number)'));
         setLoading(false);
         return;
       }
-      
+
       // Validate phone number is not empty
       if (!contactPhone || contactPhone.trim() === '') {
         setError(new Error('Pickup Contact Phone Number is required'));
+        setLoading(false);
+        return;
+      }
+
+      // Validate Pickup Location (Shipper) fields
+      if (!pickupLocation.company || !pickupLocation.streetAddress || !pickupLocation.city || !pickupLocation.state || !pickupLocation.postalCode) {
+        setError(new Error('Please fill in all required Pickup Location fields (Company, Address, City, State, Zip) for Pickup Request'));
+        setLoading(false);
+        return;
+      }
+
+      // Validate Delivery Location Zip (for destZip6)
+      if (!deliveryLocation.postalCode) {
+        setError(new Error('Delivery Location Zip Code is required for Pickup Request'));
+        setLoading(false);
+        return;
+      }
+
+      // Validate Commodity Weight
+      const invalidWeight = commodities.some(c => !c.grossWeight?.weight || c.grossWeight.weight <= 0);
+      if (invalidWeight) {
+        setError(new Error('All commodities must have a valid weight greater than 0 for Pickup Request'));
         setLoading(false);
         return;
       }
@@ -840,7 +863,7 @@ export const XPOBOLForm = ({
       const requestBody = buildRequestBody();
       setPayloadPreview(requestBody as unknown as Record<string, unknown>); // Set payload for preview
       const payload = buildXPOBillOfLadingRequestBody(requestBody);
-      
+
       const finalPayload = {
         shippingCompany: carrier,
         ...payload,
@@ -863,7 +886,7 @@ export const XPOBOLForm = ({
       if (!res.ok) {
         const errorText = await res.text();
         let errorMessage = `BOL creation failed: ${res.status} ${res.statusText}`;
-        
+
         try {
           if (errorText) {
             const errorData = JSON.parse(errorText);
@@ -872,19 +895,19 @@ export const XPOBOLForm = ({
         } catch {
           errorMessage = errorText || errorMessage;
         }
-        
+
         throw new Error(errorMessage);
       }
 
       const data = await res.json();
       setResponseJson(data);
-      
+
       // Store pickup request payload for later use (to trigger email modal)
       let pickupRequestPayload: XPOPickupRequestFields | undefined = undefined;
       let finalPickupPayload: Record<string, unknown> | undefined = undefined;
       let pickupRequestSuccess = false;
       let pickupResponseData: Record<string, unknown> | undefined = undefined;
-      
+
       // If schedulePickup is true, also create a pickup request
       if (schedulePickup && pickupDate && pickupReadyTime && dockCloseTime && contactCompanyName && contactName && contactPhone) {
         try {
@@ -966,6 +989,9 @@ export const XPOBOLForm = ({
             console.log('XPO Pickup Request:', JSON.stringify(finalPickupPayload, null, 2));
           }
 
+          // Log the request payload for debugging
+          console.log('Sending pickup request with payload:', JSON.stringify(finalPickupPayload, null, 2));
+
           const pickupRes = await fetch(buildApiUrl('/Logistics/create-pickup-request'), {
             method: 'POST',
             headers: {
@@ -978,33 +1004,45 @@ export const XPOBOLForm = ({
           if (!pickupRes.ok) {
             const pickupErrorText = await pickupRes.text();
             let pickupErrorMessage = `Pickup request creation failed: ${pickupRes.status} ${pickupRes.statusText}`;
-            
+            let errorDetails = pickupErrorText;
+
             try {
               if (pickupErrorText && pickupErrorText.trim()) {
                 if (pickupErrorText.trim().startsWith('{') || pickupErrorText.trim().startsWith('[')) {
                   const pickupErrorData = JSON.parse(pickupErrorText);
+                  errorDetails = JSON.stringify(pickupErrorData, null, 2);
                   pickupErrorMessage = pickupErrorData.message || pickupErrorData.error?.message || pickupErrorMessage;
                 } else {
+                  errorDetails = pickupErrorText;
                   pickupErrorMessage = pickupErrorText.substring(0, 200);
                 }
               }
-            } catch {
-              // Use default error message
+            } catch (e) {
+              console.error('Error parsing error response:', e);
+              errorDetails = pickupErrorText || 'No additional error details available';
             }
 
-            // Log the error but don't fail the entire flow - BOL was created successfully
-            console.error('Pickup Request Creation Error:', pickupErrorMessage);
-            // You might want to show a warning to the user here
+            // Log detailed error information
+            console.error('Pickup Request Creation Error:', {
+              status: pickupRes.status,
+              statusText: pickupRes.statusText,
+              message: pickupErrorMessage,
+              details: errorDetails,
+              requestPayload: finalPickupPayload
+            });
+
+            // Show a more detailed error to the user
+            setError(new Error(`Failed to create pickup request: ${pickupErrorMessage}`));
           } else {
             const pickupData = await pickupRes.json();
             if (process.env.NODE_ENV === 'development') {
               console.log('Pickup Request Created:', pickupData);
             }
-            
+
             // Store pickup response for later use
             pickupResponseData = pickupData;
             pickupRequestSuccess = true;
-            
+
             // Dispatch pickup data to cache - this will trigger final DB save in AutomateLogisticModal
             dispatchPickupData(order.id, {
               pickupRequestPayload: finalPickupPayload,
@@ -1020,20 +1058,21 @@ export const XPOBOLForm = ({
           // You might want to show a warning to the user here
         }
       }
-      
+
       // After successful BOL creation, fetch PDF using the PDF URI from response
+      let generatedPdfFile: File | null = null;
       try {
         // Extract PDF URI from BOL response - look for link with rel="self" and uri containing "/pdf"
         const bolInfo = (data as Record<string, unknown>)?.data as Record<string, unknown> | undefined;
         const dataBolInfo = bolInfo?.data as Record<string, unknown> | undefined;
         const finalBolInfo = dataBolInfo?.bolInfo || bolInfo?.bolInfo;
         const links = ((finalBolInfo as Record<string, unknown>)?.link || bolInfo?.link || []) as Array<Record<string, unknown>>;
-        
+
         // Find the link with rel="self" and uri containing "/pdf"
-        const pdfLinkObj = links.find((link) => 
+        const pdfLinkObj = links.find((link) =>
           (link.uri as string)?.includes('/pdf') && ((link.rel as string) === 'self' || !link.rel)
         );
-        
+
         // If not found with rel="self", try any link with "/pdf"
         const pdfUri = (pdfLinkObj?.uri as string) || (links.find((link) => (link.uri as string)?.includes('/pdf'))?.uri as string);
 
@@ -1055,14 +1094,21 @@ export const XPOBOLForm = ({
           });
 
           const pdfData = await pdfRes.json();
-          
+
           // Convert base64 PDF to File
           // XPO response has contentType field
           if (pdfData.code === '200' && pdfData.data?.bolpdf?.contentType) {
             try {
               const base64Content = pdfData.data.bolpdf.contentType;
-              const fileName = pdfData.data.bolpdf.fileName || 'BillOfLading.pdf';
-              
+              const orderJsonb = order.jsonb as Record<string, unknown>;
+              const customerName = getJsonbValue(orderJsonb, 'Customer Name');
+              const orderNumber = getJsonbValue(orderJsonb, 'Order Number') ||
+                getJsonbValue(orderJsonb, 'PO#') ||
+                getJsonbValue(orderJsonb, 'PO Number') || '';
+              const marketplace = order.orderOnMarketPlace || '';
+              const formattedFileName = getFormattedBOLFilename(customerName, marketplace, orderNumber);
+              const fileName = formattedFileName ? `${formattedFileName}.pdf` : (pdfData.data.bolpdf.fileName || 'BillOfLading.pdf');
+
               // Convert base64 to binary
               const binaryString = atob(base64Content);
               const bytes = new Uint8Array(binaryString.length);
@@ -1070,14 +1116,15 @@ export const XPOBOLForm = ({
                 bytes[i] = binaryString.charCodeAt(i);
               }
               const blob = new Blob([bytes], { type: 'application/pdf' });
-              
+
               // Create PDF URL for viewing
               const pdfUrl = URL.createObjectURL(blob);
               setBolPdfUrl(pdfUrl);
-              
+
               // Create File object
               const pdfFileObj = new File([blob], fileName, { type: 'application/pdf' });
               setPdfFile(pdfFileObj);
+              generatedPdfFile = pdfFileObj;
             } catch (convertError) {
               console.error('Error converting PDF base64 to File:', convertError);
             }
@@ -1097,30 +1144,32 @@ export const XPOBOLForm = ({
         const sku = getJsonbValue(order.jsonb, 'SKU') || '';
         const marketplace = order.orderOnMarketPlace || '';
         const finalShippingType = shippingType || 'LTL'; // Use provided shipping type or default to LTL
-        
+
         if (sku && marketplace) {
           // Prepare BOL PDF file if available
           const bolFiles: File[] = [];
-          if (pdfFile) {
+          if (generatedPdfFile) {
+            bolFiles.push(generatedPdfFile);
+          } else if (pdfFile) {
             bolFiles.push(pdfFile);
           }
-          
-          // Save BOL files directly to cache immediately so they're available for email attachment
+
+          // First, update the cache with BOL files
           if (bolFiles.length > 0) {
-            updateCachedOrder(order.id, { xpoBolFiles: bolFiles });
-            // Also store in state to pass directly to email modal (more reliable)
+            // Store in state to pass directly to email modal
             setBolFilesForEmail(bolFiles);
-            console.log('✅ BOL files saved to cache and state for email attachment:', bolFiles.map(f => f.name));
+            console.log('✅ BOL files stored for email attachment:', bolFiles.map(f => f.name));
           }
-          
-          // Dispatch event for cache update (for LTL orders)
-          dispatchBOLData(order.id, 'xpo', data, bolFiles.length > 0 ? bolFiles : undefined);
-          
+
+          // Dispatch event for cache update (for LTL orders) - don't pass files here to avoid duplication
+          dispatchBOLData(order.id, 'xpo', data, undefined);
+
+          // Remove the updateCachedOrder call since dispatchBOLData will handle the cache update
           // Get cached rate quotes if available
           const cachedOrder = getCachedOrder(order.id);
           let rateQuotesRequestJsonb: Record<string, unknown> | undefined = undefined;
           let rateQuotesResponseJsonb: Record<string, unknown> | undefined = undefined;
-          
+
           // Include rate quotes from cache if available
           if (cachedOrder) {
             if (cachedOrder.xpoRateQuoteRequest && cachedOrder.xpoRateQuoteResponse) {
@@ -1131,14 +1180,14 @@ export const XPOBOLForm = ({
               rateQuotesResponseJsonb = { estes: cachedOrder.estesRateQuoteResponse };
             }
           }
-          
+
           // Prepare bolResponseJsonb - combine XPO and Estes if both exist
           const bolResponseJsonb: Record<string, unknown> = {};
           bolResponseJsonb.xpo = data; // Current XPO BOL
           if (cachedOrder?.estesBolResponse) {
             bolResponseJsonb.estes = cachedOrder.estesBolResponse;
           }
-          
+
           // Always create new order - don't check for duplicates by SKU
           // Updates should only be done using ID (not SKU)
           console.log('📤 Creating order with files:', {
@@ -1147,7 +1196,8 @@ export const XPOBOLForm = ({
             filesCount: bolFiles.length,
             files: bolFiles.map(f => ({ name: f.name, size: f.size, type: f.type })),
           });
-          
+
+          // Create the order with BOL files
           const createdOrder = await createShippedOrder({
             sku,
             orderOnMarketPlace: marketplace,
@@ -1157,19 +1207,19 @@ export const XPOBOLForm = ({
             rateQuotesResponseJsonb: rateQuotesResponseJsonb,
             shippingType: finalShippingType,
             subSKUs: subSKUs.length > 0 ? subSKUs : undefined,
-            files: bolFiles.length > 0 ? bolFiles : undefined,
+            files: bolFiles, // Include the BOL files here
           });
-          
+
           console.log('✅ Order created:', {
             id: createdOrder?.id,
             uploads: createdOrder?.uploads,
             uploadsLength: createdOrder?.uploads?.length,
           });
-          
+
           // Extract ID from response
           const logisticsOrderId = createdOrder?.id;
           console.log('✅ Created new order with BOL response, ID:', logisticsOrderId);
-          
+
           // Store logisticsOrderId in cache for pickup update (always use ID, not SKU)
           if (logisticsOrderId) {
             updateCachedOrder(order.id, { logisticsShippedOrderId: logisticsOrderId });
@@ -1180,14 +1230,14 @@ export const XPOBOLForm = ({
           // This happens even if pickup request creation failed, because BOL is created and pickup was attempted
           if (schedulePickup) {
             const cachedOrder = getCachedOrder(order.id);
-            
+
             // Use actual pickup response if available, otherwise create a placeholder
             const pickupResponse = pickupResponseData || cachedOrder?.pickupResponseJsonb || {
               carrier: 'xpo',
               pickupRequested: true,
               pickupScheduled: pickupRequestSuccess,
             };
-            
+
             // Dispatch pickup data to trigger email modal
             dispatchPickupData(order.id, {
               carrier: 'xpo',
@@ -1207,17 +1257,17 @@ export const XPOBOLForm = ({
       // Show email modal regardless of pickup request visibility, with a delay to ensure it appears on top
       // Only show once - prevent duplicate emails
       const finalShippingType = shippingType || 'LTL'; // Use provided shipping type or default to LTL
-      
+
       if ((finalShippingType === 'LTL' || finalShippingType === 'Parcel') && !showEmailCompose) {
         const orderJsonb = order.jsonb as Record<string, unknown>;
         const customerName = getJsonbValue(orderJsonb, 'Customer Name');
-        const orderNumber = getJsonbValue(orderJsonb, 'Order Number') || 
-                           getJsonbValue(orderJsonb, 'PO#') || 
-                           getJsonbValue(orderJsonb, 'PO Number') || '';
-        
+        const orderNumber = getJsonbValue(orderJsonb, 'Order Number') ||
+          getJsonbValue(orderJsonb, 'PO#') ||
+          getJsonbValue(orderJsonb, 'PO Number') || '';
+
         let emailSubject = '';
         let emailBody = '';
-        
+
         if (finalShippingType === 'LTL') {
           emailSubject = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.subject(customerName, orderNumber);
           emailBody = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.body(orderJsonb, subSKUs);
@@ -1225,7 +1275,7 @@ export const XPOBOLForm = ({
           emailSubject = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.subject(customerName, orderNumber);
           emailBody = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.body(orderJsonb, subSKUs);
         }
-        
+
         console.log('📧 Preparing to show email compose modal:', {
           shippingType: finalShippingType,
           customerName,
@@ -1233,23 +1283,24 @@ export const XPOBOLForm = ({
           hasSubject: !!emailSubject,
           hasBody: !!emailBody,
         });
-        
+
         // Open email compose modal after a delay (longer than pickup request to ensure it appears on top)
         // The email modal has z-index 9999, so it will appear above the pickup request form
-        setTimeout(() => {
-          if (!showEmailCompose) {
-            console.log('📧 Opening email compose modal');
-            setShowEmailCompose(true);
-          } else {
-            console.log('⚠️ Email modal already open, skipping duplicate');
-          }
-        }, 3000); // 3 second delay to ensure pickup request form is visible first, then email modal appears on top
-      } else {
-        if (showEmailCompose) {
-          console.log('⚠️ Email modal already shown, skipping');
+        if (!hasShownEmailCompose.current) {
+          setTimeout(() => {
+            if (!showEmailCompose) {
+              console.log('📧 Opening email compose modal');
+              hasShownEmailCompose.current = true;
+              setShowEmailCompose(true);
+            } else {
+              console.log('⚠️ Email modal already open, skipping duplicate');
+            }
+          }, 3000); // 3 second delay to ensure pickup request form is visible first, then email modal appears on top
         } else {
-          console.log('⚠️ Email modal not shown - shippingType is not LTL or Parcel:', finalShippingType);
+          console.log('⚠️ Email modal already shown in this session, not showing again');
         }
+      } else {
+        console.log('⚠️ Email modal not shown - shippingType is not LTL or Parcel:', finalShippingType);
       }
 
       if (onSuccess) {
@@ -1342,10 +1393,10 @@ export const XPOBOLForm = ({
                   setPickupLocation((prev) => {
                     // If phone is explicitly in updatedData (even if empty), use it
                     // Otherwise, preserve the previous phone value
-                    const phoneValue = 'phone' in updatedData 
-                      ? (updatedData.phone || '') 
+                    const phoneValue = 'phone' in updatedData
+                      ? (updatedData.phone || '')
                       : (prev.phone || '');
-                    
+
                     return {
                       ...prev,
                       ...updatedData,
@@ -1395,10 +1446,10 @@ export const XPOBOLForm = ({
                   setDeliveryLocation((prev) => {
                     // If phone is explicitly in updatedData (even if empty), use it
                     // Otherwise, preserve the previous phone value
-                    const phoneValue = 'phone' in updatedData 
-                      ? (updatedData.phone || '') 
+                    const phoneValue = 'phone' in updatedData
+                      ? (updatedData.phone || '')
                       : (prev.phone || '');
-                    
+
                     return {
                       ...prev,
                       ...updatedData,
@@ -1478,7 +1529,7 @@ export const XPOBOLForm = ({
                         current = current[path[i]] as Record<string, unknown>;
                       }
                     }
-                    
+
                     // Weight field: Always convert to integer (whole numbers only) - only in Automation
                     let finalValue = value;
                     if (path.length === 2 && path[0] === 'grossWeight' && path[1] === 'weight') {
@@ -1499,7 +1550,7 @@ export const XPOBOLForm = ({
                         }
                       }
                     }
-                    
+
                     current[path[path.length - 1]] = finalValue;
                     updated[index] = commodity;
                     setCommodities(updated);
@@ -1873,7 +1924,7 @@ export const XPOBOLForm = ({
                   e.preventDefault();
                   setSaveAsTemplate(true);
                   const syntheticEvent = {
-                    preventDefault: () => {},
+                    preventDefault: () => { },
                   } as React.FormEvent;
                   await handleSubmit(syntheticEvent);
                 }}
@@ -1982,7 +2033,7 @@ export const XPOBOLForm = ({
               />
             </div>
           </div>
-          
+
           {/* JSON Response Preview Section */}
           {responseJson && (
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-6 space-y-4">
@@ -2016,14 +2067,14 @@ export const XPOBOLForm = ({
       {showEmailCompose && (() => {
         const orderJsonb = order.jsonb as Record<string, unknown>;
         const customerName = getJsonbValue(orderJsonb, 'Customer Name');
-        const orderNumber = getJsonbValue(orderJsonb, 'Order Number') || 
-                           getJsonbValue(orderJsonb, 'PO#') || 
-                           getJsonbValue(orderJsonb, 'PO Number') || '';
-        
+        const orderNumber = getJsonbValue(orderJsonb, 'Order Number') ||
+          getJsonbValue(orderJsonb, 'PO#') ||
+          getJsonbValue(orderJsonb, 'PO Number') || '';
+
         const finalShippingType = shippingType || 'LTL';
         let emailSubject = '';
         let emailBody = '';
-        
+
         if (finalShippingType === 'LTL') {
           emailSubject = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.subject(customerName, orderNumber);
           emailBody = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.body(orderJsonb, subSKUs);
@@ -2031,14 +2082,14 @@ export const XPOBOLForm = ({
           emailSubject = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.subject(customerName, orderNumber);
           emailBody = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.body(orderJsonb, subSKUs);
         }
-        
+
         console.log('📧 Rendering email compose modal:', {
           isOpen: showEmailCompose,
           shippingType: finalShippingType,
           hasSubject: !!emailSubject,
           hasBody: !!emailBody,
         });
-        
+
         return (
           <EmailComposeModal
             isOpen={showEmailCompose}

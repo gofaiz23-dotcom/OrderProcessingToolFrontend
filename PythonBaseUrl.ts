@@ -1,4 +1,3 @@
-// const DEFAULT_PYTHON_BASE_URL = 'http://192.168.0.23:8000';
 const DEFAULT_PYTHON_BASE_URL = 'http://localhost:8000';
 // const DEFAULT_PYTHON_BASE_URL = process.env.NEXT_PUBLIC_PYTHON_BASE_URL || 'http://localhost:8000' || 'http://192.168.0.23:8000';
 

@@ -20,12 +20,12 @@ import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
 const helperText = `Up to ${MAX_RECIPIENTS} total recipients (To + CC + BCC). Attachments limited by 25MB total size.`;
 
 // Attachment Preview Component
-const AttachmentPreview = ({ 
-  file, 
-  onRemove, 
-  formatFileSize 
-}: { 
-  file: File; 
+const AttachmentPreview = ({
+  file,
+  onRemove,
+  formatFileSize
+}: {
+  file: File;
   onRemove: () => void;
   formatFileSize: (bytes: number) => string;
 }) => {
@@ -62,7 +62,7 @@ const AttachmentPreview = ({
           </p>
         </div>
       )}
-      
+
       <div className="p-3 border-t border-slate-100">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
@@ -106,20 +106,20 @@ const ComposeEmailForm = () => {
   const emailInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const replyDataProcessedRef = useRef(false);
-  
+
   // CC and BCC states
   const [ccInput, setCcInput] = useState('');
   const [bccInput, setBccInput] = useState('');
   const [showCc, setShowCc] = useState(false);
   const [showBcc, setShowBcc] = useState(false);
-  
+
   // Domain suggestions states
   const [showDomainSuggestions, setShowDomainSuggestions] = useState(false);
   const [domainSuggestions, setDomainSuggestions] = useState<string[]>([]);
   const [selectedDomainIndex, setSelectedDomainIndex] = useState(-1);
   const [domainInputPrefix, setDomainInputPrefix] = useState('');
   const domainSuggestionsRef = useRef<HTMLDivElement>(null);
-  
+
   // Common email domains
   const commonDomains = [
     'gmail.com',
@@ -183,17 +183,17 @@ const ComposeEmailForm = () => {
     const domainRegex = /@[a-zA-Z0-9][a-zA-Z0-9-]*[a-zA-Z0-9]*\.[a-zA-Z]{2,}$/;
     return domainRegex.test(str.trim());
   };
-  
+
   // Get domain suggestions based on input after @
   const getDomainSuggestions = (input: string): { prefix: string; suggestions: string[] } => {
     const atIndex = input.lastIndexOf('@');
     if (atIndex === -1 || atIndex === input.length - 1) {
       return { prefix: '', suggestions: [] };
     }
-    
+
     const prefix = input.substring(0, atIndex + 1); // Include "@"
     const domainPart = input.substring(atIndex + 1).toLowerCase();
-    
+
     // Don't show suggestions if there's already a dot and it looks like a complete domain
     if (domainPart.includes('.') && domainPart.split('.').length > 1) {
       const parts = domainPart.split('.');
@@ -203,18 +203,18 @@ const ComposeEmailForm = () => {
         return { prefix: '', suggestions: [] };
       }
     }
-    
-    const filtered = commonDomains.filter(domain => 
+
+    const filtered = commonDomains.filter(domain =>
       domain.startsWith(domainPart)
     );
-    
+
     return { prefix, suggestions: filtered };
   };
-  
+
   // Handle domain suggestion selection
   const selectDomainSuggestion = (prefix: string, domain: string, field: 'to' | 'cc' | 'bcc') => {
     const completeEmail = prefix + domain;
-    
+
     if (field === 'to') {
       setEmailInput(completeEmail);
       emailInputRef.current?.focus();
@@ -229,7 +229,7 @@ const ComposeEmailForm = () => {
     } else if (field === 'bcc') {
       setBccInput(completeEmail);
     }
-    
+
     setShowDomainSuggestions(false);
     setDomainSuggestions([]);
     setSelectedDomainIndex(-1);
@@ -251,12 +251,12 @@ const ComposeEmailForm = () => {
     }
 
     const currentList = form[field];
-    
+
     // Check if email already exists in any recipient field
-    const existsInAnyField = form.to.includes(trimmedEmail) || 
-                            form.cc.includes(trimmedEmail) || 
-                            form.bcc.includes(trimmedEmail);
-    
+    const existsInAnyField = form.to.includes(trimmedEmail) ||
+      form.cc.includes(trimmedEmail) ||
+      form.bcc.includes(trimmedEmail);
+
     if (existsInAnyField) {
       setStatus({
         type: 'error',
@@ -337,11 +337,11 @@ const ComposeEmailForm = () => {
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (showDomainSuggestions && domainSuggestions.length > 0) {
-        setSelectedDomainIndex(prev => 
+        setSelectedDomainIndex(prev =>
           prev < domainSuggestions.length - 1 ? prev + 1 : 0
         );
       } else if (showSuggestions && emailSuggestions.length > 0) {
-        setSelectedSuggestionIndex(prev => 
+        setSelectedSuggestionIndex(prev =>
           prev < emailSuggestions.length - 1 ? prev + 1 : prev
         );
       }
@@ -458,7 +458,7 @@ const ComposeEmailForm = () => {
   const handleEmailInputPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
     e.preventDefault();
     const pastedText = e.clipboardData.getData('text');
-    
+
     // Split by comma, semicolon, or newline
     const emails = pastedText
       .split(/[,;\n]/)
@@ -499,7 +499,7 @@ const ComposeEmailForm = () => {
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = html;
       const plainText = tempDiv.textContent || tempDiv.innerText || '';
-      
+
       setForm((prev) => ({
         ...prev,
         html: html,
@@ -530,25 +530,25 @@ const ComposeEmailForm = () => {
   // Handle URL search params for Reply and Forward
   useEffect(() => {
     const action = searchParams.get('action');
-    
+
     // Only process reply/forward data once per action change
     if (!action || replyDataProcessedRef.current) {
       return;
     }
-    
+
     const to = searchParams.get('to');
     const subject = searchParams.get('subject');
-    
+
     // Get body from sessionStorage (stored to avoid URL length issues)
     const body = sessionStorage.getItem('compose_body');
-    
+
     // Get reply data from sessionStorage
     const replyDataStr = sessionStorage.getItem('compose_reply_data');
 
     if (action === 'reply' || action === 'forward') {
       // Mark as processed
       replyDataProcessedRef.current = true;
-      
+
       // Pre-fill form with reply/forward data
       const newForm: ComposeFormState = {
         ...defaultComposeState,
@@ -560,16 +560,16 @@ const ComposeEmailForm = () => {
         if (replyDataStr) {
           try {
             const replyData = JSON.parse(replyDataStr);
-            
+
             // Debug: Log the reply data being read
             console.log('Reply data being read from sessionStorage:', replyData);
-            
+
             // Ensure arrays are valid
             newForm.to = Array.isArray(replyData.to) && replyData.to.length > 0 ? replyData.to : [];
             newForm.cc = Array.isArray(replyData.cc) ? replyData.cc : [];
             newForm.bcc = Array.isArray(replyData.bcc) ? replyData.bcc : [];
             newForm.subject = replyData.subject || subject || '';
-            
+
             // Validate that we have at least a "to" email
             if (newForm.to.length === 0) {
               console.error('No recipient email found in reply data');
@@ -578,12 +578,12 @@ const ComposeEmailForm = () => {
                 newForm.to = [to];
               }
             }
-            
+
             // Validate subject
             if (!newForm.subject) {
               console.error('No subject found in reply data');
             }
-            
+
             // Show CC/BCC fields if they have values
             if (newForm.cc.length > 0) {
               setShowCc(true);
@@ -591,7 +591,7 @@ const ComposeEmailForm = () => {
             if (newForm.bcc.length > 0) {
               setShowBcc(true);
             }
-            
+
             // Clear sessionStorage after reading
             sessionStorage.removeItem('compose_reply_data');
           } catch (e) {
@@ -607,7 +607,7 @@ const ComposeEmailForm = () => {
           newForm.to = [to];
           newForm.subject = subject || '';
         }
-        
+
         // For reply, ensure body is always empty (user types fresh reply)
         newForm.html = '';
         newForm.text = '';
@@ -619,22 +619,22 @@ const ComposeEmailForm = () => {
           const tempDiv = document.createElement('div');
           tempDiv.innerHTML = body;
           newForm.text = tempDiv.textContent || tempDiv.innerText || '';
-          
+
           // Clear sessionStorage after reading
           sessionStorage.removeItem('compose_body');
         }
-        
+
         // Load and convert attachments from sessionStorage
         const attachmentsDataStr = sessionStorage.getItem('compose_forward_attachments');
         if (attachmentsDataStr) {
           try {
             const attachmentsData = JSON.parse(attachmentsDataStr);
-            
+
             // Helper function to convert base64 to File object
             const base64ToFile = (base64: string, filename: string, mimeType: string): File => {
               // Normalize base64 (handle URL-safe base64)
               const normalizedBase64 = base64.replace(/-/g, '+').replace(/_/g, '/');
-              
+
               // Convert base64 to binary
               const byteCharacters = atob(normalizedBase64);
               const byteNumbers = new Array(byteCharacters.length);
@@ -643,10 +643,10 @@ const ComposeEmailForm = () => {
               }
               const byteArray = new Uint8Array(byteNumbers);
               const blob = new Blob([byteArray], { type: mimeType });
-              
+
               return new File([blob], filename, { type: mimeType });
             };
-            
+
             // Convert all attachments to File objects
             const attachmentFiles: File[] = [];
             for (const att of attachmentsData) {
@@ -659,10 +659,10 @@ const ComposeEmailForm = () => {
                 }
               }
             }
-            
+
             // Add attachments to form (no count limit, only size limit)
             newForm.attachments = attachmentFiles;
-            
+
             // Clear sessionStorage after reading
             sessionStorage.removeItem('compose_forward_attachments');
           } catch (e) {
@@ -674,7 +674,7 @@ const ComposeEmailForm = () => {
 
       // Update form state
       setForm(newForm);
-      
+
       // Update editor if it exists
       if (editor) {
         if (action === 'forward' && body) {
@@ -686,7 +686,7 @@ const ComposeEmailForm = () => {
       }
     }
   }, [searchParams, editor]);
-  
+
   // Reset the processed flag when action changes
   useEffect(() => {
     const action = searchParams.get('action');
@@ -734,10 +734,10 @@ const ComposeEmailForm = () => {
 
   const handleAddLink = () => {
     // Get current selected text or use empty string
-    const selectedText = editor?.state.selection.empty 
-      ? '' 
+    const selectedText = editor?.state.selection.empty
+      ? ''
       : editor?.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to);
-    
+
     // If there's a link already, get its URL
     if (editor?.isActive('link')) {
       const attrs = editor.getAttributes('link');
@@ -745,7 +745,7 @@ const ComposeEmailForm = () => {
     } else {
       setLinkUrl('');
     }
-    
+
     setShowLinkDialog(true);
   };
 
@@ -756,7 +756,7 @@ const ComposeEmailForm = () => {
       if (!url.match(/^https?:\/\//i)) {
         url = 'https://' + url;
       }
-      
+
       editor.chain().focus().setLink({ href: url }).run();
       setShowLinkDialog(false);
       setLinkUrl('');
@@ -785,7 +785,7 @@ const ComposeEmailForm = () => {
           <label className="mb-2 block text-xs sm:text-sm font-medium text-slate-900">
             To
           </label>
-          
+
           <div className="w-full rounded-md border border-slate-300 bg-white overflow-hidden focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-200">
             {/* To Field */}
             <div className="px-2 sm:px-3 py-2 text-xs sm:text-sm text-slate-900 min-h-[42px] flex flex-wrap gap-2 items-center border-b border-slate-200">
@@ -869,70 +869,70 @@ const ComposeEmailForm = () => {
                   )}
                 </div>
                 <div className="flex-1 flex flex-wrap gap-2 items-center">
-                {form.cc.map((email, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-700 px-2.5 py-1 text-xs font-medium border border-slate-200"
-                  >
-                    <span>{email}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeEmail('cc', index)}
-                      className="hover:bg-slate-200 rounded-full p-0.5 transition-colors"
-                      aria-label={`Remove ${email}`}
+                  {form.cc.map((email, index) => (
+                    <span
+                      key={index}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 text-slate-700 px-2.5 py-1 text-xs font-medium border border-slate-200"
                     >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-                <input
-                  type="text"
-                  placeholder={form.cc.length === 0 ? "cc@example.com" : ""}
-                  className="flex-1 min-w-[200px] outline-none bg-transparent placeholder:text-slate-400"
-                  value={ccInput}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setCcInput(value);
-                    if (value.includes(',')) {
-                      const parts = value.split(',');
-                      const emailToAdd = parts[0].trim();
-                      if (emailToAdd) {
-                        addCc(emailToAdd);
-                        setCcInput(parts.slice(1).join(',').trim());
-                      } else {
-                        setCcInput(parts.slice(1).join(',').trim());
+                      <span>{email}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeEmail('cc', index)}
+                        className="hover:bg-slate-200 rounded-full p-0.5 transition-colors"
+                        aria-label={`Remove ${email}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    type="text"
+                    placeholder={form.cc.length === 0 ? "cc@example.com" : ""}
+                    className="flex-1 min-w-[200px] outline-none bg-transparent placeholder:text-slate-400"
+                    value={ccInput}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setCcInput(value);
+                      if (value.includes(',')) {
+                        const parts = value.split(',');
+                        const emailToAdd = parts[0].trim();
+                        if (emailToAdd) {
+                          addCc(emailToAdd);
+                          setCcInput(parts.slice(1).join(',').trim());
+                        } else {
+                          setCcInput(parts.slice(1).join(',').trim());
+                        }
+                      } else if (value.endsWith(' ') && endsWithDomain(value.slice(0, -1))) {
+                        addCc(value.slice(0, -1).trim());
                       }
-                    } else if (value.endsWith(' ') && endsWithDomain(value.slice(0, -1))) {
-                      addCc(value.slice(0, -1).trim());
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (ccInput.trim()) {
+                          addCc(ccInput);
+                        }
+                      } else if (e.key === 'Backspace' && !ccInput && form.cc.length > 0) {
+                        e.preventDefault();
+                        const lastEmail = form.cc[form.cc.length - 1];
+                        setCcInput(lastEmail);
+                        removeEmail('cc', form.cc.length - 1);
+                      }
+                    }}
+                    onPaste={(e) => {
                       e.preventDefault();
-                      if (ccInput.trim()) {
-                        addCc(ccInput);
-                      }
-                    } else if (e.key === 'Backspace' && !ccInput && form.cc.length > 0) {
-                      e.preventDefault();
-                      const lastEmail = form.cc[form.cc.length - 1];
-                      setCcInput(lastEmail);
-                      removeEmail('cc', form.cc.length - 1);
-                    }
-                  }}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    const pastedText = e.clipboardData.getData('text');
-                    const emails = pastedText.split(/[,;\n]/).map(email => email.trim()).filter(email => email.length > 0);
-                    emails.forEach(email => {
-                      const totalRecipients = form.to.length + form.cc.length + form.bcc.length;
-                      if (isValidEmail(email) && !form.cc.includes(email) && !form.to.includes(email) && !form.bcc.includes(email) && totalRecipients < MAX_RECIPIENTS) {
-                        addEmailToField('cc', email);
-                      }
-                    });
-                    setCcInput('');
-                  }}
-                />
-              </div>
+                      const pastedText = e.clipboardData.getData('text');
+                      const emails = pastedText.split(/[,;\n]/).map(email => email.trim()).filter(email => email.length > 0);
+                      emails.forEach(email => {
+                        const totalRecipients = form.to.length + form.cc.length + form.bcc.length;
+                        if (isValidEmail(email) && !form.cc.includes(email) && !form.to.includes(email) && !form.bcc.includes(email) && totalRecipients < MAX_RECIPIENTS) {
+                          addEmailToField('cc', email);
+                        }
+                      });
+                      setCcInput('');
+                    }}
+                  />
+                </div>
               </div>
             )}
 
@@ -958,71 +958,71 @@ const ComposeEmailForm = () => {
                     </button>
                   )}
                 </div>
-              <div className="flex-1 flex flex-wrap gap-2 items-center min-w-0">
-                {form.bcc.map((email, index) => (
-                  <span
-                    key={index}
-                    className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-slate-100 text-slate-700 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-medium border border-slate-200"
-                  >
-                    <span className="truncate max-w-[120px] sm:max-w-none">{email}</span>
-                    <button
-                      type="button"
-                      onClick={() => removeEmail('bcc', index)}
-                      className="hover:bg-slate-200 rounded-full p-0.5 transition-colors flex-shrink-0"
-                      aria-label={`Remove ${email}`}
+                <div className="flex-1 flex flex-wrap gap-2 items-center min-w-0">
+                  {form.bcc.map((email, index) => (
+                    <span
+                      key={index}
+                      className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-slate-100 text-slate-700 px-2 sm:px-2.5 py-1 text-[10px] sm:text-xs font-medium border border-slate-200"
                     >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-                <input
-                  type="text"
-                  placeholder={form.bcc.length === 0 ? "bcc@example.com" : ""}
-                  className="flex-1 min-w-[120px] sm:min-w-[200px] outline-none bg-transparent placeholder:text-slate-400 text-xs sm:text-sm"
-                  value={bccInput}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setBccInput(value);
-                    if (value.includes(',')) {
-                      const parts = value.split(',');
-                      const emailToAdd = parts[0].trim();
-                      if (emailToAdd) {
-                        addBcc(emailToAdd);
-                        setBccInput(parts.slice(1).join(',').trim());
-                      } else {
-                        setBccInput(parts.slice(1).join(',').trim());
+                      <span className="truncate max-w-[120px] sm:max-w-none">{email}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeEmail('bcc', index)}
+                        className="hover:bg-slate-200 rounded-full p-0.5 transition-colors flex-shrink-0"
+                        aria-label={`Remove ${email}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  ))}
+                  <input
+                    type="text"
+                    placeholder={form.bcc.length === 0 ? "bcc@example.com" : ""}
+                    className="flex-1 min-w-[120px] sm:min-w-[200px] outline-none bg-transparent placeholder:text-slate-400 text-xs sm:text-sm"
+                    value={bccInput}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setBccInput(value);
+                      if (value.includes(',')) {
+                        const parts = value.split(',');
+                        const emailToAdd = parts[0].trim();
+                        if (emailToAdd) {
+                          addBcc(emailToAdd);
+                          setBccInput(parts.slice(1).join(',').trim());
+                        } else {
+                          setBccInput(parts.slice(1).join(',').trim());
+                        }
+                      } else if (value.endsWith(' ') && endsWithDomain(value.slice(0, -1))) {
+                        addBcc(value.slice(0, -1).trim());
                       }
-                    } else if (value.endsWith(' ') && endsWithDomain(value.slice(0, -1))) {
-                      addBcc(value.slice(0, -1).trim());
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (bccInput.trim()) {
+                          addBcc(bccInput);
+                        }
+                      } else if (e.key === 'Backspace' && !bccInput && form.bcc.length > 0) {
+                        e.preventDefault();
+                        const lastEmail = form.bcc[form.bcc.length - 1];
+                        setBccInput(lastEmail);
+                        removeEmail('bcc', form.bcc.length - 1);
+                      }
+                    }}
+                    onPaste={(e) => {
                       e.preventDefault();
-                      if (bccInput.trim()) {
-                        addBcc(bccInput);
-                      }
-                    } else if (e.key === 'Backspace' && !bccInput && form.bcc.length > 0) {
-                      e.preventDefault();
-                      const lastEmail = form.bcc[form.bcc.length - 1];
-                      setBccInput(lastEmail);
-                      removeEmail('bcc', form.bcc.length - 1);
-                    }
-                  }}
-                  onPaste={(e) => {
-                    e.preventDefault();
-                    const pastedText = e.clipboardData.getData('text');
-                    const emails = pastedText.split(/[,;\n]/).map(email => email.trim()).filter(email => email.length > 0);
-                    emails.forEach(email => {
-                      const totalRecipients = form.to.length + form.cc.length + form.bcc.length;
-                      if (isValidEmail(email) && !form.bcc.includes(email) && !form.to.includes(email) && !form.cc.includes(email) && totalRecipients < MAX_RECIPIENTS) {
-                        addEmailToField('bcc', email);
-                      }
-                    });
-                    setBccInput('');
-                  }}
-                />
-              </div>
+                      const pastedText = e.clipboardData.getData('text');
+                      const emails = pastedText.split(/[,;\n]/).map(email => email.trim()).filter(email => email.length > 0);
+                      emails.forEach(email => {
+                        const totalRecipients = form.to.length + form.cc.length + form.bcc.length;
+                        if (isValidEmail(email) && !form.bcc.includes(email) && !form.to.includes(email) && !form.cc.includes(email) && totalRecipients < MAX_RECIPIENTS) {
+                          addEmailToField('bcc', email);
+                        }
+                      });
+                      setBccInput('');
+                    }}
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -1038,16 +1038,15 @@ const ComposeEmailForm = () => {
                   key={email}
                   type="button"
                   onClick={() => selectSuggestion(email)}
-                  className={`w-full text-left px-4 py-2 text-sm hover:bg-blue-50 transition-colors ${
-                    index === selectedSuggestionIndex ? 'bg-blue-50 text-blue-700' : 'text-slate-900'
-                  }`}
+                  className={`w-full text-left px-4 py-2 text-sm hover:bg-blue-50 transition-colors ${index === selectedSuggestionIndex ? 'bg-blue-50 text-blue-700' : 'text-slate-900'
+                    }`}
                 >
                   {email}
                 </button>
               ))}
             </div>
           )}
-          
+
           {/* Domain Suggestions Dropdown */}
           {showDomainSuggestions && domainSuggestions.length > 0 && (
             <div
@@ -1059,9 +1058,8 @@ const ComposeEmailForm = () => {
                   key={domain}
                   type="button"
                   onClick={() => selectDomainSuggestion(domainInputPrefix, domain, 'to')}
-                  className={`w-full text-left px-4 py-2 text-sm hover:bg-blue-50 transition-colors ${
-                    index === selectedDomainIndex ? 'bg-blue-50 text-blue-700' : 'text-slate-900'
-                  }`}
+                  className={`w-full text-left px-4 py-2 text-sm hover:bg-blue-50 transition-colors ${index === selectedDomainIndex ? 'bg-blue-50 text-blue-700' : 'text-slate-900'
+                    }`}
                 >
                   {domainInputPrefix}{domain}
                 </button>
@@ -1099,9 +1097,8 @@ const ComposeEmailForm = () => {
                   type="button"
                   onClick={() => editor.chain().focus().toggleBold().run()}
                   disabled={!editor.can().chain().focus().toggleBold().run()}
-                  className={`p-1.5 rounded hover:bg-slate-200 transition-colors ${
-                    editor.isActive('bold') ? 'bg-blue-100 text-blue-700' : 'text-slate-600'
-                  }`}
+                  className={`p-1.5 rounded hover:bg-slate-200 transition-colors ${editor.isActive('bold') ? 'bg-blue-100 text-blue-700' : 'text-slate-600'
+                    }`}
                   title="Bold"
                 >
                   <Bold className="h-4 w-4" />
@@ -1110,9 +1107,8 @@ const ComposeEmailForm = () => {
                   type="button"
                   onClick={() => editor.chain().focus().toggleItalic().run()}
                   disabled={!editor.can().chain().focus().toggleItalic().run()}
-                  className={`p-1.5 rounded hover:bg-slate-200 transition-colors ${
-                    editor.isActive('italic') ? 'bg-blue-100 text-blue-700' : 'text-slate-600'
-                  }`}
+                  className={`p-1.5 rounded hover:bg-slate-200 transition-colors ${editor.isActive('italic') ? 'bg-blue-100 text-blue-700' : 'text-slate-600'
+                    }`}
                   title="Italic"
                 >
                   <Italic className="h-4 w-4" />
@@ -1121,9 +1117,8 @@ const ComposeEmailForm = () => {
                   type="button"
                   onClick={() => editor.chain().focus().toggleStrike().run()}
                   disabled={!editor.can().chain().focus().toggleStrike().run()}
-                  className={`px-2 py-1.5 rounded hover:bg-slate-200 transition-colors text-sm font-semibold ${
-                    editor.isActive('strike') ? 'bg-blue-100 text-blue-700' : 'text-slate-600'
-                  }`}
+                  className={`px-2 py-1.5 rounded hover:bg-slate-200 transition-colors text-sm font-semibold ${editor.isActive('strike') ? 'bg-blue-100 text-blue-700' : 'text-slate-600'
+                    }`}
                   title="Strikethrough"
                 >
                   S̶
@@ -1132,9 +1127,8 @@ const ComposeEmailForm = () => {
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleBulletList().run()}
-                  className={`p-1.5 rounded hover:bg-slate-200 transition-colors ${
-                    editor.isActive('bulletList') ? 'bg-blue-100 text-blue-700' : 'text-slate-600'
-                  }`}
+                  className={`p-1.5 rounded hover:bg-slate-200 transition-colors ${editor.isActive('bulletList') ? 'bg-blue-100 text-blue-700' : 'text-slate-600'
+                    }`}
                   title="Bullet List"
                 >
                   <List className="h-4 w-4" />
@@ -1142,9 +1136,8 @@ const ComposeEmailForm = () => {
                 <button
                   type="button"
                   onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                  className={`p-1.5 rounded hover:bg-slate-200 transition-colors ${
-                    editor.isActive('orderedList') ? 'bg-blue-100 text-blue-700' : 'text-slate-600'
-                  }`}
+                  className={`p-1.5 rounded hover:bg-slate-200 transition-colors ${editor.isActive('orderedList') ? 'bg-blue-100 text-blue-700' : 'text-slate-600'
+                    }`}
                   title="Numbered List"
                 >
                   <List className="h-4 w-4" />
@@ -1153,9 +1146,8 @@ const ComposeEmailForm = () => {
                 <button
                   type="button"
                   onClick={handleAddLink}
-                  className={`p-1.5 rounded hover:bg-slate-200 transition-colors ${
-                    editor?.isActive('link') ? 'bg-blue-100 text-blue-700' : 'text-slate-600'
-                  }`}
+                  className={`p-1.5 rounded hover:bg-slate-200 transition-colors ${editor?.isActive('link') ? 'bg-blue-100 text-blue-700' : 'text-slate-600'
+                    }`}
                   title="Add Link"
                 >
                   <LinkIcon className="h-4 w-4" />
@@ -1222,17 +1214,17 @@ const ComposeEmailForm = () => {
             {status.message}
           </div>
         )}
-        
+
         {/* Error Display */}
         {error !== null && <ErrorDisplay error={error} className="mt-2" />}
 
         {/* Link Dialog Modal */}
         {showLinkDialog && (
-          <div 
+          <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
             onClick={() => setShowLinkDialog(false)}
           >
-            <div 
+            <div
               className="bg-white rounded-lg shadow-xl border border-slate-200 w-full max-w-md mx-4"
               onClick={(e) => e.stopPropagation()}
             >
@@ -1250,7 +1242,7 @@ const ComposeEmailForm = () => {
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              
+
               <div className="p-4">
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-slate-900 mb-2">
@@ -1266,7 +1258,7 @@ const ComposeEmailForm = () => {
                     autoFocus
                   />
                 </div>
-                
+
                 <div className="flex items-center justify-end gap-3">
                   <button
                     type="button"
