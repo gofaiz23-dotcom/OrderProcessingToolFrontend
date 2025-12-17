@@ -998,22 +998,14 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           let rateQuotesRequestJsonb: Record<string, unknown> | undefined = undefined;
           let rateQuotesResponseJsonb: Record<string, unknown> | undefined = undefined;
 
-          // Include rate quotes from cache if available
-          if (cachedOrder) {
-            if (cachedOrder.xpoRateQuoteRequest && cachedOrder.xpoRateQuoteResponse) {
-              rateQuotesRequestJsonb = { xpo: cachedOrder.xpoRateQuoteRequest };
-              rateQuotesResponseJsonb = { xpo: cachedOrder.xpoRateQuoteResponse };
-            } else if (cachedOrder.estesRateQuoteRequest && cachedOrder.estesRateQuoteResponse) {
-              rateQuotesRequestJsonb = { estes: cachedOrder.estesRateQuoteRequest };
-              rateQuotesResponseJsonb = { estes: cachedOrder.estesRateQuoteResponse };
-            }
+          // Include only Estes rate quotes from cache (Estes BOL should only use Estes quotes)
+          if (cachedOrder && cachedOrder.estesRateQuoteRequest && cachedOrder.estesRateQuoteResponse) {
+            rateQuotesRequestJsonb = { estes: cachedOrder.estesRateQuoteRequest };
+            rateQuotesResponseJsonb = { estes: cachedOrder.estesRateQuoteResponse };
           }
 
-          // Prepare bolResponseJsonb - combine XPO and Estes if both exist
+          // Prepare bolResponseJsonb - only include Estes BOL (not XPO)
           const bolResponseJsonb: Record<string, unknown> = {};
-          if (cachedOrder?.xpoBolResponse) {
-            bolResponseJsonb.xpo = cachedOrder.xpoBolResponse;
-          }
           bolResponseJsonb.estes = data; // Current Estes BOL
 
           // Always create new order - don't check for duplicates by SKU
