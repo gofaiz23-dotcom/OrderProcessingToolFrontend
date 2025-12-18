@@ -479,6 +479,7 @@ export const BillOfLanding = ({
   const [showResponsePreview, setShowResponsePreview] = useState(!!initialResponseData);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [requestPayload, setRequestPayload] = useState<any>(null);
+  const [liveRequestPayload, setLiveRequestPayload] = useState<any>(null);
   const [showSections, setShowSections] = useState<Record<string, boolean>>({
     accountInfo: true,
     billingInfo: true,
@@ -490,6 +491,7 @@ export const BillOfLanding = ({
     serviceOptions: true,
     referenceNumbers: true,
     notifications: true,
+    livePayload: false,
   });
 
   // Accessorial codes mapping
@@ -938,6 +940,44 @@ export const BillOfLanding = ({
       onResponseDataChange(responseData);
     }
   }, [responseData, onResponseDataChange]);
+  
+  // Update live request payload as form data changes (debounced)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      try {
+        const payload = buildRequestBody();
+        const normalizedCarrier = carrier.toLowerCase();
+        const shippingCompany = normalizedCarrier === 'estes' ? 'estes' : normalizedCarrier;
+        const fullPayload = {
+          shippingCompany: shippingCompany,
+          ...payload,
+        };
+        setLiveRequestPayload(fullPayload);
+      } catch (err) {
+        // Silently fail - payload might be incomplete during form filling
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Failed to build live payload:', err);
+        }
+      }
+    }, 500); // Debounce for 500ms
+    
+    return () => clearTimeout(timeoutId);
+  }, [
+    myAccount, role, payer, terms, masterBol, shipDate, quoteId, autoAssignPro,
+    originAccount, originName, originAddress1, originAddress2, originCity, originState, originZipCode, originCountry,
+    originContactName, originPhone, originEmail,
+    destinationName, destinationAddress1, destinationAddress2, destinationCity, destinationState, destinationZipCode, destinationCountry,
+    destinationContactName, destinationPhone, destinationEmail,
+    billToAccount, billToName, billToAddress1, billToAddress2, billToCity, billToState, billToZipCode, billToCountry,
+    billToContactName, billToPhone, billToEmail,
+    liftGateService, residentialDelivery, appointmentRequest, selectedAccessorials,
+    specialHandlingRequests, handlingUnits,
+    fullValueCoverage, fullValueCoverageAmount,
+    selectedService, referenceNumbers,
+    billOfLadingNotification, shippingLabelsNotification, trackingUpdatesNotification,
+    shippingLabelFormat, shippingLabelQuantity, shippingLabelPosition,
+    billOfLadingEmails, trackingUpdatesEmails, notificationSendTo,
+  ]);
   
   // Expose PDF URL and files to parent component
   useEffect(() => {
@@ -3488,6 +3528,58 @@ export const BillOfLanding = ({
             )}
           </div>
           
+          {/* Live Request Payload Preview */}
+          <div className="border border-slate-200 rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => toggleSection('livePayload')}
+              className="w-full px-6 py-4 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+            >
+              <h3 className="text-lg font-bold text-slate-900">Live Request Payload</h3>
+              {showSections.livePayload ? (
+                <ChevronUp className="text-slate-600" size={20} />
+              ) : (
+                <ChevronDown className="text-slate-600" size={20} />
+              )}
+            </button>
+            {showSections.livePayload && (
+              <div className="p-6 space-y-4">
+                <p className="text-sm text-slate-600">
+                  This payload updates in real-time as you fill out the form. This is what will be sent to the API when you submit.
+                </p>
+                {liveRequestPayload ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-sm font-semibold text-slate-900">Request Payload (JSON)</h4>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(JSON.stringify(liveRequestPayload, null, 2));
+                        }}
+                        className="px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center gap-2 text-sm"
+                        title="Copy Payload"
+                      >
+                        <Copy size={16} />
+                        Copy
+                      </button>
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-lg p-4 overflow-auto max-h-96">
+                      <pre className="text-sm text-slate-800 whitespace-pre-wrap font-mono">
+                        {JSON.stringify(liveRequestPayload, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                    <p className="text-sm text-slate-600 text-center">
+                      Fill out the form to see the live request payload...
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Error Message */}
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-3 sm:px-4 py-2 sm:py-3 rounded-lg text-xs sm:text-sm">
