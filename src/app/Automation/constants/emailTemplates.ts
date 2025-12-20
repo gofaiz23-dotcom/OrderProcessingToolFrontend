@@ -142,17 +142,79 @@ export const EMAIL_TEMPLATES = {
       carrier === 'estes'
         ? getEstesPickupScheduledEmailSubject(orderId, orderNumber)
         : getXPOPickupScheduledEmailSubject(orderId, orderNumber),
-    body: (carrier: Carrier, orderId: number, orderNumber?: string, sku?: string) => {
-      const orderRef = orderNumber || `Order ${orderId}`;
-      const carrierLower = typeof carrier === 'string' ? carrier.toLowerCase() : carrier;
-      const carrierName = carrierLower === 'estes' ? 'Estes Express' : 'XPO Logistics';
+    body: (orderJsonb: Record<string, unknown>, subSKUs: string[] = []) => {
+      const customerName = getJsonbValue(orderJsonb, 'Customer Name');
+      const orderNumber =
+        getJsonbValue(orderJsonb, 'Order Number') ||
+        getJsonbValue(orderJsonb, 'PO#') ||
+        getJsonbValue(orderJsonb, 'PO Number');
+
+      let streetAddress = getJsonbValue(orderJsonb, 'Ship to Address 1');
+      let streetAddress2 = getJsonbValue(orderJsonb, 'Ship to Address 2');
+      let city = getJsonbValue(orderJsonb, 'City');
+      let state = getJsonbValue(orderJsonb, 'State');
+      let zip = getJsonbValue(orderJsonb, 'Zip');
+      const phone = '6262099751';
+
+      // If street address is empty, try to get from Walmart's Address field
+      if (!streetAddress) {
+        const addressField = getJsonbValue(orderJsonb, 'Address');
+        if (addressField && addressField.trim()) {
+          const hasLetters = /[a-zA-Z]/.test(addressField);
+          if (hasLetters && !addressField.includes(',')) {
+            streetAddress = addressField;
+          } else if (hasLetters) {
+            const shippingAddress = getJsonbValue(orderJsonb, 'Shipping Address') ||
+              getJsonbValue(orderJsonb, 'Customer Shipping Address');
+            if (shippingAddress) {
+              const addressWithoutPhone = shippingAddress.replace(/,?\s*Phone:\s*\d+/i, '').trim();
+              const parts = addressWithoutPhone.split(',').map(p => p.trim());
+              if (parts.length >= 3) {
+                streetAddress = parts[1] || '';
+                if (!city || !state || !zip) {
+                  const cityStateZipPart = parts[2] || '';
+                  const cityStateZipMatch = cityStateZipPart.match(/^(.+?)\s+([A-Z]{2})\s+(\d{4,5})$/);
+                  if (cityStateZipMatch) {
+                    city = city || cityStateZipMatch[1];
+                    state = state || cityStateZipMatch[2];
+                    zip = zip || cityStateZipMatch[3];
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      const fullStreet = streetAddress2
+        ? `${streetAddress}\n${streetAddress2}`
+        : streetAddress;
+
+      const cityStateZip = [city, state, zip].filter(Boolean).join(', ');
+
+      const skuList =
+        subSKUs.length > 0
+          ? subSKUs.map(s => `- ${s}`).join('\n')
+          : `- ${getJsonbValue(orderJsonb, 'SKU') || '(No SKU provided)'}`;
+
       return `Team,
 
-Pickup has been scheduled for ${orderRef}${sku ? ` (SKU: ${sku})` : ''} via ${carrierName}.
+Please palletize this order and provide shipping info and images for our records. PLease provide sales order acknowledgement for review?
 
-Please ensure the shipment is ready for pickup.
+Shipping docs (BOL/Label) attached.
 
+Order details:
+${skuList}
+
+Shipping address:
+${customerName}
+${fullStreet}
+${cityStateZip}
+${phone}
+
+Please confirm?
 Thank You.
+Best Regards.
 `;
     },
     cc: (carrier: Carrier) => getDefaultCCEmails(carrier),

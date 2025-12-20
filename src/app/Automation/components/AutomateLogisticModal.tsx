@@ -770,9 +770,7 @@ export const AutomateLogisticModal = ({
           setToastMessage('Pickup scheduled successfully!');
           setShowToast(true);
           
-          // Show email compose modal with BOL files attached
-          setEmailComposeOrderId(orderId);
-          setShowEmailCompose(true);
+          // Email is now shown only when BOL is generated, not during pickup scheduling
         })
         .catch(err => {
           console.error('Error updating order with pickup data:', err);
@@ -1751,17 +1749,17 @@ export const AutomateLogisticModal = ({
           }
         }
 
+        const orderJsonb = order?.jsonb as Record<string, unknown> | undefined;
+        const orderSubSKUs = order ? (subSKUs[emailComposeOrderId] || []) : [];
+        
         const emailSubject = EMAIL_TEMPLATES.PICKUP_SCHEDULED.subject(
           carrier,
           emailComposeOrderId,
           orderNumber !== '-' ? orderNumber : undefined
         );
-        const emailBody = EMAIL_TEMPLATES.PICKUP_SCHEDULED.body(
-          carrier,
-          emailComposeOrderId,
-          orderNumber !== '-' ? orderNumber : undefined,
-          sku !== '-' ? sku : undefined
-        );
+        const emailBody = orderJsonb 
+          ? EMAIL_TEMPLATES.PICKUP_SCHEDULED.body(orderJsonb, orderSubSKUs)
+          : '';
         const emailCc = EMAIL_TEMPLATES.PICKUP_SCHEDULED.cc(carrier);
 
         return (

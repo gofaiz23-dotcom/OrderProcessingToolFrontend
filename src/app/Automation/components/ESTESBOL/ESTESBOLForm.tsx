@@ -1062,16 +1062,13 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           getJsonbValue(orderJsonb, 'PO#') ||
           getJsonbValue(orderJsonb, 'PO Number') || '';
 
-        let emailSubject = '';
-        let emailBody = '';
-
-        if (finalShippingType === 'LTL') {
-          emailSubject = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.subject(customerName, orderNumber);
-          emailBody = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.body(orderJsonb, subSKUs);
-        } else if (finalShippingType === 'Parcel') {
-          emailSubject = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.subject(customerName, orderNumber);
-          emailBody = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.body(orderJsonb, subSKUs);
-        }
+        // Use PICKUP_SCHEDULED template for Estes BOL emails
+        const emailSubject = EMAIL_TEMPLATES.PICKUP_SCHEDULED.subject(
+          'estes',
+          order.id,
+          orderNumber || undefined
+        );
+        const emailBody = EMAIL_TEMPLATES.PICKUP_SCHEDULED.body(orderJsonb, subSKUs);
 
         console.log('📧 Preparing to show email compose modal:', {
           shippingType: finalShippingType,
@@ -1083,7 +1080,13 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
 
         // Open email compose modal after a delay (longer than pickup request to ensure it appears on top)
         // The email modal has z-index 9999, so it will appear above the pickup request form
-        setTimeout(() => {
+        // BUT: Don't show email modal if pickup request form is visible - user only wants email when BOL is created
+        const emailModalTimeout = setTimeout(() => {
+          // Check if pickup request form is showing - if so, don't show email modal
+          if (showPickupRequest) {
+            console.log('📧 Email modal cancelled - pickup request form is visible');
+            return;
+          }
           if (!showEmailCompose) {
             console.log('📧 Opening email compose modal');
             setShowEmailCompose(true);
@@ -1091,6 +1094,9 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
             console.log('⚠️ Email modal already open, skipping duplicate');
           }
         }, 3000); // 3 second delay to ensure pickup request form is visible first, then email modal appears on top
+        
+        // Store timeout ID so we can cancel it if pickup request is submitted
+        (window as any).__estesEmailModalTimeout = emailModalTimeout;
       } else {
         if (showEmailCompose) {
           console.log('⚠️ Email modal already shown, skipping');
@@ -1572,6 +1578,14 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
                     onSuccess={(automationId) => {
                       console.log('Pickup request created:', automationId);
                       // Don't close immediately, let the user see the success message in the component
+                      // Keep email modal open - user will close it manually when ready
+                      // Cancel scheduled email modal timeout if pickup request was submitted before email modal opened
+                      if ((window as any).__estesEmailModalTimeout) {
+                        clearTimeout((window as any).__estesEmailModalTimeout);
+                        (window as any).__estesEmailModalTimeout = null;
+                        console.log('📧 Cancelled scheduled email modal timeout - pickup request was submitted');
+                      }
+                      // Do NOT close email modal if it's already open - let user close it manually
                     }}
                     onCancel={() => setShowPickupRequest(false)}
                   />
@@ -1590,21 +1604,17 @@ export const ESTESBOLForm = ({ order, subSKUs = [], shippingType, quoteData, onB
           getJsonbValue(orderJsonb, 'PO#') ||
           getJsonbValue(orderJsonb, 'PO Number') || '';
 
-        const finalShippingType = shippingType || 'LTL';
-        let emailSubject = '';
-        let emailBody = '';
-
-        if (finalShippingType === 'LTL') {
-          emailSubject = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.subject(customerName, orderNumber);
-          emailBody = EMAIL_TEMPLATES.LTL_ORDER_DRAFT.body(orderJsonb, subSKUs);
-        } else if (finalShippingType === 'Parcel') {
-          emailSubject = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.subject(customerName, orderNumber);
-          emailBody = EMAIL_TEMPLATES.PARCEL_ORDER_DRAFT.body(orderJsonb, subSKUs);
-        }
+        // Use PICKUP_SCHEDULED template for Estes BOL emails
+        const emailSubject = EMAIL_TEMPLATES.PICKUP_SCHEDULED.subject(
+          'estes',
+          order.id,
+          orderNumber || undefined
+        );
+        const emailBody = EMAIL_TEMPLATES.PICKUP_SCHEDULED.body(orderJsonb, subSKUs);
 
         console.log('📧 Rendering email compose modal:', {
           isOpen: showEmailCompose,
-          shippingType: finalShippingType,
+          shippingType: shippingType || 'LTL',
           hasSubject: !!emailSubject,
           hasBody: !!emailBody,
           bolFilesForEmailCount: bolFilesForEmail.length,
