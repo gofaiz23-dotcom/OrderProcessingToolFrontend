@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Send, Loader2, CheckCircle2, XCircle, Plus, Trash2, ChevronUp, ChevronDown, TrendingUp } from 'lucide-react';
 import { createEstesPickupRequest, getAllEstesPickupStatus, type EstesPickupData, type EstesPickupStatusItem } from '@/app/api/3plGigaFedexApi/estesPickupApi';
 import { ErrorDisplay } from '@/app/utils/Errors/ErrorDisplay';
@@ -8,6 +8,9 @@ import { createShippedOrder, updateShippedOrder, getAllShippedOrders } from '@/a
 import type { Order } from '@/app/types/order';
 import { dispatchPickupData } from '../../utils/ltlOrderCache';
 import { logger } from '@/utils/logger';
+import { useLogisticsStore } from '@/store/logisticsStore';
+import { ESTES_ACCOUNTS, ESTES_SHIPPER_DEFAULTS, ESTES_SHIPPER_ADDRESSES } from '@/Shared/constant';
+import { Toast } from '@/app/components/shared/Toast';
 
 // Helper function to extract value from JSONB
 const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
@@ -52,18 +55,49 @@ const getJsonbValue = (jsonb: Order['jsonb'], key: string): string => {
   return '';
 };
 
-type Shipment = {
+// Types matching API payload structure
+type AddressItem = {
   id: string;
-  type: string;
-  handlingUnits: string;
-  weight: string;
-  destinationZip: string;
+  addressType: string; // "C", "PICKUP", "DOCK"
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  stateProvince: string;
+  postalCode: string;
+  postalCode4: string;
+  countryAbbrev: string;
 };
 
-type Contact = {
+type ContactItem = {
   id: string;
-  name: string;
+  contactType: string; // "S", "REQUESTER", "DOCK"
+  firstName: string;
+  middleName: string;
+  lastName: string;
   email: string;
+  phoneAreaCode: string;
+  phoneNumber: string;
+  phoneExtension: string;
+  faxAreaCode: string;
+  faxNumber: string;
+  receiveNotifications: string; // "Y", "N"
+  notificationMethod: string; // "E", "EMAIL"
+};
+
+type CommodityItem = {
+  id: string;
+  code: string; // "MISC"
+  packageCode: string; // "BX", "PAT"
+  description: string;
+  pieces: string;
+  weight: string;
+  nmfcNumber: string;
+  nmfcSubNumber: string;
+};
+
+type NotificationItem = {
+  id: string;
+  type: string; // "RCV", "REJECTED", "ACCEPTED", "COMPLETED"
 };
 
 type FormSectionProps = {
@@ -111,9 +145,12 @@ const FormSection = ({ title, isExpanded, onToggle, children, className = '' }: 
 type ESTESPickupRequestProps = {
   order?: Order;
   bolData?: {
+    originAccount?: string;
     originName?: string;
     originAddress1?: string;
     originAddress2?: string;
+    originCity?: string;
+    originState?: string;
     originZipCode?: string;
     originCountry?: string;
     originContactName?: string;
@@ -138,89 +175,161 @@ type ESTESPickupRequestProps = {
 };
 
 export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTESPickupRequestProps) => {
+  const { getToken } = useLogisticsStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [success, setSuccess] = useState(false);
   const [automationId, setAutomationId] = useState<string | null>(null);
+  const [requestPayload, setRequestPayload] = useState<EstesPickupData | null>(null);
+  const [apiResponse, setApiResponse] = useState<any>(null);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+
+  // Shipper Information - Initialize with defaults from constants
+  const [shipperName, setShipperName] = useState(ESTES_SHIPPER_DEFAULTS.companyName || '');
+  const [accountCode, setAccountCode] = useState(ESTES_ACCOUNTS[0]?.accountNumber || '');
+  const [shipperAddressLine1, setShipperAddressLine1] = useState(ESTES_SHIPPER_DEFAULTS.address1 || '');
+  const [shipperAddressLine2, setShipperAddressLine2] = useState(ESTES_SHIPPER_DEFAULTS.address2 || '');
+  const [shipperCity, setShipperCity] = useState(ESTES_SHIPPER_DEFAULTS.city || '');
+  const [shipperStateProvince, setShipperStateProvince] = useState(ESTES_SHIPPER_DEFAULTS.state || '');
+  const [shipperPostalCode, setShipperPostalCode] = useState(ESTES_SHIPPER_DEFAULTS.zipCode || '');
+  const [shipperPostalCode4, setShipperPostalCode4] = useState('0000');
+  const [shipperCountryAbbrev, setShipperCountryAbbrev] = useState(ESTES_SHIPPER_DEFAULTS.country === 'USA' ? 'US' : 'US');
+
+  // Request Details
+  const [requestAction, setRequestAction] = useState('LL'); // "LL", "CREATE"
+  const [paymentTerms, setPaymentTerms] = useState('PPD'); // "PPD", "PREPAID"
+  const [pickupDate, setPickupDate] = useState('');
+  const [pickupStartTime, setPickupStartTime] = useState('0800'); // HHMM format
+  const [pickupEndTime, setPickupEndTime] = useState('1600'); // HHMM format (4 PM)
+  const [totalPieces, setTotalPieces] = useState('');
+  const [totalWeight, setTotalWeight] = useState('');
+  const [totalHandlingUnits, setTotalHandlingUnits] = useState('');
+  const [hazmatFlag, setHazmatFlag] = useState('N'); // "Y", "N"
+  const [expeditedCode, setExpeditedCode] = useState('G');
+  // whoRequested is derived from role: S = Shipper, C = Consignee, 3 = Third Party, 4 = Other
+  // Estes API accepts: S, C, 3, or 4
+
+  // Addresses array
+  const [addresses, setAddresses] = useState<AddressItem[]>([
+    {
+      id: '1',
+      addressType: 'C',
+      addressLine1: '',
+      addressLine2: '',
+      city: '',
+      stateProvince: '',
+      postalCode: '',
+      postalCode4: '0000',
+      countryAbbrev: 'US',
+    },
+  ]);
+
+  // Contacts array - Initialize with defaults from constants
+  const parseContactName = (name: string) => {
+    const parts = name.split('/');
+    if (parts.length > 1) {
+      return { firstName: parts[0]?.trim() || '', lastName: parts[1]?.trim() || '' };
+    }
+    const nameParts = name.trim().split(' ');
+    return {
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+    };
+  };
+
+  const parsePhone = (phone: string) => {
+    // Remove all non-digits
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length === 10) {
+      return {
+        areaCode: digits.substring(0, 3),
+        number: digits.substring(3, 10),
+      };
+    }
+    return { areaCode: '', number: '' };
+  };
+
+  const defaultContactName = parseContactName(ESTES_SHIPPER_DEFAULTS.contactName || '');
+  const defaultPhone = parsePhone(ESTES_SHIPPER_DEFAULTS.phone || '');
+
+  const [contacts, setContacts] = useState<ContactItem[]>([
+    {
+      id: '1',
+      contactType: 'S',
+      firstName: defaultContactName.firstName,
+      middleName: '',
+      lastName: defaultContactName.lastName,
+      email: ESTES_SHIPPER_DEFAULTS.email || '',
+      phoneAreaCode: defaultPhone.areaCode,
+      phoneNumber: defaultPhone.number,
+      phoneExtension: '',
+      faxAreaCode: '',
+      faxNumber: '',
+      receiveNotifications: 'Y',
+      notificationMethod: 'E',
+    },
+  ]);
+
+  // Commodities array - Initialize with defaults from constants
+  const [commodities, setCommodities] = useState<CommodityItem[]>([
+    {
+      id: '1',
+      code: 'MISC',
+      packageCode: 'BX',
+      description: 'KD furniture', // Default from constants
+      pieces: '1',
+      weight: '',
+      nmfcNumber: '079300', // Default from constants
+      nmfcSubNumber: '03', // Default from constants
+    },
+  ]);
+
+  // Notifications array
+  const [notifications, setNotifications] = useState<NotificationItem[]>([
+    { id: '1', type: 'RCV' },
+  ]);
 
   // Account Information
-  const [role, setRole] = useState<string>('Third-Party');
+  const [selectedAccount, setSelectedAccount] = useState('');
+  const [role, setRole] = useState('T'); // S = Shipper, C = Consignee, T = Third-Party, O = Other
 
-  // Requester Details
-  const [requesterName, setRequesterName] = useState('');
-  const [requesterEmail, setRequesterEmail] = useState('');
-  const [requesterPhone, setRequesterPhone] = useState('');
-  const [requesterPhoneExt, setRequesterPhoneExt] = useState('');
-
-  // Dock Contact
-  const [dockName, setDockName] = useState('');
-  const [dockEmail, setDockEmail] = useState('');
-  const [dockPhone, setDockPhone] = useState('');
-  const [dockPhoneExt, setDockPhoneExt] = useState('');
+  // Requester Details - Initialize with defaults from constants
+  const [requesterAddressBook, setRequesterAddressBook] = useState('');
+  const [requesterContactName, setRequesterContactName] = useState(ESTES_SHIPPER_DEFAULTS.contactName || '');
+  const [requesterEmail, setRequesterEmail] = useState(ESTES_SHIPPER_DEFAULTS.email || '');
+  const [requesterPhone, setRequesterPhone] = useState(ESTES_SHIPPER_DEFAULTS.phone || '');
+  const [requesterExtension, setRequesterExtension] = useState('');
 
   // Pickup Location
-  const [companyName, setCompanyName] = useState('');
-  const [address1, setAddress1] = useState('');
-  const [address2, setAddress2] = useState('');
-  const [zipCode, setZipCode] = useState('');
-  const [country, setCountry] = useState('USA');
+  const [pickupAddressBook, setPickupAddressBook] = useState('');
+  const [pickupCompanyName, setPickupCompanyName] = useState('');
+  const [pickupAddressLine1, setPickupAddressLine1] = useState('');
+  const [pickupAddressLine2, setPickupAddressLine2] = useState('');
+  const [pickupZipCode, setPickupZipCode] = useState('');
+  const [pickupCountry, setPickupCountry] = useState('USA');
 
-  // Helper functions to convert between 12-hour and 24-hour formats
-  const convert12To24 = (time12: string): string => {
-    if (!time12) return '';
-    const match = time12.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-    if (!match) return time12;
-    
-    let hours = parseInt(match[1], 10);
-    const minutes = match[2];
-    const period = match[3].toUpperCase();
-    
-    if (period === 'PM' && hours !== 12) {
-      hours += 12;
-    } else if (period === 'AM' && hours === 12) {
-      hours = 0;
-    }
-    
-    return `${String(hours).padStart(2, '0')}:${minutes}`;
+  // Dock Contact
+  const [useRequesterInfo, setUseRequesterInfo] = useState(false);
+  const [dockAddressBook, setDockAddressBook] = useState('');
+  const [dockContactName, setDockContactName] = useState('');
+  const [dockEmail, setDockEmail] = useState('');
+  const [dockPhone, setDockPhone] = useState('');
+  const [dockExtension, setDockExtension] = useState('');
+
+  // Pickup Type
+  const [pickupType, setPickupType] = useState('LL'); // LL = Live Load, HL = Hook Loaded
+
+  // Shipment Information (for Live Load)
+  type ShipmentItem = {
+    id: string;
+    type: string;
+    handlingUnits: string;
+    weight: string;
+    destinationZip: string;
   };
-
-  const convert24To12 = (time24: string): string => {
-    if (!time24) return '';
-    const match = time24.match(/(\d{2}):(\d{2})/);
-    if (!match) return time24;
-    
-    let hours = parseInt(match[1], 10);
-    const minutes = match[2];
-    const period = hours >= 12 ? 'PM' : 'AM';
-    
-    if (hours > 12) {
-      hours -= 12;
-    } else if (hours === 0) {
-      hours = 12;
-    }
-    
-    return `${hours}:${minutes} ${period}`;
-  };
-
-  // Pickup Details
-  const [pickupDate, setPickupDate] = useState('');
-  const [pickupStartTime, setPickupStartTime] = useState('08:00'); // 24-hour format for time picker
-  const [pickupEndTime, setPickupEndTime] = useState('16:00'); // 24-hour format for time picker (4:00 PM)
-  const [pickupType, setPickupType] = useState('LL');
-
-  // Shipments - Initialize from BOL data if available
-  const [shipments, setShipments] = useState<Shipment[]>(() => {
-    if (bolData?.handlingUnits && bolData.handlingUnits.length > 0) {
-      return bolData.handlingUnits.map((unit, index) => ({
-        id: String(index + 1),
-        type: unit.handlingUnitType || 'PALLET',
-        handlingUnits: String(unit.quantity || ''),
-        weight: String(unit.weight || ''),
-        destinationZip: bolData.destinationZipCode || '',
-      }));
-    }
-    return [{ id: '1', type: 'PALLET', handlingUnits: '', weight: '', destinationZip: '' }];
-  });
+  const [shipments, setShipments] = useState<ShipmentItem[]>([
+    { id: '1', type: 'PALLET', handlingUnits: '', weight: '', destinationZip: '' },
+  ]);
 
   // Freight Characteristics
   const [hazmat, setHazmat] = useState(false);
@@ -235,31 +344,31 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
   const [guaranteed, setGuaranteed] = useState(false);
   const [pickupInstructions, setPickupInstructions] = useState('');
 
-  // Notifications
-  const [emailForRJT, setEmailForRJT] = useState(true);
-  const [emailForACC, setEmailForACC] = useState(true);
-  const [emailForWRK, setEmailForWRK] = useState(false);
-  const [contacts, setContacts] = useState<Contact[]>([
+  // Pickup Notifications
+  const [emailForRejected, setEmailForRejected] = useState(true);
+  const [emailForAccepted, setEmailForAccepted] = useState(true);
+  const [emailForCompleted, setEmailForCompleted] = useState(false);
+  type AdditionalContact = {
+    id: string;
+    name: string;
+    email: string;
+  };
+  const [additionalContacts, setAdditionalContacts] = useState<AdditionalContact[]>([
     { id: '1', name: '', email: '' },
   ]);
 
-  // Options
-  const [showBrowser, setShowBrowser] = useState(false);
-  const [browserType, setBrowserType] = useState<'chrome' | 'chromium' | 'edge' | 'firefox'>('chrome');
-  const [submitForm, setSubmitForm] = useState(true);
-
   const [showSections, setShowSections] = useState<Record<string, boolean>>({
     accountInfo: true,
-    requesterDetails: true,
+    requesterPickup: true,
     dockContact: true,
-    pickupLocation: true,
     pickupDetails: true,
     shipmentInfo: true,
     freightCharacteristics: true,
     timeCritical: true,
-    pickupInstructions: true,
     pickupNotifications: true,
-    options: true,
+    requestPayload: false,
+    apiResponse: false,
+    livePayload: false,
   });
 
   // Automation Status Tracking
@@ -301,29 +410,161 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
     setShowSections({ ...showSections, [section]: !showSections[section] });
   };
 
-  // Auto-populate from BOL data
+  // Auto-populate from BOL data and order.jsonb (rate quote data)
   useEffect(() => {
     if (bolData) {
-      if (bolData.originName) setCompanyName(bolData.originName);
-      if (bolData.originAddress1) setAddress1(bolData.originAddress1);
-      if (bolData.originAddress2) setAddress2(bolData.originAddress2);
-      if (bolData.originZipCode) setZipCode(bolData.originZipCode);
-      if (bolData.originCountry) setCountry(bolData.originCountry);
+      // Try to get commodity description from order.jsonb rate quote data
+      let commodityDescription = 'KD furniture'; // Default
+      let commodityNMFC = '079300'; // Default
+      let commoditySub = '03'; // Default
+      
+      if (order?.jsonb) {
+        try {
+          const rateQuoteResponse = getJsonbValue(order.jsonb, 'rateQuotesResponseJsonb');
+          if (rateQuoteResponse) {
+            const parsed = typeof rateQuoteResponse === 'string' ? JSON.parse(rateQuoteResponse) : rateQuoteResponse;
+            // Try to extract description from rate quote
+            if (parsed?.commodity?.description) {
+              commodityDescription = parsed.commodity.description;
+            } else if (parsed?.commodity?.handlingUnits?.[0]?.lineItems?.[0]?.description) {
+              commodityDescription = parsed.commodity.handlingUnits[0].lineItems[0].description;
+            }
+            // Try to extract NMFC from rate quote
+            if (parsed?.commodity?.handlingUnits?.[0]?.lineItems?.[0]?.nmfc) {
+              commodityNMFC = String(parsed.commodity.handlingUnits[0].lineItems[0].nmfc);
+            }
+            if (parsed?.commodity?.handlingUnits?.[0]?.lineItems?.[0]?.nmfcSub) {
+              commoditySub = String(parsed.commodity.handlingUnits[0].lineItems[0].nmfcSub);
+            }
+          }
+        } catch (e) {
+          // Keep defaults if parsing fails
+        }
+      }
+      
+      if (bolData.originAccount) {
+        setAccountCode(bolData.originAccount);
+      }
+      if (bolData.originName) {
+        setShipperName(bolData.originName);
+        setPickupCompanyName(bolData.originName);
+        setAddresses([{
+          ...addresses[0],
+          addressLine1: bolData.originAddress1 || '',
+          addressLine2: bolData.originAddress2 || '',
+          city: bolData.originCity || '',
+          stateProvince: bolData.originState || '',
+          postalCode: bolData.originZipCode || '',
+          countryAbbrev: bolData.originCountry === 'USA' ? 'US' : (bolData.originCountry || 'US'),
+        }]);
+      }
+      if (bolData.originAddress1) {
+        setShipperAddressLine1(bolData.originAddress1);
+        setPickupAddressLine1(bolData.originAddress1);
+      }
+      if (bolData.originAddress2) {
+        setShipperAddressLine2(bolData.originAddress2 || 'NA');
+        setPickupAddressLine2(bolData.originAddress2 || '');
+      }
+      if (bolData.originCity) {
+        setShipperCity(bolData.originCity);
+      }
+      if (bolData.originState) {
+        setShipperStateProvince(bolData.originState);
+      }
+      if (bolData.originZipCode) {
+        const zipParts = bolData.originZipCode.split('-');
+        setShipperPostalCode(zipParts[0] || bolData.originZipCode);
+        setShipperPostalCode4(zipParts[1] || '0000');
+        setPickupZipCode(bolData.originZipCode);
+      }
       if (bolData.originContactName) {
-        setRequesterName(bolData.originContactName);
-        setDockName(bolData.originContactName);
+        const nameParts = bolData.originContactName.split(' ');
+        setRequesterContactName(bolData.originContactName);
+        setContacts([{
+          ...contacts[0],
+          firstName: nameParts[0] || '',
+          lastName: nameParts.slice(1).join(' ') || '',
+        }]);
       }
       if (bolData.originPhone) {
         setRequesterPhone(bolData.originPhone);
-        setDockPhone(bolData.originPhone);
+        const phoneMatch = bolData.originPhone.match(/(\d{3})[\s\-]?(\d{3})[\s\-]?(\d{4})/);
+        if (phoneMatch) {
+          setContacts([{
+            ...contacts[0],
+            phoneAreaCode: phoneMatch[1],
+            phoneNumber: phoneMatch[2] + phoneMatch[3],
+          }]);
+        }
       }
       if (bolData.originEmail) {
         setRequesterEmail(bolData.originEmail);
-        setDockEmail(bolData.originEmail);
+        setContacts([{
+          ...contacts[0],
+          email: bolData.originEmail,
+        }]);
       }
-      // Freight characteristics auto-population removed as per request
+      if (bolData.handlingUnits && bolData.handlingUnits.length > 0) {
+        const totalPieces = bolData.handlingUnits.reduce((sum, unit) => sum + (unit.quantity || 0), 0);
+        const totalWeight = bolData.handlingUnits.reduce((sum, unit) => sum + (unit.weight || 0), 0);
+        setTotalPieces(String(totalPieces));
+        setTotalWeight(String(totalWeight));
+        setTotalHandlingUnits(String(totalPieces));
+        // Populate shipments
+        setShipments(bolData.handlingUnits.map((unit, index) => ({
+          id: String(index + 1),
+          type: unit.handlingUnitType || 'PALLET',
+          handlingUnits: String(unit.quantity || ''),
+          weight: String(unit.weight || ''),
+          destinationZip: bolData.destinationZipCode || '',
+        })));
+        
+        // Populate commodities from handlingUnits
+        const newCommodities = bolData.handlingUnits.map((unit, index) => {
+          // Get package code from handling unit type
+          // Estes API valid codes: "BX" (Box), "CR" (Crate), "DR" (Drum), "PL" (Pallet), "SK" (Skid), etc.
+          // Based on requestBuilder.ts and Estes API documentation
+          const packageCodeMap: Record<string, string> = {
+            'PALLET': 'PL', // Estes uses "PL" for pallets, not "PLT"
+            'PAL': 'PL',
+            'PLT': 'PL',
+            'CARTON': 'BX',
+            'BOX': 'BX',
+            'BX': 'BX',
+            'CRATE': 'CR',
+            'SKID': 'SK',
+            'DRUM': 'DR',
+          };
+          const packageCode = packageCodeMap[unit.handlingUnitType?.toUpperCase() || ''] || 'BX';
+          
+          return {
+            id: String(index + 1),
+            code: 'MISC',
+            packageCode: packageCode,
+            description: commodityDescription, // Use description from rate quote or default
+            pieces: String(unit.quantity || 1),
+            weight: String(unit.weight || 0),
+            nmfcNumber: commodityNMFC, // Use NMFC from rate quote or default
+            nmfcSubNumber: commoditySub, // Use sub from rate quote or default
+          };
+        });
+        setCommodities(newCommodities);
+      }
+      if (bolData.hazmat !== undefined) {
+        setHazmatFlag(bolData.hazmat ? 'Y' : 'N');
+        setHazmat(bolData.hazmat);
+      }
     }
   }, [bolData]);
+
+  // Auto-select account when accountCode and shipperName are available
+  useEffect(() => {
+    if (accountCode && shipperName && shipperAddressLine1 && shipperCity && shipperStateProvince && shipperPostalCode) {
+      const accountValue = `${accountCode} - ${shipperName} - ${shipperAddressLine1}, ${shipperCity}, ${shipperStateProvince} ${shipperPostalCode}`;
+      setSelectedAccount(accountValue);
+    }
+  }, [accountCode, shipperName, shipperAddressLine1, shipperCity, shipperStateProvince, shipperPostalCode]);
 
   // Set default pickup date to today
   useEffect(() => {
@@ -334,6 +575,112 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
     setPickupDate(`${year}-${month}-${day}`);
   }, []);
 
+  // Helper function to convert time input (HH:MM) to HHMM format
+  const convertTimeToHHMM = (time: string): string => {
+    if (!time) return '';
+    const match = time.match(/(\d{2}):(\d{2})/);
+    if (match) {
+      return match[1] + match[2];
+    }
+    return time.replace(/:/g, '');
+  };
+
+  // Helper function to convert HHMM format to time input (HH:MM)
+  const convertHHMMToTime = (hhmm: string): string => {
+    if (!hhmm || hhmm.length !== 4) return '';
+    return `${hhmm.substring(0, 2)}:${hhmm.substring(2, 4)}`;
+  };
+
+  const addAddress = () => {
+    setAddresses([...addresses, {
+      id: Date.now().toString(),
+      addressType: 'C',
+      addressLine1: '',
+      addressLine2: '',
+      city: '',
+      stateProvince: '',
+      postalCode: '',
+      postalCode4: '0000',
+      countryAbbrev: 'US',
+    }]);
+  };
+
+  const removeAddress = (id: string) => {
+    if (addresses.length > 1) {
+      setAddresses(addresses.filter(a => a.id !== id));
+    }
+  };
+
+  const updateAddress = (id: string, field: keyof AddressItem, value: string) => {
+    setAddresses(addresses.map(a => a.id === id ? { ...a, [field]: value } : a));
+  };
+
+  const addContact = () => {
+    setContacts([...contacts, {
+      id: Date.now().toString(),
+      contactType: 'S',
+      firstName: '',
+      middleName: '',
+      lastName: '',
+      email: '',
+      phoneAreaCode: '',
+      phoneNumber: '',
+      phoneExtension: '',
+      faxAreaCode: '',
+      faxNumber: '',
+      receiveNotifications: 'Y',
+      notificationMethod: 'E',
+    }]);
+  };
+
+  const removeContact = (id: string) => {
+    if (contacts.length > 1) {
+      setContacts(contacts.filter(c => c.id !== id));
+    }
+  };
+
+  const updateContact = (id: string, field: keyof ContactItem, value: string) => {
+    setContacts(contacts.map(c => c.id === id ? { ...c, [field]: value } : c));
+  };
+
+  const addCommodity = () => {
+    setCommodities([...commodities, {
+      id: Date.now().toString(),
+      code: 'MISC',
+      packageCode: 'BX',
+      description: '',
+      pieces: '',
+      weight: '',
+      nmfcNumber: '',
+      nmfcSubNumber: '',
+    }]);
+  };
+
+  const removeCommodity = (id: string) => {
+    if (commodities.length > 1) {
+      setCommodities(commodities.filter(c => c.id !== id));
+    }
+  };
+
+  const updateCommodity = (id: string, field: keyof CommodityItem, value: string) => {
+    setCommodities(commodities.map(c => c.id === id ? { ...c, [field]: value } : c));
+  };
+
+  const addNotification = () => {
+    setNotifications([...notifications, { id: Date.now().toString(), type: 'RCV' }]);
+  };
+
+  const removeNotification = (id: string) => {
+    if (notifications.length > 1) {
+      setNotifications(notifications.filter(n => n.id !== id));
+    }
+  };
+
+  const updateNotification = (id: string, field: keyof NotificationItem, value: string) => {
+    setNotifications(notifications.map(n => n.id === id ? { ...n, [field]: value } : n));
+  };
+
+  // Shipment helpers
   const addShipment = () => {
     setShipments([...shipments, { id: Date.now().toString(), type: 'PALLET', handlingUnits: '', weight: '', destinationZip: '' }]);
   };
@@ -344,23 +691,132 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
     }
   };
 
-  const updateShipment = (id: string, field: keyof Shipment, value: string) => {
+  const updateShipment = (id: string, field: keyof ShipmentItem, value: string) => {
     setShipments(shipments.map(s => s.id === id ? { ...s, [field]: value } : s));
   };
 
-  const addContact = () => {
-    setContacts([...contacts, { id: Date.now().toString(), name: '', email: '' }]);
+  // Additional contact helpers
+  const addAdditionalContact = () => {
+    setAdditionalContacts([...additionalContacts, { id: Date.now().toString(), name: '', email: '' }]);
   };
 
-  const removeContact = (id: string) => {
-    if (contacts.length > 1) {
-      setContacts(contacts.filter(c => c.id !== id));
+  const removeAdditionalContact = (id: string) => {
+    if (additionalContacts.length > 1) {
+      setAdditionalContacts(additionalContacts.filter(c => c.id !== id));
     }
   };
 
-  const updateContact = (id: string, field: keyof Contact, value: string) => {
-    setContacts(contacts.map(c => c.id === id ? { ...c, [field]: value } : c));
+  const updateAdditionalContact = (id: string, field: keyof AdditionalContact, value: string) => {
+    setAdditionalContacts(additionalContacts.map(c => c.id === id ? { ...c, [field]: value } : c));
   };
+
+  // Sync dock contact with requester when checkbox is checked
+  useEffect(() => {
+    if (useRequesterInfo) {
+      setDockContactName(requesterContactName);
+      setDockEmail(requesterEmail);
+      setDockPhone(requesterPhone);
+      setDockExtension(requesterExtension);
+    }
+  }, [useRequesterInfo, requesterContactName, requesterEmail, requesterPhone, requesterExtension]);
+
+  // Build live payload for display
+  const livePayload = useMemo((): EstesPickupData => {
+    return {
+      shippingCompany: 'estes',
+      shipper: {
+        shipperName: shipperName || null,
+        accountCode: accountCode || null,
+        shipperAddress: {
+          addressInfo: {
+            addressLine1: shipperAddressLine1 || null,
+            addressLine2: shipperAddressLine2 || null,
+            city: shipperCity || null,
+            stateProvince: shipperStateProvince || null,
+            postalCode: shipperPostalCode || null,
+            postalCode4: shipperPostalCode4 || null,
+            countryAbbrev: shipperCountryAbbrev || null,
+          },
+        },
+      },
+      requestAction: requestAction || null,
+      paymentTerms: paymentTerms || null,
+      pickupDate: pickupDate || null,
+      pickupStartTime: pickupStartTime || null,
+      pickupEndTime: pickupEndTime || null,
+      totalPieces: totalPieces || null,
+      totalWeight: totalWeight || null,
+      totalHandlingUnits: totalHandlingUnits || null,
+      hazmatFlag: hazmatFlag || null,
+      expeditedCode: expeditedCode || null,
+      // Map role to whoRequested: S = Shipper, C = Consignee, 3 = Third Party, 4 = Other
+      // Estes API accepts: S, C, 3, or 4
+      whoRequested: (role === 'S' ? 'S' : role === 'C' ? 'C' : role === 'O' ? '4' : '3') || null,
+      addresses: {
+        address: addresses.map(a => ({
+          addressInfo: {
+            addressType: a.addressType || null,
+            addressLine1: a.addressLine1 || null,
+            addressLine2: a.addressLine2 || null,
+            city: a.city || null,
+            stateProvince: a.stateProvince || null,
+            postalCode: a.postalCode || null,
+            postalCode4: a.postalCode4 || null,
+            countryAbbrev: a.countryAbbrev || null,
+          },
+        })),
+      },
+      contacts: {
+        contact: contacts.map(c => ({
+          contactInfo: {
+            contactType: c.contactType || null,
+            name: {
+              firstName: c.firstName || null,
+              middleName: c.middleName || null,
+              lastName: c.lastName || null,
+            },
+            email: c.email || null,
+            phone: {
+              areaCode: c.phoneAreaCode || null,
+              number: c.phoneNumber || null,
+              extension: c.phoneExtension || null,
+            },
+            fax: {
+              areaCode: c.faxAreaCode ? Number(c.faxAreaCode) : null,
+              number: c.faxNumber ? Number(c.faxNumber) : null,
+            },
+            receiveNotifications: c.receiveNotifications || null,
+            notificationMethod: c.notificationMethod || null,
+          },
+        })),
+      },
+      commodities: {
+        commodity: commodities.map(c => ({
+          commodityInfo: {
+            code: c.code || null,
+            packageCode: c.packageCode || null,
+            description: c.description || null,
+            pieces: c.pieces || null,
+            weight: c.weight || null,
+            nmfcNumber: c.nmfcNumber || null,
+            nmfcSubNumber: c.nmfcSubNumber || null,
+          },
+        })),
+      },
+      notifications: {
+        notification: notifications.map(n => ({
+          notificationInfo: {
+            type: n.type || null,
+          },
+        })),
+      },
+    };
+  }, [
+    shipperName, accountCode, shipperAddressLine1, shipperAddressLine2, shipperCity, shipperStateProvince,
+    shipperPostalCode, shipperPostalCode4, shipperCountryAbbrev, requestAction, paymentTerms, pickupDate,
+    pickupStartTime, pickupEndTime, totalPieces, totalWeight, totalHandlingUnits, hazmatFlag, expeditedCode,
+    role, addresses, contacts, commodities, notifications
+  ]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -368,76 +824,154 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
     setError(null);
     setSuccess(false);
 
+    // Validate required fields before submission
+    if (!accountCode || !shipperName) {
+      setError(new Error('Account Code and Shipper Name are required'));
+      setLoading(false);
+      return;
+    }
+
+    if (!shipperCity || !shipperStateProvince) {
+      setError(new Error('Shipper City and State/Province are required'));
+      setLoading(false);
+      return;
+    }
+
+    // Validate at least one contact has required fields
+    const hasValidContact = contacts.some(c => 
+      c.firstName && c.lastName && c.email && c.phoneAreaCode && c.phoneNumber
+    );
+    if (!hasValidContact) {
+      setError(new Error('At least one contact must have First Name, Last Name, Email, and Phone'));
+      setLoading(false);
+      return;
+    }
+
+    // Validate at least one commodity has required fields
+    const hasValidCommodity = commodities.some(c => 
+      c.code && c.packageCode && c.description && c.pieces && c.weight
+    );
+    if (!hasValidCommodity) {
+      setError(new Error('At least one commodity must have Code, Package Code, Description, Pieces, and Weight'));
+      setLoading(false);
+      return;
+    }
+
     try {
       const pickupData: EstesPickupData = {
-        accountInformation: {
-          role: role || null,
+        shippingCompany: 'estes',
+        shipper: {
+          shipperName: shipperName || null,
+          accountCode: accountCode || null,
+          shipperAddress: {
+            addressInfo: {
+              addressLine1: shipperAddressLine1 || null,
+              addressLine2: shipperAddressLine2 || 'NA',
+              city: shipperCity || null,
+              stateProvince: shipperStateProvince || null,
+              postalCode: shipperPostalCode || null,
+              postalCode4: shipperPostalCode4 || '0000',
+              countryAbbrev: shipperCountryAbbrev || 'US',
+            },
+          },
         },
-        requesterDetails: {
-          name: requesterName || null,
-          email: requesterEmail || null,
-          phone: requesterPhone || null,
-          phoneExt: requesterPhoneExt || null,
-        },
-        dockContact: {
-          name: dockName || null,
-          email: dockEmail || null,
-          phone: dockPhone || null,
-          phoneExt: dockPhoneExt || null,
-        },
-        pickupLocation: {
-          companyName: companyName || null,
-          address1: address1 || null,
-          address2: address2 || null,
-          zipCode: zipCode || null,
-          country: country || null,
-        },
-        pickupDetails: {
+        requestAction: requestAction || null,
+        paymentTerms: paymentTerms || null,
           pickupDate: pickupDate || null,
-          pickupStartTime: convert24To12(pickupStartTime) || null,
-          pickupEndTime: convert24To12(pickupEndTime) || null,
-          pickupType: pickupType || null,
-        },
-        shipments: shipments.map(s => ({
-          type: s.type || null,
-          handlingUnits: s.handlingUnits || null,
-          weight: s.weight || null,
-          destinationZip: s.destinationZip || null,
-        })),
-        freightCharacteristics: {
-          hazmat: hazmat || null,
-          protectFromFreezing: protectFromFreezing || null,
-          food: food || null,
-          poison: poison || null,
-          overlength: overlength || null,
-          liftgate: liftgate || null,
-          stackable: !doNotStack, // Inverted: API expects stackable=true for stackable freight
-        },
-        timeCritical: {
-          guaranteed: guaranteed || null,
-        },
-        pickupInstructions: pickupInstructions || null,
-        pickupNotifications: {
-          emailForRJT: emailForRJT || null,
-          emailForACC: emailForACC || null,
-          emailForWRK: emailForWRK || null,
-          contacts: contacts.map(c => ({
-            name: c.name || null,
-            email: c.email || null,
+        pickupStartTime: pickupStartTime || null,
+        pickupEndTime: pickupEndTime || null,
+        totalPieces: totalPieces || null,
+        totalWeight: totalWeight || null,
+        totalHandlingUnits: totalHandlingUnits || null,
+        hazmatFlag: hazmatFlag || null,
+        expeditedCode: expeditedCode || null,
+        // Map role to whoRequested: S = Shipper, C = Consignee, 3 = Third Party, 4 = Other
+        // Estes API accepts: S, C, 3, or 4
+        whoRequested: role === 'S' ? 'S' : role === 'C' ? 'C' : role === 'O' ? '4' : '3', // S, C, 3, or 4
+        addresses: {
+          address: addresses.map(a => ({
+            addressInfo: {
+              addressType: a.addressType || null,
+              addressLine1: a.addressLine1 || null,
+              addressLine2: a.addressLine2 || 'NA',
+              // Use shipper address values if address city/state are empty (Estes API requires these)
+              city: a.city || shipperCity || null,
+              stateProvince: a.stateProvince || shipperStateProvince || null,
+              postalCode: a.postalCode || null,
+              postalCode4: a.postalCode4 || '0000',
+              countryAbbrev: a.countryAbbrev || 'US',
+            },
           })),
         },
-        submitForm: submitForm || null,
+        contacts: {
+          contact: contacts.filter(c => c.firstName || c.lastName || c.email || c.phoneAreaCode || c.phoneNumber).map(c => ({
+            contactInfo: {
+              contactType: c.contactType || null,
+              name: {
+                firstName: c.firstName || null,
+                middleName: c.middleName || 'NA',
+                lastName: c.lastName || null,
+              },
+            email: c.email || null,
+              phone: {
+                areaCode: c.phoneAreaCode || null,
+                number: c.phoneNumber || null,
+                extension: c.phoneExtension || '0',
+              },
+              fax: {
+                areaCode: c.faxAreaCode ? Number(c.faxAreaCode) : (c.phoneAreaCode ? Number(c.phoneAreaCode) : null),
+                number: c.faxNumber ? Number(c.faxNumber) : (c.phoneNumber ? Number(c.phoneNumber) : null),
+              },
+              receiveNotifications: c.receiveNotifications || null,
+              notificationMethod: c.notificationMethod || null,
+            },
+          })),
+        },
+        commodities: {
+          commodity: commodities.filter(c => c.code && c.packageCode && c.description && c.pieces && c.weight).map(c => ({
+            commodityInfo: {
+              code: c.code || null,
+              packageCode: c.packageCode || null,
+              description: c.description || null,
+              pieces: c.pieces || null,
+              weight: c.weight || null,
+              nmfcNumber: c.nmfcNumber || null,
+              nmfcSubNumber: c.nmfcSubNumber || null,
+            },
+          })),
+        },
+        notifications: {
+          notification: notifications.map(n => ({
+            notificationInfo: {
+              type: n.type || null,
+            },
+          })),
+        },
       };
 
-      const response = await createEstesPickupRequest(pickupData, showBrowser, browserType);
-      setAutomationId(response.automation_id);
+      // Get Estes token
+      const token = getToken('estes');
+      if (!token) {
+        throw new Error('No authentication token found. Please log in to Estes first.');
+      }
+
+      logger.log('Submitting Estes pickup request with payload:', pickupData);
+      const response = await createEstesPickupRequest(pickupData, token);
+      logger.log('Estes pickup request response:', response);
+      setRequestPayload(pickupData);
+      setApiResponse(response);
+      
+      // Handle different response structures
+      const responseId = response.pickupRequestNumber || response.data?.pickupRequestNumber || response.automation_id || response.id || null;
+      setAutomationId(responseId);
       setSuccess(true);
+      setShowSuccessToast(true); // Show success toast
 
       // Dispatch event for cache update (for LTL orders)
       // This will trigger final DB save in AutomateLogisticModal
       if (order?.id) {
         dispatchPickupData(order.id, {
-          automationId: response.automation_id,
+                  automationId: responseId,
           pickupData,
           response,
           carrier: 'estes', // Explicitly set carrier
@@ -461,7 +995,7 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
               // Update existing order with pickup response
               await updateShippedOrder(existingOrder.id, {
                 pickupResponseJsonb: {
-                  automationId: response.automation_id,
+                  automationId: responseId,
                   pickupData,
                   response,
                 },
@@ -474,7 +1008,7 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                 orderOnMarketPlace: marketplace,
                 ordersJsonb: order.jsonb as Record<string, unknown>,
                 pickupResponseJsonb: {
-                  automationId: response.automation_id,
+                  automationId: responseId,
                   pickupData,
                   response,
                 },
@@ -488,7 +1022,7 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
         }
         // Dispatch pickup data to cache - this will trigger final DB save in AutomateLogisticModal
         dispatchPickupData(order.id, {
-          automationId: response.automation_id,
+                  automationId: responseId,
           pickupData,
           response,
           carrier: 'estes', // Explicitly set carrier
@@ -499,8 +1033,59 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
       if (onSuccess) {
         onSuccess(response.automation_id);
       }
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
+    } catch (err: any) {
+      logger.error('Error creating Estes pickup request:', err);
+      
+      // Extract detailed error message
+      let errorMessage = 'Failed to create pickup request';
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        // Check if there's additional error data
+        if ((err as any).errorData) {
+          const errorData = (err as any).errorData;
+          if (errorData.data?.message) {
+            errorMessage = errorData.data.message;
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          } else if (typeof errorData === 'string') {
+            errorMessage = errorData;
+          }
+        }
+        // Check if there's error text with more details
+        if ((err as any).errorText) {
+          try {
+            const parsed = JSON.parse((err as any).errorText);
+            if (parsed.message) {
+              errorMessage = parsed.message;
+            } else if (parsed.error?.message) {
+              errorMessage = parsed.error.message;
+            } else if (parsed.data?.message) {
+              errorMessage = parsed.data.message;
+            }
+          } catch {
+            // If parsing fails, use the error text if it's short enough
+            if ((err as any).errorText && (err as any).errorText.length < 200) {
+              errorMessage = (err as any).errorText;
+            }
+          }
+        }
+      } else if (typeof err === 'string') {
+        errorMessage = err;
+      }
+      
+      const detailedError = new Error(errorMessage);
+      if (err instanceof Error && (err as any).status) {
+        (detailedError as any).status = (err as any).status;
+      }
+      if (err instanceof Error && (err as any).errorData) {
+        (detailedError as any).errorData = (err as any).errorData;
+      }
+      if (err instanceof Error && (err as any).errorText) {
+        (detailedError as any).errorText = (err as any).errorText;
+      }
+      
+      setError(detailedError);
+      setSuccess(false);
     } finally {
       setLoading(false);
     }
@@ -522,42 +1107,121 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
               <ErrorDisplay error={error} />
             </div>
           )}
+
           {/* Account Information */}
           <FormSection
             title="Account Information"
             isExpanded={showSections.accountInfo}
             onToggle={() => toggleSection('accountInfo')}
           >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Role</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">My Accounts *</label>
                 <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
+                  value={selectedAccount}
+                  onChange={(e) => setSelectedAccount(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
                 >
-                  <option value="Shipper">Shipper</option>
-                  <option value="Consignee">Consignee</option>
-                  <option value="Third-Party">Third-Party</option>
-                  <option value="Other">Other</option>
+                  <option value="">Select Account</option>
+                  <option value={`${accountCode} - ${shipperName} - ${shipperAddressLine1}, ${shipperCity}, ${shipperStateProvince} ${shipperPostalCode}`}>
+                    {accountCode} - {shipperName} - {shipperAddressLine1}, {shipperCity}, {shipperStateProvince} {shipperPostalCode}
+                  </option>
                 </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Role *</label>
+                <div className="flex gap-6">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="role"
+                      value="S"
+                      checked={role === 'S'}
+                      onChange={(e) => setRole(e.target.value)}
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                      required
+                    />
+                    <span className="text-sm font-medium text-slate-700">Shipper</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="role"
+                      value="C"
+                      checked={role === 'C'}
+                      onChange={(e) => setRole(e.target.value)}
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-medium text-slate-700">Consignee</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="role"
+                      value="T"
+                      checked={role === 'T'}
+                      onChange={(e) => setRole(e.target.value)}
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-medium text-slate-700">Third-Party</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="role"
+                      value="O"
+                      checked={role === 'O'}
+                      onChange={(e) => setRole(e.target.value)}
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-medium text-slate-700">Other</span>
+                  </label>
+                </div>
               </div>
             </div>
           </FormSection>
 
-          {/* Requester Details */}
+          {/* Requester Details and Pickup Location - Side by Side */}
           <FormSection
-            title="Requester Details"
-            isExpanded={showSections.requesterDetails}
-            onToggle={() => toggleSection('requesterDetails')}
+            title=""
+            isExpanded={showSections.requesterPickup}
+            onToggle={() => toggleSection('requesterPickup')}
           >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Requester Details - Left Column */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-slate-900 mb-4">Requester Details</h3>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Name *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Address Book (Optional)</label>
+                  <select
+                    value={requesterAddressBook}
+                    onChange={(e) => setRequesterAddressBook(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Address</option>
+                  </select>
+                </div>
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-300"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-slate-500">or</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="text-blue-600 hover:text-blue-700 text-sm font-medium mb-4"
+                >
+                  Manage My Address Book
+                </button>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Contact Name *</label>
                 <input
                   type="text"
-                  value={requesterName}
-                  onChange={(e) => setRequesterName(e.target.value)}
+                    value={requesterContactName}
+                    onChange={(e) => setRequesterContactName(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
@@ -573,127 +1237,178 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Phone *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Phone Number *</label>
                 <input
                   type="tel"
                   value={requesterPhone}
                   onChange={(e) => setRequesterPhone(e.target.value)}
-                  placeholder="(555) 123-4567"
+                    placeholder="(888) 888-8888"
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Phone Extension</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Extension (Optional)</label>
                 <input
                   type="text"
-                  value={requesterPhoneExt}
-                  onChange={(e) => setRequesterPhoneExt(e.target.value)}
+                    value={requesterExtension}
+                    onChange={(e) => setRequesterExtension(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
             </div>
+
+              {/* Pickup Location - Right Column */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-bold text-slate-900 mb-4">Pickup Location</h3>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Address Book (Optional)</label>
+                  <select
+                    value={pickupAddressBook}
+                    onChange={(e) => setPickupAddressBook(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Address</option>
+                  </select>
+                </div>
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-300"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-slate-500">or</span>
+                  </div>
+                </div>
+              <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Company Name *</label>
+                <input
+                  type="text"
+                    value={pickupCompanyName}
+                    onChange={(e) => setPickupCompanyName(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                />
+              </div>
+              <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Address Line 1 *</label>
+                <input
+                    type="text"
+                    value={pickupAddressLine1}
+                    onChange={(e) => setPickupAddressLine1(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                />
+              </div>
+              <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Address Line 2 (Optional)</label>
+                <input
+                    type="text"
+                    value={pickupAddressLine2}
+                    onChange={(e) => setPickupAddressLine2(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">ZIP Code *</label>
+                <input
+                  type="text"
+                    value={pickupZipCode}
+                    onChange={(e) => setPickupZipCode(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Country *</label>
+                  <select
+                    value={pickupCountry}
+                    onChange={(e) => setPickupCountry(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="USA">USA</option>
+                    <option value="CAN">Canada</option>
+                  </select>
+                </div>
+              </div>
+            </div>
           </FormSection>
 
-          {/* Dock Contact */}
+          {/* Dock Contact Details */}
           <FormSection
             title="Dock Contact Details"
             isExpanded={showSections.dockContact}
             onToggle={() => toggleSection('dockContact')}
           >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useRequesterInfo}
+                  onChange={(e) => setUseRequesterInfo(e.target.checked)}
+                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
+                />
+                <span className="text-sm font-medium text-slate-700">Use Requester Information</span>
+              </label>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Name</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Address Book (Optional)</label>
+                <select
+                  value={dockAddressBook}
+                  onChange={(e) => setDockAddressBook(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Address</option>
+                </select>
+              </div>
+              <div className="relative my-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-300"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-white text-slate-500">or</span>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Contact Name *</label>
                 <input
                   type="text"
-                  value={dockName}
-                  onChange={(e) => setDockName(e.target.value)}
+                    value={dockContactName}
+                    onChange={(e) => setDockContactName(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Email *</label>
                 <input
-                  type="email"
-                  value={dockEmail}
-                  onChange={(e) => setDockEmail(e.target.value)}
+                    type="email"
+                    value={dockEmail}
+                    onChange={(e) => setDockEmail(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Phone</label>
-                <input
-                  type="tel"
-                  value={dockPhone}
-                  onChange={(e) => setDockPhone(e.target.value)}
-                  placeholder="(555) 123-4567"
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Phone Extension</label>
-                <input
-                  type="text"
-                  value={dockPhoneExt}
-                  onChange={(e) => setDockPhoneExt(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-            </div>
-          </FormSection>
-
-          {/* Pickup Location */}
-          <FormSection
-            title="Pickup Location"
-            isExpanded={showSections.pickupLocation}
-            onToggle={() => toggleSection('pickupLocation')}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-2">Company Name</label>
-                <input
-                  type="text"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-2">Address Line 1</label>
-                <input
-                  type="text"
-                  value={address1}
-                  onChange={(e) => setAddress1(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-slate-700 mb-2">Address Line 2</label>
-                <input
-                  type="text"
-                  value={address2}
-                  onChange={(e) => setAddress2(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">ZIP Code</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Phone Number *</label>
                 <input
-                  type="text"
-                  value={zipCode}
-                  onChange={(e) => setZipCode(e.target.value)}
+                    type="tel"
+                    value={dockPhone}
+                    onChange={(e) => setDockPhone(e.target.value)}
+                    placeholder="(888) 888-8888"
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Country</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Extension (Optional)</label>
                 <input
                   type="text"
-                  value={country}
-                  onChange={(e) => setCountry(e.target.value)}
-                  placeholder="USA"
+                    value={dockExtension}
+                    onChange={(e) => setDockExtension(e.target.value)}
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                </div>
               </div>
             </div>
           </FormSection>
@@ -704,7 +1419,8 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
             isExpanded={showSections.pickupDetails}
             onToggle={() => toggleSection('pickupDetails')}
           >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Pickup Date *</label>
                 <input
@@ -718,9 +1434,13 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Pickup Start Time *</label>
                 <input
-                  type="time"
-                  value={pickupStartTime}
-                  onChange={(e) => setPickupStartTime(e.target.value)}
+                    type="text"
+                    value={convertHHMMToTime(pickupStartTime)}
+                    onChange={(e) => {
+                      const timeValue = e.target.value;
+                      setPickupStartTime(convertTimeToHHMM(timeValue) || timeValue);
+                    }}
+                    placeholder="08:00 AM"
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
@@ -728,29 +1448,50 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Pickup End Time *</label>
                 <input
-                  type="time"
-                  value={pickupEndTime}
-                  onChange={(e) => setPickupEndTime(e.target.value)}
+                    type="text"
+                    value={convertHHMMToTime(pickupEndTime)}
+                    onChange={(e) => {
+                      const timeValue = e.target.value;
+                      setPickupEndTime(convertTimeToHHMM(timeValue) || timeValue);
+                    }}
+                    placeholder="05:00 PM"
                   className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   required
                 />
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Pickup Type *</label>
-                <select
-                  value={pickupType}
+                <div className="flex gap-6">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="pickupType"
+                      value="LL"
+                      checked={pickupType === 'LL'}
                   onChange={(e) => setPickupType(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
                   required
-                >
-                  <option value="LL">Live Load</option>
-                  <option value="HL">Hook Loaded</option>
-                </select>
+                    />
+                    <span className="text-sm font-medium text-slate-700">Live Load</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="pickupType"
+                      value="HL"
+                      checked={pickupType === 'HL'}
+                      onChange={(e) => setPickupType(e.target.value)}
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-medium text-slate-700">Hook Loaded (Pick up trailer at location)</span>
+                  </label>
+                </div>
               </div>
             </div>
           </FormSection>
 
-          {/* Shipments (only if Live Load) */}
+          {/* Shipment Information - Only if Live Load */}
           {pickupType === 'LL' && (
             <FormSection
               title="Shipment Information"
@@ -774,11 +1515,12 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Type</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Type *</label>
                         <select
                           value={shipment.type}
                           onChange={(e) => updateShipment(shipment.id, 'type', e.target.value)}
                           className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required
                         >
                           <option value="PALLET">PALLET</option>
                           <option value="SKID">SKID</option>
@@ -786,56 +1528,76 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                         </select>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Handling Units</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Handling Units *</label>
                         <input
                           type="text"
                           value={shipment.handlingUnits}
                           onChange={(e) => updateShipment(shipment.id, 'handlingUnits', e.target.value)}
                           className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Weight (lbs)</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Weight (lbs) *</label>
                         <input
                           type="text"
                           value={shipment.weight}
                           onChange={(e) => updateShipment(shipment.id, 'weight', e.target.value)}
                           className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Destination ZIP</label>
+                        <label className="block text-sm font-medium text-slate-700 mb-2">Destination *</label>
                         <input
                           type="text"
                           value={shipment.destinationZip}
                           onChange={(e) => updateShipment(shipment.id, 'destinationZip', e.target.value)}
+                          placeholder="ZIP or Postal Code"
                           className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          required
                         />
                       </div>
                     </div>
                   </div>
                 ))}
-              </div>
-              <div className="flex justify-end mt-4">
+                <div className="flex justify-end">
                 <button
                   type="button"
                   onClick={addShipment}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-yellow-400 text-black rounded-lg hover:bg-yellow-500 transition-colors font-medium"
                 >
                   <Plus size={18} />
-                  Add Shipment
+                    ADD SHIPMENT
                 </button>
+                </div>
+                <div className="flex justify-end gap-6 mt-4">
+                  <div className="text-right">
+                    <div className="text-sm text-slate-600">Total Handling Units</div>
+                    <div className="text-lg font-bold text-slate-900">
+                      {shipments.reduce((sum, s) => sum + (Number(s.handlingUnits) || 0), 0)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm text-slate-600">Total Weight</div>
+                    <div className="text-lg font-bold text-slate-900">
+                      {shipments.reduce((sum, s) => sum + (Number(s.weight) || 0), 0)} lbs
+                    </div>
+                  </div>
+                </div>
               </div>
             </FormSection>
           )}
 
+          {/* Freight Characteristics, Time Critical, and Pickup Notifications - Side by Side */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Freight Characteristics */}
           <FormSection
             title="Freight Characteristics"
             isExpanded={showSections.freightCharacteristics}
             onToggle={() => toggleSection('freightCharacteristics')}
           >
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="space-y-3">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -902,12 +1664,13 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
             </div>
           </FormSection>
 
-          {/* Time Critical */}
+            {/* Time Critical Guaranteed */}
           <FormSection
             title="Time Critical Guaranteed"
             isExpanded={showSections.timeCritical}
             onToggle={() => toggleSection('timeCritical')}
           >
+              <div className="space-y-4">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -917,21 +1680,17 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
               />
               <span className="text-sm font-medium text-slate-700">Guaranteed Shipment</span>
             </label>
-          </FormSection>
-
-          {/* Pickup Instructions */}
-          <FormSection
-            title="Pickup Instructions (Optional)"
-            isExpanded={showSections.pickupInstructions}
-            onToggle={() => toggleSection('pickupInstructions')}
-          >
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Pickup Instructions (Optional)</label>
             <textarea
               value={pickupInstructions}
               onChange={(e) => setPickupInstructions(e.target.value)}
-              rows={4}
-              className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows={6}
+                    className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
               placeholder="Enter any special instructions for the pickup..."
             />
+                </div>
+              </div>
           </FormSection>
 
           {/* Pickup Notifications */}
@@ -941,12 +1700,12 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
             onToggle={() => toggleSection('pickupNotifications')}
           >
             <div className="space-y-4">
-              <div className="space-y-2">
+                <div className="space-y-3">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={emailForRJT}
-                    onChange={(e) => setEmailForRJT(e.target.checked)}
+                      checked={emailForRejected}
+                      onChange={(e) => setEmailForRejected(e.target.checked)}
                     className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                   />
                   <span className="text-sm font-medium text-slate-700">Email for Rejected Request</span>
@@ -954,8 +1713,8 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={emailForACC}
-                    onChange={(e) => setEmailForACC(e.target.checked)}
+                      checked={emailForAccepted}
+                      onChange={(e) => setEmailForAccepted(e.target.checked)}
                     className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                   />
                   <span className="text-sm font-medium text-slate-700">Email for Accepted Request</span>
@@ -963,105 +1722,52 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={emailForWRK}
-                    onChange={(e) => setEmailForWRK(e.target.checked)}
+                      checked={emailForCompleted}
+                      onChange={(e) => setEmailForCompleted(e.target.checked)}
                     className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
                   />
                   <span className="text-sm font-medium text-slate-700">Email for Completed Pickup</span>
                 </label>
               </div>
-              <div className="border-t-2 border-slate-200 pt-4">
-                <h3 className="font-semibold text-slate-700 mb-4">Additional Contacts</h3>
-                <div className="space-y-4">
-                  {contacts.map((contact, index) => (
-                    <div key={contact.id} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                      <div>
-                        <label className="block text-sm font-medium text-slate-700 mb-2">Name</label>
+                <div className="space-y-3 pt-4 border-t border-slate-200">
+                  {additionalContacts.map((contact, index) => (
+                    <div key={contact.id} className="space-y-2">
                         <input
                           type="text"
                           value={contact.name}
-                          onChange={(e) => updateContact(contact.id, 'name', e.target.value)}
+                        onChange={(e) => updateAdditionalContact(contact.id, 'name', e.target.value)}
+                        placeholder="Name (Optional)"
                           className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
-                      </div>
-                      <div className="flex gap-4 items-end">
-                        <div className="flex-1">
-                          <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
                           <input
                             type="email"
                             value={contact.email}
-                            onChange={(e) => updateContact(contact.id, 'email', e.target.value)}
+                        onChange={(e) => updateAdditionalContact(contact.id, 'email', e.target.value)}
+                        placeholder="Email (Optional)"
                             className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
-                        </div>
-                        {contacts.length > 1 && (
+                      {additionalContacts.length > 1 && (
                           <button
                             type="button"
-                            onClick={() => removeContact(contact.id)}
-                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                          onClick={() => removeAdditionalContact(contact.id)}
+                          className="text-red-600 hover:text-red-700 text-sm"
                           >
-                            <Trash2 size={18} />
                             Remove
                           </button>
                         )}
-                      </div>
                     </div>
                   ))}
-                </div>
-                <div className="flex justify-end mt-4">
                   <button
                     type="button"
-                    onClick={addContact}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    onClick={addAdditionalContact}
+                    className="w-full px-4 py-2 bg-yellow-400 text-black rounded-lg hover:bg-yellow-500 transition-colors font-medium text-sm"
                   >
-                    <Plus size={18} />
-                    Add Contact
+                    + ADD ADDITIONAL CONTACT
                   </button>
-                </div>
               </div>
             </div>
           </FormSection>
-
-          {/* Options */}
-          <FormSection
-            title="Options"
-            isExpanded={showSections.options}
-            onToggle={() => toggleSection('options')}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showBrowser}
-                  onChange={(e) => setShowBrowser(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm font-medium text-slate-700">Show Browser</span>
-              </label>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">Browser Type</label>
-                <select
-                  value={browserType}
-                  onChange={(e) => setBrowserType(e.target.value as 'chrome' | 'chromium' | 'edge' | 'firefox')}
-                  className="w-full px-4 py-3 border border-slate-300 bg-white text-slate-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="chrome">Chrome</option>
-                  <option value="chromium">Chromium</option>
-                  <option value="edge">Edge</option>
-                  <option value="firefox">Firefox</option>
-                </select>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={submitForm}
-                  onChange={(e) => setSubmitForm(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                />
-                <span className="text-sm font-medium text-slate-700">Submit Form</span>
-              </label>
-            </div>
-          </FormSection>
 
           {/* Status Display */}
           {success && automationId && (
@@ -1083,15 +1789,106 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
                   </div>
                 </>
               ) : null}
+
+              {/* Request Payload and Response */}
+              {(requestPayload || apiResponse) && (
+                <div className="space-y-4">
+                  {requestPayload && (
+                    <FormSection
+                      title="Request Payload"
+                      isExpanded={showSections.requestPayload || false}
+                      onToggle={() => toggleSection('requestPayload')}
+                    >
+                      <div className="bg-slate-50 rounded-lg p-4 overflow-auto max-h-96">
+                        <pre className="text-xs text-slate-800 whitespace-pre-wrap break-words">
+                          {JSON.stringify(requestPayload, null, 2)}
+                        </pre>
+            </div>
+                    </FormSection>
+                  )}
+
+                  {apiResponse && (
+                    <FormSection
+                      title="Response"
+                      isExpanded={showSections.apiResponse || false}
+                      onToggle={() => toggleSection('apiResponse')}
+                    >
+                      <div className="bg-slate-50 rounded-lg p-4 overflow-auto max-h-96">
+                        <pre className="text-xs text-slate-800 whitespace-pre-wrap break-words">
+                          {JSON.stringify(apiResponse, null, 2)}
+                        </pre>
+        </div>
+                    </FormSection>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
+          {/* Live Request Payload Display */}
+          {!success && (
+            <div className="border-t-2 border-slate-300 bg-slate-50 mt-4">
+              <FormSection
+                title="Live Request Payload"
+                isExpanded={showSections.livePayload || false}
+                onToggle={() => toggleSection('livePayload')}
+              >
+                <div className="bg-white rounded-lg p-4 overflow-auto max-h-96 border border-slate-200">
+                  <pre className="text-xs text-slate-800 whitespace-pre-wrap break-words font-mono">
+                    {JSON.stringify(livePayload, null, 2)}
+                  </pre>
+                </div>
+              </FormSection>
+            </div>
+          )}
+
+          {/* Error Display - Below Payload Sections */}
+          {error && (
+            <div className="border-2 border-red-300 bg-gradient-to-r from-red-50 to-pink-50 rounded-xl p-6 shadow-lg mt-4">
+              <div className="flex items-start gap-3">
+                <XCircle size={24} className="text-red-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-bold text-red-800 mb-2">Error</h3>
+                  <div className="bg-white border border-red-200 rounded-lg p-4">
+                    <p className="text-red-700 font-medium mb-2">{error.message}</p>
+                    {error.stack && process.env.NODE_ENV === 'development' && (
+                      <details className="mt-2">
+                        <summary className="text-sm text-red-600 cursor-pointer hover:text-red-800">
+                          Show error details
+                        </summary>
+                        <pre className="mt-2 text-xs text-red-600 bg-red-50 p-2 rounded overflow-auto max-h-40">
+                          {error.stack}
+                        </pre>
+                      </details>
+                    )}
+                    {(error as any).errorData && (
+                      <details className="mt-2">
+                        <summary className="text-sm text-red-600 cursor-pointer hover:text-red-800">
+                          Show error data
+                        </summary>
+                        <pre className="mt-2 text-xs text-red-600 bg-red-50 p-2 rounded overflow-auto max-h-40">
+                          {JSON.stringify((error as any).errorData, null, 2)}
+                        </pre>
+                      </details>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => setError(null)}
+                  className="text-red-600 hover:text-red-800 flex-shrink-0"
+                  aria-label="Dismiss error"
+                >
+                  <XCircle size={20} />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Sticky Footer */}
       {!success && (
-        <div className="border-t border-slate-200 bg-white p-4 flex items-center justify-end gap-4 z-10">
+        <div className="border-t border-slate-200 bg-white p-4 flex items-center justify-start gap-4 z-10">
           {onCancel && (
             <button
               type="button"
@@ -1104,7 +1901,7 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            className="flex items-center gap-2 px-6 py-2.5 bg-yellow-400 text-black rounded-lg hover:bg-yellow-500 transition-colors shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed font-medium"
           >
             {loading ? (
               <>
@@ -1114,7 +1911,7 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
             ) : (
               <>
                 <Send size={18} />
-                <span>Submit Request</span>
+                <span>REQUEST PICKUP</span>
               </>
             )}
           </button>
@@ -1161,7 +1958,17 @@ export const ESTESPickupRequest = ({ order, bolData, onSuccess, onCancel }: ESTE
           </div>
         </div>
       )}
-    </form >
+
+      {/* Success Toast - Bottom Right */}
+      {showSuccessToast && (
+        <Toast
+          message="Order scheduled successfully"
+          type="success"
+          duration={5000}
+          onClose={() => setShowSuccessToast(false)}
+        />
+      )}
+    </form>
   );
 };
 
